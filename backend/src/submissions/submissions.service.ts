@@ -113,6 +113,36 @@ function publicSubmission(submission: SubmissionEntity) {
             typeof quality.normalizedResult.detectedTask === "object"
               ? quality.normalizedResult.detectedTask
               : undefined,
+          dimensions:
+            quality.normalizedResult &&
+            typeof quality.normalizedResult.dimensions === "object"
+              ? quality.normalizedResult.dimensions
+              : undefined,
+          qualityRawScore:
+            quality.normalizedResult &&
+            typeof quality.normalizedResult.qualityRawScore === "number"
+              ? quality.normalizedResult.qualityRawScore
+              : undefined,
+          qualityScore:
+            quality.normalizedResult &&
+            typeof quality.normalizedResult.qualityScore === "number"
+              ? quality.normalizedResult.qualityScore
+              : undefined,
+          demandCoefficient:
+            quality.normalizedResult &&
+            typeof quality.normalizedResult.demandCoefficient === "number"
+              ? quality.normalizedResult.demandCoefficient
+              : undefined,
+          demandStatus:
+            quality.normalizedResult &&
+            typeof quality.normalizedResult.demandStatus === "string"
+              ? quality.normalizedResult.demandStatus
+              : undefined,
+          ruleVersion:
+            quality.normalizedResult &&
+            typeof quality.normalizedResult.ruleVersion === "string"
+              ? quality.normalizedResult.ruleVersion
+              : undefined,
           invalidSegments:
             quality.normalizedResult &&
             Array.isArray(quality.normalizedResult.invalidSegments)

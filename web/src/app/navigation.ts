@@ -1,6 +1,5 @@
 import {
   Archive,
-  BadgeCheck,
   BarChart3,
   CircleDollarSign,
   ClipboardCheck,
@@ -41,7 +40,6 @@ export const navigationByRole: Record<Role, NavigationItem[]> = {
     { label: "我的工作台", path: "/collector", icon: LayoutDashboard },
     { label: "上传视频", path: "/collector/upload", icon: Upload },
     { label: "我的数据", path: "/collector/submissions", icon: Files },
-    { label: "质检结果", path: "/collector/quality", icon: BadgeCheck },
     { label: "收入与提现", path: "/collector/earnings", icon: Wallet },
     { label: "采集指南", path: "/collector/guide", icon: Compass },
     { label: "个人资料", path: "/account/profile", icon: User },

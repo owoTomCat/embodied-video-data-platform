@@ -338,6 +338,7 @@ export class DemoStore {
           item.durationSeconds,
           item.invalidSeconds,
           item.finalScore,
+          item.qualityResult?.settlementRatio,
         )
       );
     }, 0);

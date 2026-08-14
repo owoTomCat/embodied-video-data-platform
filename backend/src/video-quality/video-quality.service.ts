@@ -44,6 +44,11 @@ export type EvaluateVideoQualityRequest = {
   filePath: string;
   workDirectory: string;
   registerSha256: (sha256: string) => boolean;
+  demandContext?: {
+    snapshotId: string;
+    status: "紧缺" | "推荐" | "已饱和";
+    coefficient: number;
+  };
 };
 
 export type QualityProgressObserver = (stage: QualityStage) => void;
@@ -139,6 +144,7 @@ export class VideoQualityService {
       videoId: request.videoId,
       evidence,
       exactBatchDuplicate,
+      demandContext: request.demandContext,
     });
 
     observer("initial_review");

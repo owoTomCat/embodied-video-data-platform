@@ -25,9 +25,9 @@ describe("video quality prompt loader", () => {
       ),
     );
 
-    expect(prompt.promptVersion).toBe("qwen_video_qc_prompt_v1");
-    expect(prompt.ruleVersion).toBe("video_qc_v1");
-    expect(prompt.outputSchema).toBe("video_qc_result_v1");
+    expect(prompt.promptVersion).toBe("qwen_video_qc_prompt_v2_traceable");
+    expect(prompt.ruleVersion).toBe("video_qc_v2_traceable");
+    expect(prompt.outputSchema).toBe("video_qc_result_v2");
     expect(prompt.initialModel).toBe("qwen3.7-plus");
     expect(prompt.reviewModel).toBe("qwen3.7-flash");
     expect(prompt.systemPrompt).toContain("具身视频数据质量评估器");
@@ -35,7 +35,7 @@ describe("video quality prompt loader", () => {
     expect(prompt.systemPrompt).toContain("task_summary");
     expect(prompt.systemPrompt).toContain("recommendations");
     expect(prompt.systemPrompt).not.toContain("## 用户输入模板");
-    expect(prompt.outputExample.schema_version).toBe("video_qc_result_v1");
+    expect(prompt.outputExample.schema_version).toBe("video_qc_result_v2");
     expect(prompt.outputExample).toHaveProperty("hard_veto.triggered", false);
     expect(prompt.outputExample).toHaveProperty(
       "dimensions.task_value_uniqueness",
@@ -50,8 +50,8 @@ describe("video quality prompt loader", () => {
     await writeFile(
       path,
       [
-        "提示词版本：`qwen_video_qc_prompt_v1`",
-        "适配规则：`video_qc_v1`",
+        "提示词版本：`qwen_video_qc_prompt_v2_traceable`",
+        "适配规则：`video_qc_v2_traceable`",
         "推荐模型：`qwen3.7-plus`",
         "复核模型：`qwen3.7-flash`",
       ].join("\n"),
@@ -91,15 +91,15 @@ describe("video quality prompt loader", () => {
     await writeFile(
       path,
       [
-        "提示词版本：`qwen_video_qc_prompt_v1`",
-        "适配规则：`video_qc_v1`",
+        "提示词版本：`qwen_video_qc_prompt_v2_traceable`",
+        "适配规则：`video_qc_v2_traceable`",
         "推荐模型：`qwen3.7-plus`",
         "复核模型：`qwen3.7-flash`",
         "## 系统提示词",
         "```text",
         "system prompt",
         "```",
-        '"requested_output_schema": "video_qc_result_v1"',
+        '"requested_output_schema": "video_qc_result_v2"',
       ].join("\n"),
       "utf8",
     );

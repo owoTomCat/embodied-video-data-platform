@@ -91,6 +91,36 @@ export interface Submission {
     promptRevision: number;
     promptContentSha256: string;
     settlementRatio: number | null;
+    qualityRawScore?: number;
+    qualityScore?: number;
+    demandCoefficient?: number;
+    demandStatus?: string;
+    ruleVersion?: string;
+    dimensions?: Record<string, {
+      score?: number;
+      coefficient?: number;
+      confidence?: number;
+      calculation_trace?: string;
+    }>;
+    deductions?: Array<{
+      dimension?: string;
+      subcriterion?: string;
+      rule_id?: string;
+      reason_code?: string;
+      observed_value?: string;
+      description?: string;
+      matched_level?: string;
+      coefficient?: number;
+      deducted_points?: number;
+      points_after?: number;
+      start_ms?: number;
+      end_ms?: number;
+      severity?: string;
+      confidence?: number;
+      evidence_timestamps_ms?: number[];
+      recommendation?: string;
+      is_controlling?: boolean;
+    }>;
     attempts: number;
     lastError?: string;
     startedAt?: string;

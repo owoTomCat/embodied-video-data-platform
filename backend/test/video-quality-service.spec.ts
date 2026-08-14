@@ -57,10 +57,17 @@ function evidence(): PreparedVideoEvidence {
 }
 
 function raw(reviewRequired = false): RawVideoQcResultV1 {
+  const segments: Partial<Record<DimensionKey, Array<Record<string, unknown>>>> = {
+    first_person_and_composition: [{ start_ms: 0, end_ms: 30_000, evidence_timestamps_ms: [15_000], c_pov: 1, c_angle: 1, c_orientation: 1, c_arm_entry: 1 }],
+    hand_forearm_object_integrity: [{ start_ms: 0, end_ms: 30_000, evidence_timestamps_ms: [15_000], hand_required: true, c_completeness: 1, c_edge: 1, c_scale: 1, c_occlusion: 1, c_object_visibility: 1 }],
+    frame_and_video_quality: [{ start_ms: 0, end_ms: 30_000, evidence_timestamps_ms: [15_000], c_sharpness: 1, c_exposure: 1, c_stability: 1, c_continuity: 1 }],
+    task_authenticity_completeness: [{ start_ms: 0, end_ms: 30_000, evidence_timestamps_ms: [15_000], level: "L3", c_level: 1, c_authenticity: 1, c_progress: 1 }],
+    task_value_uniqueness: [],
+  };
   return {
-    schema_version: "video_qc_result_v1",
-    rule_version: "video_qc_v1",
-    prompt_version: "qwen_video_qc_prompt_v1",
+    schema_version: "video_qc_result_v2",
+    rule_version: "video_qc_v2_traceable",
+    prompt_version: "qwen_video_qc_prompt_v2_traceable",
     video_id: "LAB-1",
     evaluation_status: reviewRequired ? "review_pending" : "scored",
     hard_veto: { triggered: false, reasons: [] },
@@ -75,12 +82,15 @@ function raw(reviewRequired = false): RawVideoQcResultV1 {
       keys.map((key) => [
         key,
         {
-          coefficient: 0.8,
-          score: 16,
+          coefficient: 1,
+          score: key === "task_value_uniqueness" ? 0 : 25,
           confidence: reviewRequired ? 0.6 : 0.9,
-          calculation_trace: "20 × 0.8",
-          segments: [],
+          calculation_trace: "25 × 1.0",
+          segments: segments[key] ?? [],
           issues: [],
+          ...(key === "hand_forearm_object_integrity" ? { hand_active_duration_ms: 30_000 } : {}),
+          ...(key === "frame_and_video_quality" ? { c_spec: 1, c_visual: 1 } : {}),
+          ...(key === "task_authenticity_completeness" ? { completion_coefficient: 1 } : {}),
         },
       ]),
     ) as unknown as RawVideoQcResultV1["dimensions"],
@@ -88,8 +98,8 @@ function raw(reviewRequired = false): RawVideoQcResultV1 {
       candidate_invalid_segments: [],
       candidate_valid_waiting_segments: [],
     },
-    raw_total_score: 80,
-    final_score: 80,
+    raw_total_score: 100,
+    final_score: 100,
     summary: "summary",
     deductions: [],
     recommendations: [],
@@ -154,7 +164,7 @@ describe("video quality service", () => {
     expect(stages).toEqual(["media_analysis", "initial_review", "completed"]);
     expect(provider.analyze).toHaveBeenCalledOnce();
     expect(provider.review).not.toHaveBeenCalled();
-    expect(result.finalScore).toBe(80);
+    expect(result.finalScore).toBe(100);
     expect(result.settlementRatio).toBe(1);
   });
 

@@ -36,7 +36,36 @@ export type BackendQualityResult = {
   billableDurationMs: number | null;
   summary: string;
   recommendations: string[];
-  deductions: Array<Record<string, unknown>>;
+  deductions: Array<{
+    dimension?: string;
+    subcriterion?: string;
+    rule_id?: string;
+    reason_code?: string;
+    observed_value?: string;
+    description?: string;
+    matched_level?: string;
+    coefficient?: number;
+    deducted_points?: number;
+    points_after?: number;
+    start_ms?: number;
+    end_ms?: number;
+    severity?: string;
+    confidence?: number;
+    evidence_timestamps_ms?: number[];
+    recommendation?: string;
+    is_controlling?: boolean;
+  }>;
+  dimensions?: Record<string, {
+    score?: number;
+    coefficient?: number;
+    confidence?: number;
+    calculation_trace?: string;
+  }>;
+  qualityRawScore?: number;
+  qualityScore?: number;
+  demandCoefficient?: number;
+  demandStatus?: string;
+  ruleVersion?: string;
   reviewRequired: boolean;
   reviewReasons: string[];
   lastError?: string;

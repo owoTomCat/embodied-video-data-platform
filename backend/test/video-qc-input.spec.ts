@@ -35,7 +35,7 @@ function evidence(): PreparedVideoEvidence {
   };
 }
 
-describe("video_qc_v1 input builder", () => {
+describe("video_qc_v2_traceable input builder", () => {
   it("uses authoritative cold-start inventory and uniqueness inputs", () => {
     const input = buildVideoQcInput({
       videoId: "LAB-video-1",

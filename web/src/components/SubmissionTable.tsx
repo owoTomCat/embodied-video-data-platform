@@ -45,7 +45,7 @@ export function SubmissionTable({
                 <td><div className="stack-cell"><strong>{item.scene}</strong><small>{item.action}</small></div></td>
                 <td>{formatDuration(item.durationSeconds)}</td>
                 <td><StatusBadge label={label} tone={tone} /></td>
-                <td><QualityScore score={item.finalScore} /></td>
+                <td><QualityScore score={item.finalScore} settlementRatio={item.qualityResult?.settlementRatio} /></td>
                 <td>{onAction && <button className="table-action" aria-label={actionLabel} onClick={() => onAction(item)}><Eye size={15} />{actionLabel}</button>}</td>
               </tr>
             );

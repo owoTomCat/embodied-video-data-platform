@@ -39,6 +39,17 @@ type QualityLabAppOptions = {
   logger?: (event: Record<string, unknown>) => void;
 };
 
+const QUALITY_LAB_DEMAND_OPTIONS = [
+  { status: "紧缺", coefficient: 1 },
+  { status: "推荐", coefficient: 0.8 },
+  { status: "已饱和", coefficient: 0.3 },
+] as const;
+
+function randomDemandContext(): (typeof QUALITY_LAB_DEMAND_OPTIONS)[number] {
+  const index = Math.floor(Math.random() * QUALITY_LAB_DEMAND_OPTIONS.length);
+  return QUALITY_LAB_DEMAND_OPTIONS[index] ?? QUALITY_LAB_DEMAND_OPTIONS[0];
+}
+
 function publicError(error: unknown, record: QualityLabJobRecord): string {
   const base =
     error instanceof BailianRequestError
@@ -121,6 +132,14 @@ export function createQualityLabApp(options: QualityLabAppOptions): Express {
           workDirectory: record.workDirectory,
           registerSha256: (sha256) =>
             store.registerSha256(record.public.batchId, sha256),
+          demandContext:
+            record.public.demandStatus && record.public.demandCoefficient
+              ? {
+                  snapshotId: `quality-lab-${record.public.id}`,
+                  status: record.public.demandStatus,
+                  coefficient: record.public.demandCoefficient,
+                }
+              : undefined,
         },
         (stage) => {
           if (stage !== "completed" && stage !== "review_pending") {
@@ -175,8 +194,8 @@ export function createQualityLabApp(options: QualityLabAppOptions): Express {
         : "not_configured",
       initialModel: options.environment.initialModel,
       reviewModel: options.environment.reviewModel,
-      ruleVersion: "video_qc_v1",
-      promptVersion: "qwen_video_qc_prompt_v1",
+      ruleVersion: "video_qc_v2_traceable",
+      promptVersion: "qwen_video_qc_prompt_v2_traceable",
       concurrency: maxConcurrency,
     });
   });
@@ -223,12 +242,15 @@ export function createQualityLabApp(options: QualityLabAppOptions): Express {
           ? request.body.batchId.trim()
           : "";
       const batchId = rawBatchId.slice(0, 128) || "standalone";
+      const demand = randomDemandContext();
       const record = store.create({
         batchId,
         fileName: request.file.originalname.slice(0, 255),
         sizeBytes: request.file.size,
         filePath: request.file.path,
         workDirectory: request.qualityTempDirectory,
+        demandStatus: demand.status,
+        demandCoefficient: demand.coefficient,
       });
       pending.push(record.public.id);
       logger({

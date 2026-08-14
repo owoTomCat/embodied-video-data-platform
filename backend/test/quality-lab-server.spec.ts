@@ -33,9 +33,9 @@ function environment(
 
 function result(videoId: string): NormalizedVideoQcResultV1 {
   return {
-    schemaVersion: "video_qc_result_v1",
-    ruleVersion: "video_qc_v1",
-    promptVersion: "qwen_video_qc_prompt_v1",
+    schemaVersion: "video_qc_result_v2",
+    ruleVersion: "video_qc_v2_traceable",
+    promptVersion: "qwen_video_qc_prompt_v2_traceable",
     videoId,
     evaluationStatus: "scored",
     dimensions: {} as NormalizedVideoQcResultV1["dimensions"],
@@ -107,6 +107,35 @@ describe("quality lab environment", () => {
 });
 
 describe("quality lab server", () => {
+  it("assigns demand from fixed server constants and ignores client input", async () => {
+    const random = vi.spyOn(Math, "random").mockReturnValue(0.5);
+    const evaluate = vi.fn(async (input: Parameters<VideoQualityEvaluator["evaluate"]>[0]) => {
+      expect(input.demandContext).toEqual({
+        snapshotId: expect.stringMatching(/^quality-lab-LAB-/u),
+        status: "推荐",
+        coefficient: 0.8,
+      });
+      return result(input.videoId);
+    });
+    const app = createQualityLabApp({
+      environment: environment(),
+      evaluator: { evaluate },
+    });
+
+    const created = await request(app)
+      .post("/api/jobs")
+      .field("batchId", "batch-random-demand")
+      .field("demandStatus", "紧缺")
+      .attach("video", Buffer.from("video"), "sample.mp4")
+      .expect(202);
+
+    const completed = await waitForTerminal(app, created.body.jobId);
+    expect(completed.body.demandStatus).toBe("推荐");
+    expect(completed.body.demandCoefficient).toBe(0.8);
+    expect(evaluate).toHaveBeenCalledOnce();
+    random.mockRestore();
+  });
+
   it("runs two evaluations in parallel and holds the third", async () => {
     const started: string[] = [];
     const releases: Array<() => void> = [];

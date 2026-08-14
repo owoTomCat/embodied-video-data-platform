@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import * as accountApi from "../auth/client/accountApi";
 import { useIdentity } from "../auth/client/IdentityContext";
 import type { Role } from "../domain/types";
@@ -53,6 +53,12 @@ export function PlatformApp({ initialPath }: { initialPath: string }) {
 function PlatformContent({ initialPath }: { initialPath: string }) {
   const [path, setPath] = useState(initialPath || "/");
 
+  useEffect(() => {
+    if (path !== "/collector/quality") return;
+    window.history.replaceState({}, "", "/collector/submissions");
+    setPath("/collector/submissions");
+  }, [path]);
+
   function navigate(nextPath: string) {
     window.history.pushState({}, "", nextPath);
     setPath(nextPath);
@@ -96,9 +102,8 @@ function AuthenticatedPlatformContent({
     if (safePath === "/collector/upload") page = <UploadPage />;
     else if (safePath === "/collector/submissions") page = <SubmissionsPage navigate={navigate} />;
     else if (safePath.startsWith("/collector/submissions/")) page = <SubmissionDetail id={safePath.split("/").at(-1) ?? ""} navigate={navigate} />;
-    else if (safePath === "/collector/quality") page = <SubmissionsPage qualityOnly navigate={navigate} />;
     else if (safePath === "/collector/earnings") page = <EarningsPage />;
-    else if (safePath === "/collector/guide") page = <GuidePage />;
+    else if (safePath === "/collector/guide") page = <GuidePage navigate={navigate} />;
   } else if (currentAccount.role === "leader") {
     if (safePath === "/team/members") page = <MembersPage />;
     else if (safePath === "/team/submissions") page = <TeamSubmissionsPage />;

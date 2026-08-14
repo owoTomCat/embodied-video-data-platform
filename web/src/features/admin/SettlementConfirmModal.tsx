@@ -40,6 +40,7 @@ export function SettlementConfirmModal({
         item.durationSeconds,
         item.invalidSeconds,
         item.finalScore,
+        item.qualityResult?.settlementRatio,
       );
     }, 0);
     return {

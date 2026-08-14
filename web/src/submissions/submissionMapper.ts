@@ -141,6 +141,13 @@ export function backendSubmissionToDomain(
           promptRevision: source.quality.promptRevision,
           promptContentSha256: source.quality.promptContentSha256,
           settlementRatio: source.quality.settlementRatio,
+          qualityRawScore: source.quality.qualityRawScore,
+          qualityScore: source.quality.qualityScore,
+          demandCoefficient: source.quality.demandCoefficient,
+          demandStatus: source.quality.demandStatus,
+          ruleVersion: source.quality.ruleVersion,
+          dimensions: source.quality.dimensions,
+          deductions: source.quality.deductions,
           attempts: source.quality.attempts,
           lastError: source.quality.lastError,
           startedAt: source.quality.startedAt

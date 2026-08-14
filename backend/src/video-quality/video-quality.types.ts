@@ -1,7 +1,7 @@
-export const VIDEO_QC_RULE_VERSION = "video_qc_v1" as const;
-export const VIDEO_QC_PROMPT_VERSION = "qwen_video_qc_prompt_v1" as const;
+export const VIDEO_QC_RULE_VERSION = "video_qc_v2_traceable" as const;
+export const VIDEO_QC_PROMPT_VERSION = "qwen_video_qc_prompt_v2_traceable" as const;
 export const VIDEO_QC_INPUT_SCHEMA = "video_qc_input_v1" as const;
-export const VIDEO_QC_RESULT_SCHEMA = "video_qc_result_v1" as const;
+export const VIDEO_QC_RESULT_SCHEMA = "video_qc_result_v2" as const;
 
 export type EvaluationStatus =
   | "scored"
@@ -73,11 +73,12 @@ export type VideoQcInputV1 = {
   };
   inventory_context: {
     snapshot_id: string;
-    mode: "cold_start";
-    authoritative_coefficient: 1;
-    c_scene: 1;
-    c_standard_task: 1;
-    c_variant: 1;
+    mode: "cold_start" | "guide_snapshot";
+    demand_status?: "紧缺" | "推荐" | "已饱和";
+    authoritative_coefficient: number;
+    c_scene: number;
+    c_standard_task: number;
+    c_variant: number;
     current_video_excluded: true;
   };
   similarity_context: {
@@ -117,6 +118,18 @@ export type QualityIssue = {
   severity: "minor" | "moderate" | "major" | "critical";
   confidence: number;
   evidence_timestamps_ms: number[];
+  subcriterion?: string;
+  rule_id?: string;
+  observed_value?: string;
+  matched_level?: string;
+  coefficient?: number;
+  points_before?: number;
+  deducted_points?: number;
+  points_after?: number;
+  scope?: "full_video" | "time_range";
+  evidence_source?: "model" | "detector" | "demand_snapshot" | "human_review";
+  recommendation?: string;
+  is_controlling?: boolean;
 };
 
 export type QualityDimension = {
@@ -193,6 +206,10 @@ export type NormalizedVideoQcResultV1 = {
   videoId: string;
   evaluationStatus: EvaluationStatus;
   dimensions: Record<DimensionKey, QualityDimension>;
+  qualityRawScore?: number;
+  qualityScore?: number;
+  demandCoefficient?: number;
+  demandStatus?: "紧缺" | "推荐" | "已饱和" | "未配置";
   rawTotalScore: number;
   finalScore: number;
   settlementRatio: number | null;

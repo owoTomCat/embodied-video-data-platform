@@ -29,7 +29,7 @@ describe("settlement actions", () => {
     const dialog = screen.getByRole("dialog", { name: "确认生成结算批次" });
     expect(within(dialog).getByText("4 条")).toBeVisible();
     expect(within(dialog).getByText("11.27 分钟")).toBeVisible();
-    expect(within(dialog).getByText("¥116.12")).toBeVisible();
+    expect(within(dialog).getByText("¥119.05")).toBeVisible();
     await user.click(within(dialog).getByRole("button", { name: "确认生成" }));
 
     expect(screen.getByText("结算批次已生成并锁定")).toBeVisible();

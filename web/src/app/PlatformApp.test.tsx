@@ -98,6 +98,13 @@ describe("platform routing", () => {
     ).toBeVisible();
   });
 
+  it("shows one collector data navigation without a duplicate quality page", () => {
+    renderPlatform("/collector/submissions", "collector");
+
+    expect(screen.getByRole("link", { name: "我的数据" })).toBeVisible();
+    expect(screen.queryByRole("link", { name: "质检结果" })).not.toBeInTheDocument();
+  });
+
   it("redirects a collector away from the admin area in the client fallback", () => {
     renderPlatform("/admin", "collector", "admin");
     expect(screen.getByRole("heading", { name: "我的工作台" })).toBeVisible();

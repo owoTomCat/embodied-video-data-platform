@@ -11,6 +11,7 @@ import {
   qualityStatus,
 } from "../domain/calculations";
 import type { Submission } from "../domain/types";
+import { QualityBreakdown } from "./QualityBreakdown";
 import { StatusBadge } from "./StatusBadge";
 
 export function ReviewDrawer({ submission, onClose }: { submission: Submission; onClose(): void }) {
@@ -20,11 +21,16 @@ export function ReviewDrawer({ submission, onClose }: { submission: Submission; 
   const [error, setError] = useState("");
   const team = state.teams.find((item) => item.id === submission.teamId);
   const finalScore = Math.min(100, Math.max(0, Number(score) || 0));
+  const settlementRatio =
+    finalScore === submission.finalScore
+      ? submission.qualityResult?.settlementRatio
+      : qualityCoefficient(finalScore);
   const income = estimateIncome(
     team?.unitPricePerMinute ?? 12,
     submission.durationSeconds,
     submission.invalidSeconds,
     finalScore,
+    settlementRatio,
   );
   const aiPassed = submission.qualityStatus === "passed";
   const aiStatusLabel = submission.qualityResult?.status === "review_pending"
@@ -58,14 +64,15 @@ export function ReviewDrawer({ submission, onClose }: { submission: Submission; 
           <section className="ai-conclusion">
             <div><span>AI 原始结论</span><StatusBadge label={aiStatusLabel} tone={aiStatusTone} /></div>
             <strong>{submission.aiScore}<small>/100</small></strong>
-            <p>{submission.qualityResult?.summary || "AI 原始分保持不变，人工复核只写入最终评分和审计记录。"}</p>
+            <p>{submission.qualityResult?.summary.replace(/\bD1\b/gu,"第一人称与构图").replace(/\bD2\b/gu,"手部、前臂与对象完整性").replace(/\bD3\b/gu,"视频与画面质量").replace(/\bD4\b/gu,"任务真实性与完整度").replace(/\bD5\b/gu,"平台需求与稀缺度") || "AI 原始分保持不变，人工复核只写入最终评分和审计记录。"}</p>
             {submission.qualityResult && <p>{submission.qualityResult.initialModel} · 条件复核 {submission.qualityResult.reviewModel} · 提示词 V{submission.qualityResult.promptRevision}</p>}
           </section>
+          {submission.qualityResult && <QualityBreakdown admin finalScore={submission.aiScore} quality={submission.qualityResult} />}
           <form className="review-form" onSubmit={save}>
             <label><span>最终评分</span><input aria-label="最终评分" min="0" max="100" type="number" value={score} onChange={(event) => setScore(event.target.value)} /></label>
             <div className="review-derived">
               <div><span>最终结论</span><strong className={qualityStatus(finalScore) === "passed" ? "success-text" : "danger-text"}>{qualityStatus(finalScore) === "passed" ? "通过" : "未通过"}</strong></div>
-              <div><span>质量系数</span><strong>{qualityCoefficient(finalScore).toFixed(2)}</strong></div>
+              <div><span>质量系数</span><strong>{settlementRatio === null ? "暂不结算" : (settlementRatio ?? qualityCoefficient(finalScore)).toFixed(2)}</strong></div>
               <div><span><Clock3 size={13} />有效时长</span><strong>{effectiveDuration(submission.durationSeconds, submission.invalidSeconds)} 秒</strong></div>
               <div><span><Coins size={13} />预计金额</span><strong>¥{income.toFixed(2)}</strong></div>
             </div>

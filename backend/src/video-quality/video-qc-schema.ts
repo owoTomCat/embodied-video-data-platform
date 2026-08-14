@@ -5,6 +5,50 @@ import type { RawVideoQcResultV1 } from "./video-quality.types.js";
 const boundedCoefficient = z.number().finite().min(0).max(1);
 const nonNegativeTime = z.number().finite().nonnegative();
 
+const segmentBaseSchema = z.object({
+  start_ms: nonNegativeTime,
+  end_ms: nonNegativeTime,
+  evidence_timestamps_ms: z.array(nonNegativeTime).min(1),
+});
+
+const viewSegmentSchema = segmentBaseSchema
+  .extend({
+    c_pov: boundedCoefficient,
+    c_angle: boundedCoefficient,
+    c_orientation: boundedCoefficient,
+    c_arm_entry: boundedCoefficient,
+  })
+  .strict();
+
+const handSegmentSchema = segmentBaseSchema
+  .extend({
+    hand_required: z.boolean(),
+    c_completeness: boundedCoefficient,
+    c_edge: boundedCoefficient,
+    c_scale: boundedCoefficient,
+    c_occlusion: boundedCoefficient,
+    c_object_visibility: boundedCoefficient,
+  })
+  .strict();
+
+const frameSegmentSchema = segmentBaseSchema
+  .extend({
+    c_sharpness: boundedCoefficient,
+    c_exposure: boundedCoefficient,
+    c_stability: boundedCoefficient,
+    c_continuity: boundedCoefficient,
+  })
+  .strict();
+
+const taskSegmentSchema = segmentBaseSchema
+  .extend({
+    level: z.enum(["L3", "L2", "L1", "L0", "INVALID"]),
+    c_level: boundedCoefficient,
+    c_authenticity: boundedCoefficient,
+    c_progress: boundedCoefficient,
+  })
+  .strict();
+
 const issueSchema = z
   .object({
     dimension: z.string().optional(),
@@ -15,17 +59,29 @@ const issueSchema = z
     severity: z.enum(["minor", "moderate", "major", "critical"]),
     confidence: boundedCoefficient,
     evidence_timestamps_ms: z.array(nonNegativeTime),
+    subcriterion: z.string().optional(),
+    rule_id: z.string().optional(),
+    observed_value: z.string().optional(),
+    matched_level: z.string().optional(),
+    coefficient: boundedCoefficient.optional(),
+    points_before: z.number().finite().min(0).max(25).optional(),
+    deducted_points: z.number().finite().min(0).max(25).optional(),
+    points_after: z.number().finite().min(0).max(25).optional(),
+    scope: z.enum(["full_video", "time_range"]).optional(),
+    evidence_source: z
+      .enum(["model", "detector", "demand_snapshot", "human_review"])
+      .optional(),
+    recommendation: z.string().optional(),
+    is_controlling: z.boolean().optional(),
   })
   .strict();
 
-const dimensionSchema = z
+const dimensionBaseSchema = z
   .object({
     coefficient: boundedCoefficient,
-    score: z.number().finite().min(0).max(20),
+    score: z.number().finite().min(0).max(25),
     confidence: boundedCoefficient,
     calculation_trace: z.string(),
-    // V1 文档的 D5 示例没有 segments；内部仍归一化为空数组。
-    segments: z.array(z.record(z.string(), z.unknown())).default([]),
     issues: z.array(issueSchema.omit({ dimension: true })),
     hand_active_duration_ms: nonNegativeTime.optional(),
     c_spec: boundedCoefficient.optional(),
@@ -36,6 +92,31 @@ const dimensionSchema = z
     similarity_total: boundedCoefficient.optional(),
   })
   .strict();
+
+const viewDimensionSchema = dimensionBaseSchema.extend({
+  segments: z.array(viewSegmentSchema).min(1),
+});
+
+const handDimensionSchema = dimensionBaseSchema.extend({
+  hand_active_duration_ms: nonNegativeTime,
+  segments: z.array(handSegmentSchema).min(1),
+});
+
+const frameDimensionSchema = dimensionBaseSchema.extend({
+  c_spec: boundedCoefficient,
+  c_visual: boundedCoefficient,
+  segments: z.array(frameSegmentSchema).min(1),
+});
+
+const taskDimensionSchema = dimensionBaseSchema.extend({
+  completion_coefficient: boundedCoefficient,
+  segments: z.array(taskSegmentSchema).min(1),
+});
+
+const demandDimensionSchema = dimensionBaseSchema.extend({
+  // 第五维是服务端需求快照，不要求模型生成视觉片段。
+  segments: z.array(z.record(z.string(), z.unknown())).default([]),
+});
 
 const invalidSegmentSchema = z
   .object({
@@ -61,9 +142,9 @@ const waitingSegmentSchema = z
 
 export const rawVideoQcResultSchema = z
   .object({
-    schema_version: z.literal("video_qc_result_v1"),
-    rule_version: z.literal("video_qc_v1"),
-    prompt_version: z.literal("qwen_video_qc_prompt_v1"),
+    schema_version: z.literal("video_qc_result_v2"),
+    rule_version: z.literal("video_qc_v2_traceable"),
+    prompt_version: z.literal("qwen_video_qc_prompt_v2_traceable"),
     video_id: z.string().min(1),
     evaluation_status: z.enum([
       "scored",
@@ -90,11 +171,11 @@ export const rawVideoQcResultSchema = z
       .strict(),
     dimensions: z
       .object({
-        first_person_and_composition: dimensionSchema,
-        hand_forearm_object_integrity: dimensionSchema,
-        frame_and_video_quality: dimensionSchema,
-        task_authenticity_completeness: dimensionSchema,
-        task_value_uniqueness: dimensionSchema,
+        first_person_and_composition: viewDimensionSchema,
+        hand_forearm_object_integrity: handDimensionSchema,
+        frame_and_video_quality: frameDimensionSchema,
+        task_authenticity_completeness: taskDimensionSchema,
+        task_value_uniqueness: demandDimensionSchema,
       })
       .strict(),
     billing_observations: z
@@ -129,7 +210,7 @@ export function parseRawVideoQcResult(value: unknown): RawVideoQcResultV1 {
     const issues = parsed.error.issues.map(
       (issue) => `${issue.path.join(".") || "result"}: ${issue.message}`,
     );
-    throw new VideoQcSchemaError("模型结果不符合 video_qc_result_v1", issues);
+    throw new VideoQcSchemaError("模型结果不符合 video_qc_result_v2", issues);
   }
   return parsed.data as RawVideoQcResultV1;
 }

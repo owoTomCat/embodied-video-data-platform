@@ -9,6 +9,11 @@ export type BuildVideoQcInput = {
   exactBatchDuplicate: boolean;
   prohibitedContentPolicy?: string[];
   previousModelObservations?: Array<Record<string, unknown>>;
+  demandContext?: {
+    snapshotId: string;
+    status: "紧缺" | "推荐" | "已饱和";
+    coefficient: number;
+  };
 };
 
 export function buildVideoQcInput(input: BuildVideoQcInput): VideoQcInputV1 {
@@ -32,12 +37,13 @@ export function buildVideoQcInput(input: BuildVideoQcInput): VideoQcInputV1 {
       prohibited_content_policy: input.prohibitedContentPolicy ?? [],
     },
     inventory_context: {
-      snapshot_id: "quality-lab-cold-start",
-      mode: "cold_start",
-      authoritative_coefficient: 1,
-      c_scene: 1,
-      c_standard_task: 1,
-      c_variant: 1,
+      snapshot_id: input.demandContext?.snapshotId ?? "quality-lab-cold-start",
+      mode: input.demandContext ? "guide_snapshot" : "cold_start",
+      demand_status: input.demandContext?.status,
+      authoritative_coefficient: input.demandContext?.coefficient ?? 1,
+      c_scene: input.demandContext?.coefficient ?? 1,
+      c_standard_task: input.demandContext?.coefficient ?? 1,
+      c_variant: input.demandContext?.coefficient ?? 1,
       current_video_excluded: true,
     },
     similarity_context: {
@@ -53,7 +59,7 @@ export function buildVideoQcInput(input: BuildVideoQcInput): VideoQcInputV1 {
       top_candidates: [],
     },
     previous_model_observations: input.previousModelObservations ?? [],
-    requested_output_schema: "video_qc_result_v1",
+    requested_output_schema: "video_qc_result_v2",
     missing_inputs: [...input.evidence.missingMetrics],
   };
 }

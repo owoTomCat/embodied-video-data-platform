@@ -385,7 +385,7 @@ describe("administrator rule, settlement, and delivery workflows", () => {
 
     expect(batch.submissionCount).toBe(4);
     expect(batch.effectiveMinutes).toBe(11.27);
-    expect(batch.amount).toBe(116.12);
+    expect(batch.amount).toBe(119.05);
     expect(batch.status).toBe("locked");
     expect(store.getState().settlements[0]).toEqual(batch);
     expect(store.getSubmission("SUB-001").settlementStatus).toBe("settled");

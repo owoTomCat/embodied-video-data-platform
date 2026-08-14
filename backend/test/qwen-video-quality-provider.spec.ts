@@ -20,10 +20,17 @@ const keys: DimensionKey[] = [
 ];
 
 function rawResult(): RawVideoQcResultV1 {
+  const segments: Partial<Record<DimensionKey, Array<Record<string, unknown>>>> = {
+    first_person_and_composition: [{ start_ms: 0, end_ms: 1, evidence_timestamps_ms: [0], c_pov: 1, c_angle: 1, c_orientation: 1, c_arm_entry: 1 }],
+    hand_forearm_object_integrity: [{ start_ms: 0, end_ms: 1, evidence_timestamps_ms: [0], hand_required: true, c_completeness: 1, c_edge: 1, c_scale: 1, c_occlusion: 1, c_object_visibility: 1 }],
+    frame_and_video_quality: [{ start_ms: 0, end_ms: 1, evidence_timestamps_ms: [0], c_sharpness: 1, c_exposure: 1, c_stability: 1, c_continuity: 1 }],
+    task_authenticity_completeness: [{ start_ms: 0, end_ms: 1, evidence_timestamps_ms: [0], level: "L3", c_level: 1, c_authenticity: 1, c_progress: 1 }],
+    task_value_uniqueness: [],
+  };
   return {
-    schema_version: "video_qc_result_v1",
-    rule_version: "video_qc_v1",
-    prompt_version: "qwen_video_qc_prompt_v1",
+    schema_version: "video_qc_result_v2",
+    rule_version: "video_qc_v2_traceable",
+    prompt_version: "qwen_video_qc_prompt_v2_traceable",
     video_id: "LAB-1",
     evaluation_status: "scored",
     hard_veto: { triggered: false, reasons: [] },
@@ -38,12 +45,17 @@ function rawResult(): RawVideoQcResultV1 {
       keys.map((key) => [
         key,
         {
-          coefficient: 0.8,
-          score: 16,
+          coefficient: 1,
+          score: key === "task_value_uniqueness" ? 0 : 25,
           confidence: 0.9,
-          calculation_trace: "按维度系数计算：20 × 0.8",
-          segments: [],
+          calculation_trace: key === "task_value_uniqueness"
+            ? "平台需求快照 C_demand=1.0"
+            : "按维度系数计算：25 × 1.0",
+          segments: segments[key] ?? [],
           issues: [],
+          ...(key === "hand_forearm_object_integrity" ? { hand_active_duration_ms: 1 } : {}),
+          ...(key === "frame_and_video_quality" ? { c_spec: 1, c_visual: 1 } : {}),
+          ...(key === "task_authenticity_completeness" ? { completion_coefficient: 1 } : {}),
         },
       ]),
     ) as unknown as RawVideoQcResultV1["dimensions"],
@@ -51,8 +63,8 @@ function rawResult(): RawVideoQcResultV1 {
       candidate_invalid_segments: [],
       candidate_valid_waiting_segments: [],
     },
-    raw_total_score: 80,
-    final_score: 80,
+    raw_total_score: 100,
+    final_score: 100,
     summary: "质量稳定",
     deductions: [],
     recommendations: [],
@@ -87,9 +99,9 @@ function response(
 const prompt: LoadedVideoQualityPrompt = {
   systemPrompt: "system prompt",
   outputExample: rawResult() as unknown as Record<string, unknown>,
-  promptVersion: "qwen_video_qc_prompt_v1",
-  ruleVersion: "video_qc_v1",
-  outputSchema: "video_qc_result_v1",
+  promptVersion: "qwen_video_qc_prompt_v2_traceable",
+  ruleVersion: "video_qc_v2_traceable",
+  outputSchema: "video_qc_result_v2",
   initialModel: "qwen3.7-plus",
   reviewModel: "qwen3.7-flash",
   contentSha256: "c".repeat(64),
@@ -174,7 +186,7 @@ describe("Qwen video quality provider", () => {
     expect(textInput.output_contract.hard_veto.triggered).toBe(false);
     expect(textInput.output_requirements.join(" ")).toContain("不得改名或遗漏字段");
     expect(textInput.output_requirements.join(" ")).toContain("简体中文");
-    expect(result.raw.final_score).toBe(80);
+    expect(result.raw.final_score).toBe(100);
     expect(result.metadata.requestId).toBe("req-123");
     expect(result.metadata.stage).toBe("initial");
     expect(JSON.stringify(result)).not.toContain("secret-test-key");
@@ -210,21 +222,21 @@ describe("Qwen video quality provider", () => {
     expect(
       (await provider(fencedFetch).analyze({ input, frames: [] })).raw
         .schema_version,
-    ).toBe("video_qc_result_v1");
+    ).toBe("video_qc_result_v2");
 
     const repairFetch = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(response("{}"))
       .mockResolvedValueOnce(response(JSON.stringify(rawResult())));
     const repaired = await provider(repairFetch).analyze({ input, frames: [] });
-    expect(repaired.raw.final_score).toBe(80);
+    expect(repaired.raw.final_score).toBe(100);
     expect(repairFetch).toHaveBeenCalledTimes(2);
     const repairBody = JSON.parse(
       String(repairFetch.mock.calls[1]?.[1]?.body),
     ) as Record<string, any>;
     expect(repairBody.model).toBe("qwen3.7-plus");
     expect(repairBody.messages.at(-1).content[0].text).toContain(
-      "video_qc_result_v1",
+      "video_qc_result_v2",
     );
     expect(repairBody.messages.at(-1).content[0].text).toContain(
       '"hard_veto"',
@@ -252,6 +264,144 @@ describe("Qwen video quality provider", () => {
       "detected_task.task_summary",
     );
     expect(result.raw.summary).toBe("质量稳定");
+  });
+
+  it("repairs a sub-full dimension that has no deduction explanation", async () => {
+    const unexplained = rawResult();
+    unexplained.dimensions.hand_forearm_object_integrity.coefficient = 0.92;
+    unexplained.dimensions.hand_forearm_object_integrity.score = 23;
+    unexplained.raw_total_score = 98;
+    unexplained.final_score = 98;
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(response(JSON.stringify(unexplained), 200, "req-missing"))
+      .mockResolvedValueOnce(response(JSON.stringify(rawResult()), 200, "req-fixed"));
+
+    const result = await provider(fetcher).analyze({ input, frames: [] });
+
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(result.raw.final_score).toBe(100);
+    const repairBody = JSON.parse(
+      String(fetcher.mock.calls[1]?.[1]?.body),
+    ) as Record<string, any>;
+    expect(repairBody.messages.at(-1).content[0].text).toContain("没有扣分原因");
+    expect(repairBody.messages.at(-1).content[0].text).toContain("issue_contract=");
+  });
+
+  it("normalizes a missing observed_value from the required description", async () => {
+    const resultWithIssue = rawResult();
+    resultWithIssue.dimensions.hand_forearm_object_integrity.coefficient = 0.85;
+    resultWithIssue.dimensions.hand_forearm_object_integrity.score = 21.3;
+    resultWithIssue.dimensions.hand_forearm_object_integrity.segments[0]!.c_scale = 0.85;
+    resultWithIssue.dimensions.hand_forearm_object_integrity.issues = [{
+      reason_code: "HAND_SCALE_TOO_LARGE",
+      description: "操作区域持续占画面约 60%",
+      start_ms: 0,
+      end_ms: 1,
+      severity: "minor",
+      confidence: 0.9,
+      evidence_timestamps_ms: [0],
+      subcriterion: "SCALE",
+      matched_level: "55%～70%",
+      coefficient: 0.85,
+      evidence_source: "model",
+      recommendation: "适当拉远镜头",
+    }];
+    resultWithIssue.raw_total_score = 96.3;
+    resultWithIssue.final_score = 96.3;
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      response(JSON.stringify(resultWithIssue)),
+    );
+
+    const result = await provider(fetcher).analyze({ input, frames: [] });
+
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(
+      result.raw.dimensions.hand_forearm_object_integrity.issues[0]?.observed_value,
+    ).toBe("操作区域持续占画面约 60%");
+  });
+
+  it("still repairs a deduction that has no evidence timestamp", async () => {
+    const unsupported = rawResult();
+    unsupported.dimensions.hand_forearm_object_integrity.coefficient = 0.85;
+    unsupported.dimensions.hand_forearm_object_integrity.score = 21.3;
+    unsupported.dimensions.hand_forearm_object_integrity.segments[0]!.c_scale = 0.85;
+    unsupported.dimensions.hand_forearm_object_integrity.issues = [{
+      reason_code: "HAND_SCALE_TOO_LARGE",
+      description: "操作区域持续占画面约 60%",
+      observed_value: "操作区域约占画面 60%",
+      start_ms: 0,
+      end_ms: 1,
+      severity: "minor",
+      confidence: 0.9,
+      evidence_timestamps_ms: [],
+      subcriterion: "SCALE",
+      matched_level: "55%～70%",
+      coefficient: 0.85,
+      evidence_source: "model",
+      recommendation: "适当拉远镜头",
+    }];
+    unsupported.raw_total_score = 96.3;
+    unsupported.final_score = 96.3;
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(response(JSON.stringify(unsupported), 200, "req-no-evidence"))
+      .mockResolvedValueOnce(response(JSON.stringify(rawResult()), 200, "req-repaired"));
+
+    await provider(fetcher).analyze({ input, frames: [] });
+
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    const repairBody = JSON.parse(String(fetcher.mock.calls[1]?.[1]?.body)) as Record<string, any>;
+    expect(repairBody.messages.at(-1).content[0].text).toContain("缺少证据时间点");
+  });
+
+  it("normalizes ffprobe and metadata evidence aliases to detector", async () => {
+    const resultWithAlias = rawResult();
+    resultWithAlias.dimensions.frame_and_video_quality.coefficient = 0.8;
+    resultWithAlias.dimensions.frame_and_video_quality.score = 20;
+    resultWithAlias.dimensions.frame_and_video_quality.c_spec = 0.8;
+    resultWithAlias.dimensions.frame_and_video_quality.issues = [{
+      reason_code: "LOW_RESOLUTION",
+      description: "视频短边分辨率为 720px",
+      observed_value: "短边 720px",
+      start_ms: 0,
+      end_ms: 1,
+      severity: "minor",
+      confidence: 1,
+      evidence_timestamps_ms: [0],
+      subcriterion: "RESOLUTION",
+      matched_level: "720～1079",
+      coefficient: 0.8,
+      evidence_source: "video_metadata" as "detector",
+      recommendation: "使用 1080p 或更高分辨率拍摄",
+    }];
+    resultWithAlias.raw_total_score = 95;
+    resultWithAlias.final_score = 95;
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      response(JSON.stringify(resultWithAlias)),
+    );
+
+    const result = await provider(fetcher).analyze({ input, frames: [] });
+
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(
+      result.raw.dimensions.frame_and_video_quality.issues[0]?.evidence_source,
+    ).toBe("detector");
+  });
+
+  it("accepts formula-only calculation traces without a repair call", async () => {
+    const formulaResult = rawResult();
+    for (const key of keys.slice(0, 4)) {
+      formulaResult.dimensions[key].calculation_trace = "25 × 0.8 = 20";
+    }
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      response(JSON.stringify(formulaResult)),
+    );
+
+    const result = await provider(fetcher).analyze({ input, frames: [] });
+
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(result.raw.dimensions.task_value_uniqueness.calculation_trace).toBe("平台需求快照 C_demand=1.0");
   });
 
   it("uses Qwen3.7 Flash only for review input and preserves initial observations", async () => {

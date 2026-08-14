@@ -21,10 +21,10 @@ function normalizeSystemPrompt(value: string): string {
   if (prompt.length > 100_000) {
     throw new IdentityFailure("VALIDATION", "系统提示词不能超过 100000 个字符", 400);
   }
-  if (!/video_qc_v1/u.test(prompt) || !/JSON/iu.test(prompt)) {
+  if (!/video_qc_v2_traceable/u.test(prompt) || !/JSON/iu.test(prompt)) {
     throw new IdentityFailure(
       "VALIDATION",
-      "系统提示词必须保留 video_qc_v1 和 JSON 结构化输出约束",
+      "系统提示词必须保留 video_qc_v2_traceable 和 JSON 结构化输出约束",
       400,
     );
   }
@@ -45,15 +45,23 @@ export class AiQualityPromptService {
   ) {}
 
   async ensureDefault(): Promise<VideoQualityPromptVersionEntity> {
-    const current = await this.prompts.findOneBy({ active: true });
-    if (current) return current;
-
     const loaded = await loadVideoQualityPrompt(videoQualityPromptPath());
+    const current = await this.prompts.findOneBy({ active: true });
+    if (
+      current &&
+      current.promptVersion === loaded.promptVersion &&
+      current.ruleVersion === loaded.ruleVersion
+    ) return current;
+
     return this.dataSource.transaction(async (manager) => {
       await manager.query("SELECT pg_advisory_xact_lock($1)", [PROMPT_LOCK_KEY]);
       const repository = manager.getRepository(VideoQualityPromptVersionEntity);
       const active = await repository.findOneBy({ active: true });
-      if (active) return active;
+      if (
+        active &&
+        active.promptVersion === loaded.promptVersion &&
+        active.ruleVersion === loaded.ruleVersion
+      ) return active;
       const creator = await manager.getRepository(UserEntity).findOne({
         where: { role: "admin", status: "active" },
         order: { createdAt: "ASC" },
@@ -61,9 +69,13 @@ export class AiQualityPromptService {
       if (!creator) {
         throw new Error("初始化 AI 质检提示词前必须存在启用的管理员账号");
       }
+      if (active) {
+        active.active = false;
+        await repository.save(active);
+      }
       return repository.save({
         id: `VQP-${randomUUID()}`,
-        revision: 1,
+        revision: (active?.revision ?? 0) + 1,
         systemPrompt: loaded.systemPrompt,
         contentSha256: contentSha256(loaded.systemPrompt),
         promptVersion: loaded.promptVersion,
@@ -73,7 +85,7 @@ export class AiQualityPromptService {
         reviewModel: loaded.reviewModel,
         active: true,
         createdByAccountId: creator.id,
-        createdByName: "系统初始化",
+        createdByName: active ? "系统规则升级" : "系统初始化",
       });
     });
   }

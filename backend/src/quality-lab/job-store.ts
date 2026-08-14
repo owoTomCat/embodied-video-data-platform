@@ -25,6 +25,8 @@ export type PublicQualityLabJob = {
   result?: Omit<NormalizedVideoQcResultV1, "rawModelResult">;
   error?: string;
   diagnostics: BailianCallDiagnostic[];
+  demandStatus?: "紧缺" | "推荐" | "已饱和";
+  demandCoefficient?: number;
 };
 
 export type QualityLabJobRecord = {
@@ -97,6 +99,8 @@ export class QualityLabJobStore {
     sizeBytes: number;
     filePath: string;
     workDirectory: string;
+    demandStatus?: "紧缺" | "推荐" | "已饱和";
+    demandCoefficient?: number;
   }): QualityLabJobRecord {
     this.sweep();
     const timestamp = this.now().toISOString();
@@ -111,6 +115,8 @@ export class QualityLabJobStore {
         createdAt: timestamp,
         updatedAt: timestamp,
         diagnostics: [],
+        demandStatus: input.demandStatus,
+        demandCoefficient: input.demandCoefficient,
       },
       filePath: input.filePath,
       workDirectory: input.workDirectory,

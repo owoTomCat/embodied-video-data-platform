@@ -46,9 +46,9 @@ class TestStorage implements ObjectStoragePort {
 
 function scored(videoId: string): NormalizedVideoQcResultV1 {
   return {
-    schemaVersion: "video_qc_result_v1",
-    ruleVersion: "video_qc_v1",
-    promptVersion: "qwen_video_qc_prompt_v1",
+    schemaVersion: "video_qc_result_v2",
+    ruleVersion: "video_qc_v2_traceable",
+    promptVersion: "qwen_video_qc_prompt_v2_traceable",
     videoId,
     evaluationStatus: "scored",
     dimensions: {} as NormalizedVideoQcResultV1["dimensions"],

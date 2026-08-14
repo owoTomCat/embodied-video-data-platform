@@ -35,7 +35,7 @@ describe("quality lab page", () => {
     expect(html).toContain("state.running+=1");
     expect(html).toContain("void processEntry(entry)");
     expect(html).toContain("state.running-=1");
-    expect(html).toContain("最多双并发");
+    expect(html).toContain("最多同时处理 2 个");
     expect(html).toContain("textContent");
     expect(html).not.toContain("innerHTML");
   });
@@ -60,7 +60,18 @@ describe("quality lab page", () => {
     expect(html).toContain('critical:"严重"');
     expect(html).toContain("evaluationStatusLabel(result.evaluationStatus)");
     expect(html).toContain("reasonLabel(issue.reason_code)");
-    expect(html).toContain("severityLabel(issue.severity)");
+    expect(html).toContain("pointsText(issue)");
+    expect(html).toContain('result.ruleVersion==="video_qc_v2_25point"');
+    expect(html).toContain('track.setAttribute("role","progressbar")');
+    expect(html).toContain("dimension-score-track");
+    expect(html).toContain("平台需求与稀缺度");
+    expect(html).toContain("三个固定档位中随机抽取平台需求状态");
+    expect(html).not.toContain("采集任务<input");
+    expect(html).not.toContain("任务标准描述<input");
+    expect(html).not.toContain("用户上传描述<input");
+    expect(html).not.toContain('id="demand-status"');
+    expect(html).toContain("其他问题");
+    expect(html).not.toContain("👁️");
   });
 
   it("uses model-independent stage labels and keeps old history readable", () => {

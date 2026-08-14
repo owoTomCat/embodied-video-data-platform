@@ -9,9 +9,11 @@ import {
 
 describe("quality calculations", () => {
   it.each([
-    [59, 0],
-    [60, 0.7],
-    [70, 0.85],
+    [39, 0.4],
+    [40, 0.6],
+    [59, 0.6],
+    [60, 0.8],
+    [79, 0.8],
     [80, 1],
     [100, 1],
   ])("maps score %s to coefficient %s", (score, coefficient) => {
@@ -28,7 +30,12 @@ describe("quality calculations", () => {
   });
 
   it("calculates income by price, effective minutes, and coefficient", () => {
-    expect(estimateIncome(12, 120, 30, 75)).toBe(15.3);
+    expect(estimateIncome(12, 120, 30, 75)).toBe(14.4);
+  });
+
+  it("uses the persisted settlement ratio when the backend provides one", () => {
+    expect(estimateIncome(12, 120, 30, 75, 0)).toBe(0);
+    expect(estimateIncome(12, 120, 30, 75, 0.6)).toBe(10.8);
   });
 });
 

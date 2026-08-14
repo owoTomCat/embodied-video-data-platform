@@ -1,9 +1,9 @@
 import type { QualityStatus, ValidationResult } from "./types";
 
 export function qualityCoefficient(score: number): number {
-  if (score < 60) return 0;
-  if (score < 70) return 0.7;
-  if (score < 80) return 0.85;
+  if (score < 40) return 0.4;
+  if (score < 60) return 0.6;
+  if (score < 80) return 0.8;
   return 1;
 }
 
@@ -23,11 +23,16 @@ export function estimateIncome(
   durationSeconds: number,
   invalidSeconds: number,
   score: number,
+  settlementRatio?: number | null,
 ): number {
+  const coefficient =
+    settlementRatio === undefined
+      ? qualityCoefficient(score)
+      : settlementRatio ?? 0;
   const amount =
     unitPricePerMinute *
     (effectiveDuration(durationSeconds, invalidSeconds) / 60) *
-    qualityCoefficient(score);
+    coefficient;
 
   return Math.round(amount * 100) / 100;
 }

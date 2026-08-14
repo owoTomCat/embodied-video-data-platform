@@ -81,4 +81,46 @@ describe("collector journey", () => {
     expect(screen.getByText("kitchen_breakfast_0803.mov")).toBeVisible();
     expect(screen.queryByText("warehouse_packing_0803.mp4")).not.toBeInTheDocument();
   });
+
+  it("merges the legacy quality route into my data", async () => {
+    renderCollector("/collector/quality");
+
+    expect(screen.getByRole("heading", { name: "我的数据" })).toBeVisible();
+    expect(screen.queryByRole("link", { name: "质检结果" })).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(window.location.pathname).toBe("/collector/submissions"),
+    );
+  });
+
+  it("opens upload from a collection guide task", async () => {
+    const user = userEvent.setup();
+    renderCollector("/collector/guide");
+
+    await user.click(screen.getByRole("button", { name: "上传工作台组装视频" }));
+
+    expect(screen.getByRole("heading", { name: "上传视频" })).toBeVisible();
+    expect(window.location.pathname).toBe("/collector/upload");
+  });
+
+  it("shows the current collector's latest submissions on the dashboard", () => {
+    renderCollector("/collector");
+
+    expect(screen.getByRole("heading", { name: "最近数据" })).toBeVisible();
+    expect(screen.getByText("kitchen_breakfast_0803.mov")).toBeVisible();
+    expect(screen.queryByText("warehouse_packing_0803.mp4")).not.toBeInTheDocument();
+  });
+
+  it("returns a newly uploaded video to dashboard recent data", async () => {
+    const user = userEvent.setup();
+    renderCollector("/collector/upload");
+
+    await user.upload(
+      screen.getByLabelText("选择视频文件"),
+      new File(["video"], "new-work.mp4", { type: "video/mp4" }),
+    );
+    await screen.findByText("上传完成，等待媒体处理");
+    await user.click(screen.getByRole("link", { name: "我的工作台" }));
+
+    expect(screen.getByText("new-work.mp4")).toBeVisible();
+  });
 });

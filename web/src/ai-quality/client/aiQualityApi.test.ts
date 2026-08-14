@@ -16,7 +16,7 @@ describe("AI quality prompt API", () => {
       contentSha256: "a".repeat(64),
       promptVersion: "qwen_video_qc_prompt_v1",
       ruleVersion: "video_qc_v1",
-      outputSchema: "video_qc_result_v1",
+      outputSchema: "video_qc_result_v2",
       initialModel: "qwen3.7-plus",
       reviewModel: "qwen3.7-flash",
       createdByName: "管理员",
