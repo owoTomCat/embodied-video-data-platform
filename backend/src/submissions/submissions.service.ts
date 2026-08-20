@@ -7,6 +7,10 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Brackets, DataSource, EntityManager, Repository } from "typeorm";
 
 import { AuditService } from "../audit/audit.service.js";
+import { AiQualityPromptService } from "../ai-quality/ai-quality-prompt.service.js";
+import { evaluationSystemPrompt, promptContentSha256 } from "../ai-quality/evaluation-context.js";
+import { LabelSetService } from "../ai-quality/label-set.service.js";
+import { QualityRuleService } from "../ai-quality/quality-rule.service.js";
 import type { PublicUser } from "../auth/auth.types.js";
 import { AuditLogEntity } from "../database/entities/audit-log.entity.js";
 import { csvDocument } from "../csv/csv.js";
@@ -25,6 +29,7 @@ import { VideoQualityResultEntity } from "../database/entities/video-quality-res
 import {
   coefficientForScore,
   DEFAULT_COEFFICIENT_BANDS,
+  labelSetSnapshot,
   passesQualityRule,
   pointsForRule,
   qualityRuleSnapshot,
@@ -506,6 +511,9 @@ export class SubmissionsService {
     private readonly dataSource: DataSource,
     private readonly policy: SubmissionsPolicy,
     private readonly audit: AuditService,
+    private readonly prompts: AiQualityPromptService,
+    private readonly qualityRules: QualityRuleService,
+    private readonly labelSets: LabelSetService,
     @Inject(OBJECT_STORAGE)
     private readonly storage: ObjectStoragePort,
   ) {}
@@ -1455,6 +1463,31 @@ export class SubmissionsService {
         quality.stuckReason = null;
         quality.startedAt = null;
         quality.completedAt = null;
+        // 重跑使用当前生效的提示词/规则/标签快照（例如提示词升级后重跑可识别新场景分类）。
+        const [activePrompt, qualityRule, labelSet] = await Promise.all([
+          this.prompts.getActive(),
+          this.qualityRules.ensureDefault(),
+          this.labelSets.ensureDefault(),
+        ]);
+        const ruleSnapshot = qualityRuleSnapshot(qualityRule);
+        const labelsSnapshot = labelSetSnapshot(labelSet);
+        const systemPromptSnapshot = evaluationSystemPrompt({
+          basePrompt: activePrompt.systemPrompt,
+          qualityRule: ruleSnapshot,
+          labelSet: labelsSnapshot,
+        });
+        quality.promptVersionId = activePrompt.id;
+        quality.promptRevision = activePrompt.revision;
+        quality.promptContentSha256 = promptContentSha256(systemPromptSnapshot);
+        quality.systemPromptSnapshot = systemPromptSnapshot;
+        quality.qualityRuleVersionId = qualityRule.id;
+        quality.qualityRuleRevision = qualityRule.revision;
+        quality.qualityRuleSnapshot = ruleSnapshot;
+        quality.labelSetVersionId = labelSet.id;
+        quality.labelSetRevision = labelSet.revision;
+        quality.labelSetSnapshot = labelsSnapshot;
+        quality.initialModel = activePrompt.initialModel;
+        quality.reviewModel = activePrompt.reviewModel;
         await manager.getRepository(VideoQualityResultEntity).save(quality);
       }
 

@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 
+import { AiQualityModule } from "../ai-quality/ai-quality.module.js";
 import { AuditModule } from "../audit/audit.module.js";
 import { AuthModule } from "../auth/auth.module.js";
 import { JobOutboxEntity } from "../database/entities/job-outbox.entity.js";
@@ -28,6 +29,7 @@ import { SubmissionsService } from "./submissions.service.js";
     AuthModule,
     SecurityModule,
     StorageModule,
+    AiQualityModule,
   ],
   controllers: [SubmissionsController],
   providers: [
