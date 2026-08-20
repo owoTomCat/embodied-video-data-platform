@@ -17,6 +17,10 @@ const DEFAULT_BANDS: BackendPointRuleCoefficientBand[] = [
   { minScore: 0, maxScore: 59, ratio: 0, label: "不计分" },
 ];
 
+function newBand(): BackendPointRuleCoefficientBand {
+  return { minScore: 0, maxScore: 0, ratio: 1, label: "新档位" };
+}
+
 export function PointRuleModal({
   open,
   currentRule,
@@ -35,6 +39,11 @@ export function PointRuleModal({
   const [defaultPoints, setDefaultPoints] = useState(
     String(currentRule?.defaultPointsPerMinute ?? 12),
   );
+  const [bands, setBands] = useState<BackendPointRuleCoefficientBand[]>(
+    currentRule?.coefficientBands?.length
+      ? currentRule.coefficientBands.map((band) => ({ ...band }))
+      : DEFAULT_BANDS.map((band) => ({ ...band })),
+  );
   const [description, setDescription] = useState(
     currentRule?.description ?? "",
   );
@@ -51,6 +60,29 @@ export function PointRuleModal({
     onClose();
   }
 
+  function updateBand(
+    index: number,
+    patch: Partial<BackendPointRuleCoefficientBand>,
+  ) {
+    setBands((current) =>
+      current.map((band, bandIndex) =>
+        bandIndex === index ? { ...band, ...patch } : band,
+      ),
+    );
+  }
+
+  function addBand() {
+    setBands((current) => [...current, newBand()]);
+  }
+
+  function removeBand(index: number) {
+    if (bands.length <= 1) {
+      setError("至少保留一个系数档位");
+      return;
+    }
+    setBands((current) => current.filter((_band, bandIndex) => bandIndex !== index));
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (submittingRef.current) return;
@@ -63,6 +95,29 @@ export function PointRuleModal({
       setError("请输入有效的每分钟积分");
       return;
     }
+    for (const band of bands) {
+      const min = Number(band.minScore);
+      const max = Number(band.maxScore);
+      const ratio = Number(band.ratio);
+      if (
+        !Number.isInteger(min) ||
+        !Number.isInteger(max) ||
+        min < 0 ||
+        max > 100 ||
+        min > max
+      ) {
+        setError(`档位「${band.label || "未命名"}」的分数区间无效（0-100 且下限≤上限）`);
+        return;
+      }
+      if (!Number.isFinite(ratio) || ratio < 0 || ratio > 1) {
+        setError(`档位「${band.label || "未命名"}」的比例必须是 0 到 1 之间的数字`);
+        return;
+      }
+      if (!band.label.trim()) {
+        setError("每个档位都需要填写名称");
+        return;
+      }
+    }
     submittingRef.current = true;
     setSubmitting(true);
     setError("");
@@ -70,7 +125,12 @@ export function PointRuleModal({
       const rule = await createPointRule({
         version: version.trim(),
         defaultPointsPerMinute: parsedPoints,
-        coefficientBands: currentRule?.coefficientBands ?? DEFAULT_BANDS,
+        coefficientBands: bands.map((band) => ({
+          minScore: Number(band.minScore),
+          maxScore: Number(band.maxScore),
+          ratio: Number(band.ratio),
+          label: band.label.trim(),
+        })),
         description,
       });
       onCreated(rule);
@@ -112,6 +172,28 @@ export function PointRuleModal({
             onChange={(event) => setDefaultPoints(event.target.value)}
           />
         </label>
+        <fieldset className="modal-fieldset">
+          <legend>质量系数档位（按最终评分计算结算比例）</legend>
+          <div className="table-scroll">
+            <table className="data-table">
+              <thead>
+                <tr><th>档位名称</th><th>分数下限</th><th>分数上限</th><th>比例</th><th /></tr>
+              </thead>
+              <tbody>
+                {bands.map((band, index) => (
+                  <tr key={`${band.label}-${index}`}>
+                    <td><input value={band.label} onChange={(event) => updateBand(index, { label: event.target.value })} aria-label="档位名称" /></td>
+                    <td><input type="number" min="0" max="100" value={band.minScore} onChange={(event) => updateBand(index, { minScore: Number(event.target.value) })} aria-label="分数下限" /></td>
+                    <td><input type="number" min="0" max="100" value={band.maxScore} onChange={(event) => updateBand(index, { maxScore: Number(event.target.value) })} aria-label="分数上限" /></td>
+                    <td><input type="number" min="0" max="1" step="0.05" value={band.ratio} onChange={(event) => updateBand(index, { ratio: Number(event.target.value) })} aria-label="比例" /></td>
+                    <td><button type="button" className="table-action table-action-danger" onClick={() => removeBand(index)}>删除</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <button type="button" className="button button-secondary" onClick={addBand}>添加档位</button>
+        </fieldset>
         <label>
           规则说明
           <textarea
@@ -119,16 +201,6 @@ export function PointRuleModal({
             onChange={(event) => setDescription(event.target.value)}
           />
         </label>
-        <div className="point-rule-band-preview">
-          {(currentRule?.coefficientBands ?? DEFAULT_BANDS).map((band) => (
-            <span key={`${band.minScore}-${band.maxScore}`}>
-              {band.minScore === 0
-                ? `低于 ${band.maxScore + 1} 分`
-                : `${band.minScore}-${band.maxScore} 分`}
-              ：{band.ratio.toFixed(2)}
-            </span>
-          ))}
-        </div>
         {error && <p className="modal-error" role="alert">{error}</p>}
         <div className="modal-actions">
           <button type="button" className="button button-secondary" onClick={close}>

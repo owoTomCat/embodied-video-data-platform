@@ -17,6 +17,7 @@ import {
   previewDeliveryPackage,
 } from "../../delivery/client/deliveryPackageApi";
 import {
+  adjustPointCycleItem,
   createPointCycle,
   createPointRule,
   getPointRule,
@@ -35,6 +36,7 @@ vi.mock("../../points/client/pointCycleApi", async (importOriginal) => {
     createPointCycle: vi.fn(),
     getPointRule: vi.fn(),
     createPointRule: vi.fn(),
+    adjustPointCycleItem: vi.fn(),
   };
 });
 
@@ -59,6 +61,7 @@ const previewPointCycleMock = vi.mocked(previewPointCycle);
 const createPointCycleMock = vi.mocked(createPointCycle);
 const getPointRuleMock = vi.mocked(getPointRule);
 const createPointRuleMock = vi.mocked(createPointRule);
+const adjustPointCycleItemMock = vi.mocked(adjustPointCycleItem);
 const listDeliveryPackagesMock = vi.mocked(listDeliveryPackages);
 const previewDeliveryPackageMock = vi.mocked(previewDeliveryPackage);
 const createDeliveryPackageMock = vi.mocked(createDeliveryPackage);
@@ -287,7 +290,7 @@ describe("settlement actions", () => {
     expect(within(firstBatch).getByText("116.12 分")).toBeVisible();
     expect(within(firstBatch).getByText("已锁定")).toBeVisible();
     expect(
-      within(firstBatch).getByRole("link", { name: /下载明细/ }),
+      within(firstBatch).getByRole("link", { name: /导出/ }),
     ).toHaveAttribute("href", expect.stringContaining("export.csv"));
   });
 
@@ -421,5 +424,70 @@ describe("delivery package actions", () => {
     expect(
       screen.getByRole("link", { name: "下载归档" }),
     ).toHaveAttribute("href", expect.stringContaining("DAT-20260813-ZIP.zip"));
+  });
+
+  it("adjusts a single locked cycle item score and refreshes the cycle", async () => {
+    const user = userEvent.setup();
+    const cycleWithItems = {
+      id: "PC-20260812",
+      businessDate: "2026-08-12",
+      status: "locked" as const,
+      submissionCount: 1,
+      effectiveDurationMs: 60_000,
+      effectiveMinutes: 1,
+      totalPoints: 12,
+      createdByAccountId: "U-ADMIN-01",
+      createdByName: "管理员",
+      createdAt: 1_786_118_400_000,
+      items: [
+        {
+          id: "PCI-1",
+          submissionId: "SUB-1",
+          ownerId: "U-COL-01",
+          ownerName: "数采人员1",
+          teamId: "TEAM-01",
+          teamName: "团队1",
+          fileName: "kitchen-task.mp4",
+          finalScore: 85,
+          settlementRatio: 1,
+          effectiveDurationMs: 60_000,
+          effectiveMinutes: 1,
+          pointsPerMinute: 12,
+          points: 12,
+          qualityRevision: 1,
+          adjusted: false,
+        },
+      ],
+    };
+    listPointCyclesMock.mockResolvedValue([cycleWithItems]);
+    adjustPointCycleItemMock.mockResolvedValue({
+      ...cycleWithItems,
+      totalPoints: 10.2,
+      items: [
+        {
+          ...cycleWithItems.items[0],
+          finalScore: 80,
+          settlementRatio: 0.85,
+          points: 10.2,
+          adjusted: true,
+        },
+      ],
+    });
+    renderAdmin("/admin/settlements");
+
+    await user.click(await screen.findByRole("button", { name: "查看条目" }));
+    expect(screen.getByText("kitchen-task.mp4")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "调整" }));
+    await user.clear(screen.getByLabelText("最终评分"));
+    await user.type(screen.getByLabelText("最终评分"), "80");
+    await user.type(screen.getByLabelText("调整原因"), "人工复核修正评分");
+    await user.click(screen.getByRole("button", { name: "确认调整" }));
+
+    expect(adjustPointCycleItemMock).toHaveBeenCalledWith("PC-20260812", "PCI-1", {
+      reason: "人工复核修正评分",
+      nextFinalScore: 80,
+    });
+    expect(await screen.findByText("已调整")).toBeVisible();
+    expect(screen.getByText("10.20")).toBeVisible();
   });
 });

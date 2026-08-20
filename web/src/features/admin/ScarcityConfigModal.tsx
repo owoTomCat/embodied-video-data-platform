@@ -163,7 +163,7 @@ export function ScarcityConfigModal({
                   <td><input type="number" min="0" value={tier.minCount} onChange={(event) => updateTier(index, { minCount: Number(event.target.value) })} aria-label="存量下限" /></td>
                   <td><input type="number" min="0" value={tier.maxCount ?? ""} placeholder="无上限" onChange={(event) => updateTier(index, { maxCount: event.target.value === "" ? null : Number(event.target.value) })} aria-label="存量上限" /></td>
                   <td><input type="number" min="0" max="1" step="0.05" value={tier.coefficient} onChange={(event) => updateTier(index, { coefficient: Number(event.target.value) })} aria-label="系数" /></td>
-                  <td><button type="button" className="table-action danger" onClick={() => removeTier(index)}>删除</button></td>
+                  <td><button type="button" className="table-action table-action-danger" onClick={() => removeTier(index)}>删除</button></td>
                 </tr>
               ))}
             </tbody>

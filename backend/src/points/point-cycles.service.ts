@@ -22,6 +22,7 @@ import {
   settlementRatioForScore,
 } from "../rules/rule-calculator.js";
 import { loadLatestPointCycleAdjustments } from "./latest-point-cycle-adjustments.js";
+import { AdjustPointCycleItemDto } from "./dto/point-cycle.dto.js";
 import { PointCycleFailure } from "./point-cycle-failure.js";
 import { PointCyclesPolicy } from "./point-cycles.policy.js";
 import { PointRulesService } from "./point-rules.service.js";
@@ -89,6 +90,8 @@ function publicItem(
     points: effective.points,
     qualityRevision: item.qualityRevision,
     qualityReviewedAt: item.qualityReviewedAt?.getTime(),
+    adjusted: adjustment !== undefined,
+    adjustedAt: adjustment?.createdAt.getTime(),
   };
 }
 
@@ -249,6 +252,156 @@ export class PointCyclesService {
       ]),
     ];
     return csvDocument(rows);
+  }
+
+  /**
+   * 对已锁定周期中的单个视频条目进行人工积分调整。
+   * 管理员可调整最终评分和/或无效时长；结算系数与积分由服务端按周期快照规则重算，
+   * 调整记录完整保留 before/after 快照并写入审计。
+   */
+  async adjustItem(
+    actor: PublicUser,
+    cycleId: string,
+    itemId: string,
+    input: AdjustPointCycleItemDto,
+  ) {
+    this.policy.requireCreate(actor);
+    const reason = input.reason.trim();
+    if (!reason) {
+      throw new PointCycleFailure("VALIDATION", "请填写调整原因", 400);
+    }
+    return this.dataSource.transaction(async (manager) => {
+      const cycle = await manager.getRepository(PointCycleEntity).findOne({
+        where: { id: cycleId },
+        lock: { mode: "pessimistic_write" },
+      });
+      if (!cycle) {
+        throw new PointCycleFailure("NOT_FOUND", "积分周期不存在", 404);
+      }
+      const item = await manager.getRepository(PointCycleItemEntity).findOne({
+        where: { id: itemId, cycleId },
+        lock: { mode: "pessimistic_write" },
+      });
+      if (!item) {
+        throw new PointCycleFailure("NOT_FOUND", "周期条目不存在", 404);
+      }
+      const quality = await manager
+        .getRepository(VideoQualityResultEntity)
+        .findOne({ where: { submissionId: item.submissionId } });
+      if (!quality) {
+        throw new PointCycleFailure(
+          "VALIDATION",
+          "该条目的质检结果不存在，无法调整",
+          409,
+        );
+      }
+
+      const adjustments = await loadLatestPointCycleAdjustments(manager, [
+        itemId,
+      ]);
+      const latest = adjustments.get(itemId);
+      const previous = effectiveItemValues(item, latest);
+      const previousInvalidMs = Number(
+        latest?.nextInvalidDurationMs ??
+          quality.manualInvalidDurationMs ??
+          quality.invalidDurationMs ??
+          0,
+      );
+      const durationMs = previous.effectiveDurationMs + previousInvalidMs;
+
+      const nextFinalScore =
+        input.nextFinalScore === undefined
+          ? previous.finalScore
+          : input.nextFinalScore;
+      const nextInvalidMs =
+        input.nextInvalidDurationMs === undefined
+          ? previousInvalidMs
+          : input.nextInvalidDurationMs;
+      const nextEffectiveMs = Math.max(0, durationMs - nextInvalidMs);
+
+      if (
+        nextFinalScore === previous.finalScore &&
+        nextInvalidMs === previousInvalidMs
+      ) {
+        throw new PointCycleFailure(
+          "VALIDATION",
+          "评分与无效时长均未变化，无需调整",
+          400,
+        );
+      }
+
+      const passThreshold = Number(
+        quality.qualityRuleSnapshot?.passThreshold ?? 60,
+      );
+      const nextRatio = settlementRatioForScore({
+        score: nextFinalScore,
+        passThreshold,
+        coefficientBands: cycle.pointRuleSnapshot?.coefficientBands ?? [],
+      });
+      const nextPoints = pointsForRule({
+        pointsPerMinute: Number(item.pointsPerMinute),
+        effectiveDurationMs: nextEffectiveMs,
+        settlementRatio: nextRatio,
+      });
+      const previousPoints = Number(previous.points);
+
+      const adjustment = await manager
+        .getRepository(PointCycleAdjustmentEntity)
+        .save({
+          id: `PCA-${randomUUID()}`,
+          pointCycleItemId: itemId,
+          submissionId: item.submissionId,
+          previousFinalScore: decimal(previous.finalScore, 1),
+          nextFinalScore: decimal(nextFinalScore, 1),
+          previousSettlementRatio: decimal(previous.settlementRatio, 4),
+          nextSettlementRatio: decimal(nextRatio, 4),
+          previousInvalidDurationMs: String(previousInvalidMs),
+          nextInvalidDurationMs: String(nextInvalidMs),
+          previousEffectiveDurationMs: String(previous.effectiveDurationMs),
+          nextEffectiveDurationMs: String(nextEffectiveMs),
+          previousPoints: decimal(previousPoints, 2),
+          nextPoints: decimal(nextPoints, 2),
+          pointsDelta: decimal(nextPoints - previousPoints, 2),
+          reason,
+          createdByAccountId: actor.id,
+          createdByName: actor.displayName,
+        });
+
+      await this.audit.record(
+        manager,
+        actor,
+        "point_cycle_adjust",
+        { id: cycle.id, name: cycle.businessDate },
+        `调整周期 ${cycle.businessDate} 条目「${item.fileName}」积分：${decimal(previousPoints, 2)} → ${decimal(nextPoints, 2)}`,
+        {
+          submissionId: item.submissionId,
+          previousFinalScore: previous.finalScore,
+          previousPoints: previousPoints,
+        },
+        {
+          submissionId: item.submissionId,
+          nextFinalScore,
+          nextPoints,
+          reason,
+        },
+      );
+
+      const reloaded = await manager
+        .getRepository(PointCycleEntity)
+        .createQueryBuilder("cycle")
+        .leftJoinAndSelect("cycle.items", "item")
+        .where("cycle.id = :cycleId", { cycleId })
+        .orderBy("item.teamName", "ASC")
+        .addOrderBy("item.ownerName", "ASC")
+        .addOrderBy("item.fileName", "ASC")
+        .getOneOrFail();
+      const allAdjustments = await loadLatestPointCycleAdjustments(
+        manager,
+        (reloaded.items ?? []).map((entry) => entry.id),
+      );
+      void adjustment;
+      return publicCycle(reloaded, allAdjustments);
+    });
   }
 
   async create(actor: PublicUser, businessDate = todayIsoDate()) {

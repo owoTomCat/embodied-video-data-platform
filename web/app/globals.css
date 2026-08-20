@@ -546,3 +546,51 @@ button:disabled { cursor: not-allowed; opacity: .56; }
   .member-detail-metrics { grid-template-columns: 1fr; }
   .settlement-preview > div:not(.modal-actions) { grid-template-columns: 1fr; }
 }
+
+/* ---- 管理后台配置编辑：表格内输入框 / 字段组 / 帮助文本 / 弹窗导语 ---- */
+.data-table input, .data-table select {
+  width: 100%;
+  min-width: 74px;
+  min-height: 34px;
+  padding: 6px 9px;
+  color: #354156;
+  background: #f9fafd;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  outline: 0;
+  font-size: 11px;
+}
+.data-table input:focus, .data-table select:focus {
+  border-color: #9db7f3;
+  box-shadow: 0 0 0 3px rgb(52 104 245 / 14%);
+}
+
+.modal-fieldset {
+  display: grid;
+  margin: 0;
+  padding: 14px;
+  gap: 11px;
+  background: #fafcff;
+  border: 1px solid #e6ecf6;
+  border-radius: 11px;
+}
+.modal-fieldset legend {
+  padding: 0 6px;
+  color: #5f6e85;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.form-help {
+  margin: 0;
+  color: #8b97a8;
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.modal-intro {
+  display: grid;
+  margin: 0 0 14px;
+  gap: 7px;
+}
+.modal-intro p { margin: 0; }

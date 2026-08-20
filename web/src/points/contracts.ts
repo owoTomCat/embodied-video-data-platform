@@ -14,6 +14,9 @@ export type BackendPointCycleItem = {
   points: number;
   qualityRevision: number;
   qualityReviewedAt?: number;
+  /** 是否被管理员人工调整过（最新调整生效后为 true） */
+  adjusted?: boolean;
+  adjustedAt?: number;
 };
 
 export type BackendPointCycle = {
@@ -71,4 +74,10 @@ export type CreatePointRuleInput = {
   defaultPointsPerMinute: number;
   coefficientBands: BackendPointRuleCoefficientBand[];
   description: string;
+};
+
+export type AdjustPointCycleItemInput = {
+  reason: string;
+  nextFinalScore?: number;
+  nextInvalidDurationMs?: number;
 };

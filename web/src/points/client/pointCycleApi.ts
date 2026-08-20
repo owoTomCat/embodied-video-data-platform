@@ -1,4 +1,5 @@
 import type {
+  AdjustPointCycleItemInput,
   BackendPointCycle,
   BackendPointCyclePreview,
   BackendPointRule,
@@ -104,4 +105,19 @@ export async function createPointRule(
     },
   );
   return result.rule;
+}
+
+export async function adjustPointCycleItem(
+  cycleId: string,
+  itemId: string,
+  input: AdjustPointCycleItemInput,
+): Promise<BackendPointCycle> {
+  const result = await requestJson<{ cycle: BackendPointCycle }>(
+    `/point-cycles/${encodeURIComponent(cycleId)}/items/${encodeURIComponent(itemId)}/adjust`,
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+  );
+  return result.cycle;
 }

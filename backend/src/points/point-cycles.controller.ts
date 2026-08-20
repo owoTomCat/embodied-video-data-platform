@@ -17,7 +17,7 @@ import { CurrentUser } from "../auth/current-user.decorator.js";
 import { SessionGuard } from "../auth/session.guard.js";
 import { AllowedOriginGuard } from "../http/allowed-origin.guard.js";
 import { SensitiveActionRateLimitGuard } from "../security/sensitive-action-rate-limit.guard.js";
-import { CreatePointCycleDto } from "./dto/point-cycle.dto.js";
+import { AdjustPointCycleItemDto, CreatePointCycleDto } from "./dto/point-cycle.dto.js";
 import { CreatePointRuleDto } from "./dto/point-rule.dto.js";
 import { PointCycleFailureFilter } from "./point-cycle-failure.filter.js";
 import { PointCyclesService } from "./point-cycles.service.js";
@@ -75,6 +75,19 @@ export class PointCyclesController {
         `attachment; filename="${id}-points.csv"`,
       )
       .send(csv);
+  }
+
+  @Post(":id/items/:itemId/adjust")
+  @UseGuards(AllowedOriginGuard, SensitiveActionRateLimitGuard)
+  async adjustItem(
+    @CurrentUser() actor: PublicUser,
+    @Param("id") id: string,
+    @Param("itemId") itemId: string,
+    @Body() input: AdjustPointCycleItemDto,
+  ) {
+    return {
+      cycle: await this.cycles.adjustItem(actor, id, itemId, input),
+    };
   }
 
   @Post()
