@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState } from "react";
 import { FilterBar } from "../../components/FilterBar";
 import { SubmissionTable } from "../../components/SubmissionTable";
 import { useDemoStore } from "../../data/DemoStoreContext";
-import { isActivePassedSubmission } from "../../domain/calculations";
 import type { Submission } from "../../domain/types";
 import {
   searchSubmissions,
@@ -16,30 +15,7 @@ import { backendSubmissionToDomain } from "../../submissions/submissionMapper";
 
 const PAGE_SIZE = 20;
 
-type ListMode = "loading" | "live" | "demo";
-
-function localFilter(
-  submissions: Submission[],
-  teamId: string | undefined,
-  query: string,
-  status: string,
-): Submission[] {
-  const normalized = query.trim().toLowerCase();
-  return submissions.filter((item) => {
-    if (item.teamId !== teamId) return false;
-    const text =
-      `${item.fileName}${item.ownerName}${item.scene}`.toLowerCase();
-    if (normalized && !text.includes(normalized)) return false;
-    if (status === "all") return true;
-    if (status === "passed" || status === "failed") {
-      return item.qualityStatus === status;
-    }
-    if (status === "unsettled") {
-      return item.settlementStatus === status && isActivePassedSubmission(item);
-    }
-    return item.processingStatus === status;
-  });
-}
+type ListMode = "loading" | "live" | "unavailable";
 
 function processingCount(submissions: Submission[]): number {
   return submissions.filter((item) =>
@@ -48,7 +24,7 @@ function processingCount(submissions: Submission[]): number {
 }
 
 export function TeamSubmissionsPage() {
-  const { state, currentTeam } = useDemoStore();
+  const { currentTeam } = useDemoStore();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [page, setPage] = useState(1);
@@ -79,28 +55,14 @@ export function TeamSubmissionsPage() {
       })
       .catch(() => {
         if (!active) return;
-        const filtered = localFilter(
-          state.submissions,
-          currentTeam?.id,
-          query,
-          status,
-        );
-        const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-        const safePage = Math.min(page, totalPages);
-        const start = (safePage - 1) * PAGE_SIZE;
-        setSubmissions(filtered.slice(start, start + PAGE_SIZE));
-        setPagination({
-          page: safePage,
-          pageSize: PAGE_SIZE,
-          total: filtered.length,
-          totalPages,
-        });
-        setMode("demo");
+        setSubmissions([]);
+        setPagination({ page: 1, pageSize: PAGE_SIZE, total: 0, totalPages: 1 });
+        setMode("unavailable");
       });
     return () => {
       active = false;
     };
-  }, [currentTeam?.id, page, query, state.submissions, status]);
+  }, [currentTeam?.id, page, query, status]);
 
   const range = useMemo(() => {
     if (pagination.total === 0) return "0";
@@ -159,7 +121,7 @@ export function TeamSubmissionsPage() {
               ? `后端筛选 ${range} / ${pagination.total} 条团队数据`
               : mode === "loading"
                 ? "正在读取后端团队数据"
-                : `共 ${range} / ${pagination.total} 条团队数据`}
+                : "后端团队数据暂不可用"}
           </span>
           <span>处理中 {processingCount(submissions)} 条</span>
         </div>

@@ -2,13 +2,12 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DemoStoreProvider } from "../../data/DemoStoreContext";
 import { InteractionProvider } from "../../interactions/InteractionContext";
 import {
   getQueueSnapshot,
   reclaimWorkerTimeouts,
 } from "../../operations/client/operationsApi";
-import { rerunAiQuality } from "../../submissions/client/submissionApi";
+import { rerunAiQuality, loadAllSubmissions } from "../../submissions/client/submissionApi";
 import { AiQueuePage } from "./AiQueuePage";
 
 vi.mock("../../operations/client/operationsApi", () => ({
@@ -22,26 +21,27 @@ vi.mock("../../submissions/client/submissionApi", async (importOriginal) => {
   return {
     ...actual,
     rerunAiQuality: vi.fn(),
+    loadAllSubmissions: vi.fn(),
   };
 });
 
 const getQueueSnapshotMock = vi.mocked(getQueueSnapshot);
 const reclaimWorkerTimeoutsMock = vi.mocked(reclaimWorkerTimeouts);
 const rerunAiQualityMock = vi.mocked(rerunAiQuality);
+const loadAllSubmissionsMock = vi.mocked(loadAllSubmissions);
 
 function renderQueuePage() {
   return render(
-    <DemoStoreProvider>
-      <InteractionProvider>
-        <AiQueuePage />
-      </InteractionProvider>
-    </DemoStoreProvider>,
+    <InteractionProvider>
+      <AiQueuePage />
+    </InteractionProvider>,
   );
 }
 
 describe("AiQueuePage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    loadAllSubmissionsMock.mockResolvedValue([]);
     reclaimWorkerTimeoutsMock.mockResolvedValue({ reclaimed: [], stuck: [] });
     rerunAiQualityMock.mockResolvedValue({
       id: "SUB-019",
@@ -249,21 +249,37 @@ describe("AiQueuePage", () => {
     expect(await screen.findByText("空闲")).toBeVisible();
   });
 
-  it("keeps the existing demo queue fallback when the backend is unavailable", async () => {
+  it("shows an unavailable state when the backend queue is unavailable", async () => {
     getQueueSnapshotMock.mockRejectedValue(new Error("offline"));
 
     renderQueuePage();
 
     expect(await screen.findByText("队列暂不可用")).toBeVisible();
-    expect(
-      screen.getByText("正式提交的媒体分析与 AI 质检状态"),
-    ).toBeVisible();
-    expect(screen.getByText("kitchen_breakfast_0803.mov")).toBeVisible();
+    expect(screen.getByText("暂无正式 AI 任务")).toBeVisible();
   });
 
   it("reruns failed AI quality submissions with an operator reason", async () => {
     const user = userEvent.setup();
     getQueueSnapshotMock.mockRejectedValue(new Error("offline"));
+    loadAllSubmissionsMock
+      .mockResolvedValueOnce([
+        {
+          id: "SUB-019",
+          fileName: "pantry_sorting_0803.mp4",
+          ownerId: "U-COL-03",
+          ownerName: "测试人员3",
+          teamId: "TEAM-01",
+          teamName: "星火一队",
+          sizeBytes: "333447168",
+          uploadStatus: "uploaded",
+          processingStatus: "system_failed",
+          settlementStatus: "unsettled",
+          isTestData: false,
+          createdAt: Date.parse("2026-08-03T02:18:00.000Z"),
+          segments: [],
+        },
+      ])
+      .mockResolvedValue([]);
 
     renderQueuePage();
 

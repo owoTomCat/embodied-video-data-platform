@@ -2,7 +2,6 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DemoStoreProvider } from "../../data/DemoStoreContext";
 import { InteractionProvider } from "../../interactions/InteractionContext";
 import { searchSubmissions } from "../../submissions/client/submissionApi";
 import type { BackendSubmission } from "../../submissions/contracts";
@@ -72,11 +71,9 @@ function backendSubmission(
 
 function renderPage() {
   return render(
-    <DemoStoreProvider>
-      <InteractionProvider>
-        <SubmissionsAdminPage />
-      </InteractionProvider>
-    </DemoStoreProvider>,
+    <InteractionProvider>
+      <SubmissionsAdminPage />
+    </InteractionProvider>,
   );
 }
 

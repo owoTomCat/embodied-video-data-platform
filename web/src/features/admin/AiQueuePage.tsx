@@ -6,7 +6,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { MetricCard } from "../../components/MetricCard";
 import { StatusBadge } from "../../components/StatusBadge";
 import { stageLabel, stagePercent } from "../../components/AiQualityProgress";
-import { useDemoStore } from "../../data/DemoStoreContext";
 import type { Submission } from "../../domain/types";
 import {
   getQueueSnapshot,
@@ -25,7 +24,7 @@ import { backendSubmissionToDomain } from "../../submissions/submissionMapper";
 import { useInteractions } from "../../interactions/InteractionContext";
 import { AiRerunModal } from "./AiRerunModal";
 
-type QueueMode = "loading" | "live" | "demo";
+type QueueMode = "loading" | "live" | "unavailable";
 
 function jobStatus(item: Submission): {
   label: string;
@@ -113,10 +112,9 @@ function formatDurationMs(milliseconds?: number): string {
 }
 
 export function AiQueuePage() {
-  const { state, upsertSubmission } = useDemoStore();
   const { notify } = useInteractions();
   const [liveSubmissions, setLiveSubmissions] = useState<Submission[] | null>(null);
-  const jobs = liveSubmissions ?? state.submissions;
+  const jobs = liveSubmissions ?? [];
   const [snapshot, setSnapshot] = useState<BackendQueueSnapshot | null>(null);
   const [queueMode, setQueueMode] = useState<QueueMode>("loading");
   const [tasksMode, setTasksMode] = useState<QueueMode>("loading");
@@ -131,7 +129,7 @@ export function AiQueuePage() {
         setLiveSubmissions(list.map(backendSubmissionToDomain));
         setTasksMode("live");
       })
-      .catch(() => setTasksMode("demo"));
+      .catch(() => setTasksMode("unavailable"));
   }, []);
 
   const loadSnapshot = useCallback(() => {
@@ -142,7 +140,7 @@ export function AiQueuePage() {
       })
       .catch(() => {
         setSnapshot(null);
-        setQueueMode("demo");
+        setQueueMode("unavailable");
       });
   }, []);
 
@@ -156,7 +154,7 @@ export function AiQueuePage() {
     return () => clearInterval(timer);
   }, [loadTasks, loadSnapshot]);
 
-  const demoMetrics = useMemo(() => {
+  const fallbackMetrics = useMemo(() => {
     const queued = jobs.filter(
       (item) =>
         item.pipelineStage === "queued" ||
@@ -252,9 +250,7 @@ export function AiQueuePage() {
     }
   }
 
-  const stuckCount = liveSubmissions ? stuckTasks.length : demoMetrics.stuck;
-  const tasksFromDemo = tasksMode === "demo";
-  const mixedData = snapshot !== null && tasksFromDemo;
+  const stuckCount = liveSubmissions ? stuckTasks.length : fallbackMetrics.stuck;
 
   return (
     <div className="page-stack">
@@ -285,10 +281,10 @@ export function AiQueuePage() {
           </>
         ) : (
           <>
-            <MetricCard label="等待处理" value={String(demoMetrics.queued)} detail="等待媒体或 AI 队列" icon={Clock3} tone="amber" />
-            <MetricCard label="AI 执行中" value={String(demoMetrics.aiRunning)} detail={`最多同时执行 3 条 · 媒体分析中 ${demoMetrics.mediaRunning} 条`} icon={Cpu} />
-            <MetricCard label="已出结果" value={String(demoMetrics.completed)} detail="包含通过、退回和待复核" icon={CheckCircle2} tone="green" />
-            <MetricCard label="异常任务" value={String(demoMetrics.failed)} detail="已持久化失败原因" icon={CircleX} tone="red" />
+            <MetricCard label="等待处理" value={String(fallbackMetrics.queued)} detail="等待媒体或 AI 队列" icon={Clock3} tone="amber" />
+            <MetricCard label="AI 执行中" value={String(fallbackMetrics.aiRunning)} detail={`最多同时执行 3 条 · 媒体分析中 ${fallbackMetrics.mediaRunning} 条`} icon={Cpu} />
+            <MetricCard label="已出结果" value={String(fallbackMetrics.completed)} detail="包含通过、退回和待复核" icon={CheckCircle2} tone="green" />
+            <MetricCard label="异常任务" value={String(fallbackMetrics.failed)} detail="已持久化失败原因" icon={CircleX} tone="red" />
           </>
         )}
         <MetricCard label="卡住任务" value={String(stuckCount)} detail="超时或心跳过期，可重新排队" icon={CircleX} tone={stuckCount > 0 ? "amber" : "green"} />
@@ -386,7 +382,7 @@ export function AiQueuePage() {
         </section>
       )}
       <section className="content-card table-card">
-        <div className="card-heading"><div><h2>任务队列</h2><p>{liveSubmissions ? `真实任务状态，共 ${jobs.length} 条 · 每 10 秒自动刷新` : mixedData ? "任务数据暂不可用，当前展示本地示例" : "正式提交的媒体分析与 AI 质检状态"}</p></div></div>
+        <div className="card-heading"><div><h2>任务队列</h2><p>{liveSubmissions ? `真实任务状态，共 ${jobs.length} 条 · 每 10 秒自动刷新` : "任务数据暂不可用，请检查后端服务"}</p></div></div>
         <div className="table-scroll">
           <table className="data-table">
             <thead><tr><th>提交</th><th>视频文件</th><th>质检进度</th><th>模型路由</th><th>尝试</th><th>状态</th></tr></thead>
@@ -485,7 +481,7 @@ export function AiQueuePage() {
           open
           submission={rerunTarget}
           onClose={() => setRerunTarget(null)}
-          onRerun={upsertSubmission}
+          onRerun={() => void loadTasks()}
         />
       )}
     </div>

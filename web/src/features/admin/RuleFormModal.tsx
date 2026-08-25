@@ -7,15 +7,12 @@ import {
   type RefObject,
 } from "react";
 import {
-  AiQualityApiError,
   createQualityLabel,
   createQualityRule,
   updateQualityLabel,
 } from "../../ai-quality/client/aiQualityApi";
 import type { LabelSet, QualityRule } from "../../ai-quality/contracts";
 import { Modal } from "../../components/Modal";
-import { demoFallbackEnabled } from "../../config/demoFallback";
-import { useDemoStore } from "../../data/DemoStoreContext";
 import type { LabelConfig } from "../../domain/types";
 import { useInteractions } from "../../interactions/InteractionContext";
 
@@ -45,11 +42,10 @@ export function RuleFormModal({
   onClose(): void;
   returnFocusRef: RefObject<HTMLButtonElement | null>;
 }) {
-  const { state, createRuleVersion, updateLabel } = useDemoStore();
   const { notify } = useInteractions();
   const [version, setVersion] = useState("");
   const [threshold, setThreshold] = useState(
-    String(currentRule?.passThreshold ?? state.rule.passThreshold),
+    String(currentRule?.passThreshold ?? 60),
   );
   const [description, setDescription] = useState("");
   const [labelName, setLabelName] = useState(label?.name ?? "");
@@ -112,33 +108,13 @@ export function RuleFormModal({
           passThreshold: Number(threshold),
           description,
         };
-        try {
-          const published = await createQualityRule(input);
-          onRulePublished?.(published);
-        } catch (caught) {
-          if (
-            !demoFallbackEnabled ||
-            (caught instanceof AiQualityApiError && caught.status < 500)
-          ) {
-            throw caught;
-          }
-          createRuleVersion(input);
-        }
+        const published = await createQualityRule(input);
+        onRulePublished?.(published);
         notify("success", "规则版本已发布");
       } else if (mode === "label-create") {
         const input = { name: labelName.trim(), type: labelType, enabled };
-        try {
-          const published = await createQualityLabel(input);
-          onLabelSetPublished?.(published);
-        } catch (caught) {
-          if (
-            !demoFallbackEnabled ||
-            (caught instanceof AiQualityApiError && caught.status < 500)
-          ) {
-            throw caught;
-          }
-          updateLabel({ id: "", name: input.name, enabled: input.enabled });
-        }
+        const published = await createQualityLabel(input);
+        onLabelSetPublished?.(published);
         notify("success", "标签已新增");
       } else if (label) {
         const input = {
@@ -147,18 +123,8 @@ export function RuleFormModal({
           name: labelName.trim(),
           enabled,
         };
-        try {
-          const published = await updateQualityLabel(input);
-          onLabelSetPublished?.(published);
-        } catch (caught) {
-          if (
-            !demoFallbackEnabled ||
-            (caught instanceof AiQualityApiError && caught.status < 500)
-          ) {
-            throw caught;
-          }
-          updateLabel(input);
-        }
+        const published = await updateQualityLabel(input);
+        onLabelSetPublished?.(published);
         notify("success", "标签已更新");
       }
       close();

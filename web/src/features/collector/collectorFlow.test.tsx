@@ -237,7 +237,7 @@ function renderCollector(path: string) {
   const collector = accountForRole("collector");
   return render(
     <IdentityProvider currentAccount={collector} accounts={demoAccounts} teams={[]}>
-      <DemoStoreProvider>
+      <DemoStoreProvider currentAccount={collector} accounts={demoAccounts} teams={[]}>
         <PlatformApp initialPath={path} />
       </DemoStoreProvider>
     </IdentityProvider>,
@@ -268,7 +268,6 @@ function renderAdminDetail(unitPricePerMinute: number) {
         currentAccount={admin}
         accounts={demoAccounts}
         teams={teams}
-        backendSubmissions={[backendSubmission()]}
       >
         <PlatformApp initialPath={path} />
       </DemoStoreProvider>

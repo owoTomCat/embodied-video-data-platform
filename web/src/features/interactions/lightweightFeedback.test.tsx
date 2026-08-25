@@ -23,7 +23,7 @@ function renderPath(path: string, admin = false) {
   const account = admin ? accountForRole("admin") : undefined;
   const app = (
     <DemoStoreProvider
-      currentAccount={account}
+      currentAccount={account ?? accountForRole("collector")}
       accounts={account ? demoAccounts : undefined}
     >
       <PlatformApp initialPath={path} />
@@ -64,7 +64,7 @@ describe("lightweight feedback interactions", () => {
     searchAccountAuditMock.mockRejectedValue(new Error("offline"));
     renderPath("/admin/audit", true);
 
-    expect(await screen.findByText("调整团队积分规则")).toBeVisible();
+    expect(await screen.findByText("审计日志服务不可用")).toBeVisible();
     expect(screen.getByRole("button", { name: "导出日志" })).toBeDisabled();
   });
 });

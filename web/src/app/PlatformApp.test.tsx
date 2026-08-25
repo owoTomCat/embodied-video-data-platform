@@ -66,7 +66,7 @@ function renderPlatform(path: string, role?: Role, demoRole = role) {
     : [];
   const app = (
     <DemoStoreProvider
-      currentAccount={demoCurrent}
+      currentAccount={demoCurrent ?? account("collector")}
       accounts={demoCurrent ? [demoCurrent] : undefined}
       teams={teams}
     >

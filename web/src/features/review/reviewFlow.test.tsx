@@ -163,7 +163,7 @@ function renderAdminWithSubmissions(submissions: BackendSubmission[]) {
       <DemoStoreProvider
         currentAccount={admin}
         accounts={demoAccounts}
-        backendSubmissions={submissions}
+        teams={[]}
       >
         <PlatformApp initialPath="/admin/review" />
       </DemoStoreProvider>

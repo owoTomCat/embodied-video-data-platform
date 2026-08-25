@@ -25,7 +25,7 @@ type AuditRow = {
   reason: string;
 };
 
-type ListMode = "loading" | "live" | "demo";
+type ListMode = "loading" | "live" | "unavailable";
 
 const accountActionLabels: Record<KnownAccountAuditAction, string> = {
   create: "创建账号",
@@ -83,47 +83,8 @@ function accountLogToRow(log: AccountAuditLog): AuditRow {
   };
 }
 
-function localRowDate(row: AuditRow): string {
-  return row.createdAt.slice(0, 10);
-}
-
-function localFilter(
-  rows: AuditRow[],
-  query: string,
-  actor: string,
-  action: string,
-  from: string,
-  to: string,
-): AuditRow[] {
-  const normalizedQuery = query.trim().toLowerCase();
-  const normalizedActor = actor.trim().toLowerCase();
-  const actionLabel = accountActionLabel(action);
-  return rows.filter((row) => {
-    const text =
-      `${row.id}${row.action}${row.target}${row.reason}`.toLowerCase();
-    if (normalizedQuery && !text.includes(normalizedQuery)) return false;
-    if (
-      normalizedActor &&
-      !`${row.actor}`.toLowerCase().includes(normalizedActor)
-    ) {
-      return false;
-    }
-    if (
-      action !== "all" &&
-      row.actionCode !== action &&
-      row.action !== actionLabel
-    ) {
-      return false;
-    }
-    const date = localRowDate(row);
-    if (from && date < from) return false;
-    if (to && date > to) return false;
-    return true;
-  });
-}
-
 export function AuditLogPage() {
-  const { state, currentUser } = useDemoStore();
+  const { currentAccount } = useDemoStore();
   const [query, setQuery] = useState("");
   const [actor, setActor] = useState("");
   const [action, setAction] = useState("all");
@@ -139,25 +100,8 @@ export function AuditLogPage() {
     totalPages: 1,
   });
 
-  const demoRows = useMemo<AuditRow[]>(
-    () => [
-      ...state.operationLogs.map((log) => ({
-        ...log,
-        actionCode: log.action,
-      })),
-      ...state.submissions.flatMap((submission) =>
-        submission.audit.map((record) => ({
-          ...record,
-          actionCode: record.action,
-          target: submission.id,
-        })),
-      ),
-    ],
-    [state.operationLogs, state.submissions],
-  );
-
   useEffect(() => {
-    if (currentUser.role !== "admin") return;
+    if (currentAccount.role !== "admin") return;
     let active = true;
     searchAccountAudit({
       q: query,
@@ -176,31 +120,15 @@ export function AuditLogPage() {
       })
       .catch(() => {
         if (!active) return;
-        const filtered = localFilter(
-          demoRows,
-          query,
-          actor,
-          action,
-          from,
-          to,
-        );
-        const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-        const safePage = Math.min(page, totalPages);
-        const start = (safePage - 1) * PAGE_SIZE;
-        setLogs(filtered.slice(start, start + PAGE_SIZE));
-        setPagination({
-          page: safePage,
-          pageSize: PAGE_SIZE,
-          total: filtered.length,
-          totalPages,
-        });
-        setMode("demo");
+        setLogs([]);
+        setPagination({ page: 1, pageSize: PAGE_SIZE, total: 0, totalPages: 1 });
+        setMode("unavailable");
       });
 
     return () => {
       active = false;
     };
-  }, [action, actor, currentUser.role, demoRows, from, page, query, to]);
+  }, [action, actor, currentAccount.role, from, page, query, to]);
 
   const range = useMemo(() => {
     if (pagination.total === 0) return "0";
@@ -244,7 +172,7 @@ export function AuditLogPage() {
               ? "审计日志已连接后端筛选"
               : mode === "loading"
                 ? "正在读取审计日志"
-                : "当前展示本地示例日志"}
+                : "审计日志服务不可用"}
           </strong>
           <small>
             {mode === "live"
@@ -327,7 +255,7 @@ export function AuditLogPage() {
               ? `后端筛选 ${range} / ${pagination.total} 条`
               : mode === "loading"
                 ? "正在读取后端数据"
-                : `共 ${range} / ${pagination.total} 条`}
+                : "后端数据暂不可用"}
           </span>
           <span>
             第 {pagination.page} / {pagination.totalPages} 页

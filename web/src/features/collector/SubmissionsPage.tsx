@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState } from "react";
 import { FilterBar } from "../../components/FilterBar";
 import { SubmissionTable } from "../../components/SubmissionTable";
 import { useDemoStore } from "../../data/DemoStoreContext";
-import { isActivePassedSubmission } from "../../domain/calculations";
 import type { Submission } from "../../domain/types";
 import { searchSubmissions } from "../../submissions/client/submissionApi";
 import type { BackendSubmissionListPagination } from "../../submissions/contracts";
@@ -13,53 +12,11 @@ import { backendSubmissionToDomain } from "../../submissions/submissionMapper";
 
 const PAGE_SIZE = 20;
 
-type ListMode = "loading" | "live" | "demo";
-
-function hasQualityResult(submission: Submission): boolean {
-  return [
-    "scored",
-    "hard_reject",
-    "review_pending",
-    "system_failed",
-  ].includes(submission.qualityResult?.status ?? "");
-}
+type ListMode = "loading" | "live" | "unavailable";
 
 function backendStatus(status: string, qualityOnly: boolean): string {
   if (qualityOnly && status === "all") return "reviewed";
   return status;
-}
-
-function localFilter(
-  submissions: Submission[],
-  ownerId: string,
-  query: string,
-  status: string,
-  qualityOnly: boolean,
-  taskId: string,
-): Submission[] {
-  const normalized = query.trim().toLowerCase();
-  return submissions.filter((item) => {
-    if (item.ownerId !== ownerId) return false;
-    if (qualityOnly && !hasQualityResult(item)) return false;
-    if (taskId === "__none__" && item.task) return false;
-    if (taskId !== "all" && taskId !== "__none__" && item.task?.taskId !== taskId) {
-      return false;
-    }
-    const text =
-      `${item.fileName} ${item.id} ${item.scene} ${item.action} ${item.task?.title ?? ""} ${item.task?.sceneName ?? ""} ${item.task?.taskId ?? ""}`.toLowerCase();
-    if (normalized && !text.includes(normalized)) return false;
-    if (status === "all") return true;
-    if (status === "passed" || status === "failed") {
-      return item.qualityStatus === status;
-    }
-    if (status === "unsettled") {
-      return (
-        item.settlementStatus === "unsettled" &&
-        isActivePassedSubmission(item)
-      );
-    }
-    return item.processingStatus === status;
-  });
 }
 
 export function SubmissionsPage({
@@ -69,7 +26,7 @@ export function SubmissionsPage({
   qualityOnly?: boolean;
   navigate(path: string): void;
 }) {
-  const { state, currentUser } = useDemoStore();
+  const { currentAccount } = useDemoStore();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [taskId, setTaskId] = useState("all");
@@ -106,43 +63,15 @@ export function SubmissionsPage({
       })
       .catch(() => {
         if (!active) return;
-        const filtered = localFilter(
-          state.submissions,
-          currentUser.id,
-          query,
-          status,
-          qualityOnly,
-          qualityOnly ? "all" : taskId,
-        );
-        const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-        const safePage = Math.min(page, totalPages);
-        const start = (safePage - 1) * PAGE_SIZE;
-        setSubmissions(filtered.slice(start, start + PAGE_SIZE));
-        setPagination({
-          page: safePage,
-          pageSize: PAGE_SIZE,
-          total: filtered.length,
-          totalPages,
-        });
-        const fallbackSources = new Map<
-          string,
-          { taskId: string; title: string; sceneName: string }
-        >();
-        for (const item of state.submissions) {
-          if (item.ownerId !== currentUser.id || !item.task) continue;
-          fallbackSources.set(item.task.taskId, {
-            taskId: item.task.taskId,
-            title: item.task.title || item.task.sceneName,
-            sceneName: item.task.sceneName,
-          });
-        }
-        setTaskSources([...fallbackSources.values()]);
-        setMode("demo");
+        setSubmissions([]);
+        setTaskSources([]);
+        setPagination({ page: 1, pageSize: PAGE_SIZE, total: 0, totalPages: 1 });
+        setMode("unavailable");
       });
     return () => {
       active = false;
     };
-  }, [currentUser.id, page, qualityOnly, query, state.submissions, status, taskId]);
+  }, [currentAccount.id, page, qualityOnly, query, status, taskId]);
 
   const range = useMemo(() => {
     if (pagination.total === 0) return "0";
@@ -208,7 +137,7 @@ export function SubmissionsPage({
               ? `后端筛选 ${range} / ${pagination.total} 条数据`
               : mode === "loading"
                 ? "正在读取后端数据"
-                : `共 ${range} / ${pagination.total} 条数据`}
+                : "后端数据暂不可用"}
           </span>
           <span>数据范围：仅本人</span>
         </div>

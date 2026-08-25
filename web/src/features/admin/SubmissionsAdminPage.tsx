@@ -7,8 +7,6 @@ import { FilterBar } from "../../components/FilterBar";
 import { Modal } from "../../components/Modal";
 import { ReviewDrawer } from "../../components/ReviewDrawer";
 import { SubmissionTable } from "../../components/SubmissionTable";
-import { useDemoStore } from "../../data/DemoStoreContext";
-import { isActivePassedSubmission } from "../../domain/calculations";
 import type { Submission } from "../../domain/types";
 import { useInteractions } from "../../interactions/InteractionContext";
 import {
@@ -26,7 +24,7 @@ import { AiRerunModal } from "./AiRerunModal";
 
 const PAGE_SIZE = 20;
 
-type ListMode = "loading" | "live" | "demo";
+type ListMode = "loading" | "live" | "unavailable";
 type SubmissionManagementStage =
   | "queued"
   | "probing"
@@ -63,27 +61,6 @@ function canReview(submission: Submission): boolean {
   return ["scored", "review_pending"].includes(
     submission.qualityResult?.status ?? "",
   );
-}
-
-function localFilter(
-  submissions: Submission[],
-  query: string,
-  status: string,
-): Submission[] {
-  const normalized = query.trim().toLowerCase();
-  return submissions.filter((item) => {
-    const text =
-      `${item.id}${item.fileName}${item.ownerName}${item.teamName}${item.scene}`.toLowerCase();
-    if (normalized && !text.includes(normalized)) return false;
-    if (status === "all") return true;
-    if (status === "passed" || status === "failed") {
-      return item.qualityStatus === status;
-    }
-    if (status === "unsettled") {
-      return item.settlementStatus === status && isActivePassedSubmission(item);
-    }
-    return item.processingStatus === status;
-  });
 }
 
 function RenameSubmissionModal({
@@ -282,7 +259,6 @@ export function SubmissionsAdminPage({
 }: {
   navigate?(path: string): void;
 }) {
-  const { state, upsertSubmission } = useDemoStore();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [page, setPage] = useState(1);
@@ -318,23 +294,14 @@ export function SubmissionsAdminPage({
       })
       .catch(() => {
         if (!active) return;
-        const filtered = localFilter(state.submissions, query, status);
-        const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-        const safePage = Math.min(page, totalPages);
-        const start = (safePage - 1) * PAGE_SIZE;
-        setSubmissions(filtered.slice(start, start + PAGE_SIZE));
-        setPagination({
-          page: safePage,
-          pageSize: PAGE_SIZE,
-          total: filtered.length,
-          totalPages,
-        });
-        setMode("demo");
+        setSubmissions([]);
+        setPagination({ page: 1, pageSize: PAGE_SIZE, total: 0, totalPages: 1 });
+        setMode("unavailable");
       });
     return () => {
       active = false;
     };
-  }, [page, query, refreshKey, state.submissions, status]);
+  }, [page, query, refreshKey, status]);
 
   const range = useMemo(() => {
     if (pagination.total === 0) return "0";
@@ -359,7 +326,6 @@ export function SubmissionsAdminPage({
     setSubmissions((current) =>
       current.map((item) => (item.id === mapped.id ? mapped : item)),
     );
-    upsertSubmission(updated);
     refresh();
   }
 
@@ -484,7 +450,7 @@ export function SubmissionsAdminPage({
               ? `后端筛选 ${range} / ${pagination.total} 条`
               : mode === "loading"
                 ? "正在读取后端数据"
-                : `共 ${range} / ${pagination.total} 条`}
+                : "后端数据暂不可用"}
           </span>
           <span>
             第 {pagination.page} / {pagination.totalPages} 页

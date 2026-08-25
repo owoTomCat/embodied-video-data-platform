@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { BadgeCheck, ChartNoAxesCombined, RotateCcw, Target } from "lucide-react";
 import { MetricCard } from "../../components/MetricCard";
 import { useIdentity } from "../../auth/client/IdentityContext";
-import { useDemoStore } from "../../data/DemoStoreContext";
 import type { Submission } from "../../domain/types";
 import { loadAllSubmissions } from "../../submissions/client/submissionApi";
 import { backendSubmissionToDomain } from "../../submissions/submissionMapper";
@@ -17,7 +16,7 @@ import {
 } from "./teamMetrics";
 
 const sceneColors = ["#4775ef", "#805de2", "#39b985", "#e5a03f"];
-type PageMode = "loading" | "live" | "demo";
+type PageMode = "loading" | "live" | "unavailable";
 
 function visibleScenes(scenes: ReturnType<typeof sceneContributions>) {
   if (scenes.length <= 4) return scenes;
@@ -46,20 +45,11 @@ function sceneGradient(scenes: ReturnType<typeof sceneContributions>): string {
 
 export function TeamAnalyticsPage() {
   const { accounts, currentAccount, teams } = useIdentity();
-  const { state } = useDemoStore();
   const currentTeam = teams.find((team) => team.id === currentAccount.teamId);
   const members = accounts.filter(
     (account) => account.teamId === currentTeam?.id,
   );
-  const fallbackSubmissions = useMemo(
-    () =>
-      state.submissions.filter(
-        (submission) => submission.teamId === currentTeam?.id,
-      ),
-    [currentTeam?.id, state.submissions],
-  );
-  const [teamSubmissions, setTeamSubmissions] =
-    useState<Submission[]>(fallbackSubmissions);
+  const [teamSubmissions, setTeamSubmissions] = useState<Submission[]>([]);
   const [mode, setMode] = useState<PageMode>("loading");
 
   useEffect(() => {
@@ -72,13 +62,13 @@ export function TeamAnalyticsPage() {
       })
       .catch(() => {
         if (!active) return;
-        setTeamSubmissions(fallbackSubmissions);
-        setMode("demo");
+        setTeamSubmissions([]);
+        setMode("unavailable");
       });
     return () => {
       active = false;
     };
-  }, [fallbackSubmissions]);
+  }, []);
 
   const monthSubmissions = submissionsSince(teamSubmissions, 30);
   const metrics = contributionMetrics(monthSubmissions);

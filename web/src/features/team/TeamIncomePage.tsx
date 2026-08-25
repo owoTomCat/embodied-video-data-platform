@@ -8,7 +8,6 @@ import { useIdentity } from "../../auth/client/IdentityContext";
 import { useDemoStore } from "../../data/DemoStoreContext";
 import {
   effectiveDuration,
-  estimatePoints,
   qualityCoefficient,
   type QualityCoefficientBand,
 } from "../../domain/calculations";
@@ -27,10 +26,9 @@ import {
   contributionMetrics,
   formatDuration,
   formatRate,
-  submissionsSince,
 } from "./teamMetrics";
 
-type PageMode = "loading" | "live" | "demo";
+type PageMode = "loading" | "live" | "unavailable";
 
 type MemberPointSummary = {
   id: string;
@@ -134,49 +132,6 @@ function memberSummaryFromSubmissions(
   };
 }
 
-function demoSummary(
-  members: Array<{ id: string; displayName: string; username: string }>,
-  submissions: Submission[],
-  pointsPerMinute: number,
-): TeamPointSummary {
-  const monthSubmissions = submissionsSince(submissions, 30);
-  const reviewed = monthSubmissions.filter(
-    (submission) => submission.qualityStatus !== "pending",
-  );
-  const passed = reviewed.filter(
-    (submission) => submission.qualityStatus === "passed",
-  );
-  const pendingPoints = passed.reduce(
-    (total, submission) =>
-      total +
-      estimatePoints(
-        pointsPerMinute,
-        submission.durationSeconds,
-        submission.invalidSeconds,
-        submission.finalScore,
-      ),
-    0,
-  );
-  return {
-    lockedPoints: 0,
-    pendingPoints,
-    reviewedCount: reviewed.length,
-    uploadCount: monthSubmissions.length,
-    pendingQualityCount: monthSubmissions.length - reviewed.length,
-    effectiveSeconds: contributionMetrics(passed).effectiveSeconds,
-    pointsPerMinute,
-    members: members.map((member) =>
-      memberSummaryFromSubmissions(
-        member,
-        monthSubmissions,
-        passed,
-        [],
-        pointsPerMinute,
-      ),
-    ),
-  };
-}
-
 function backendSummary(
   members: Array<{ id: string; displayName: string; username: string }>,
   cycles: BackendPointCycle[],
@@ -236,10 +191,20 @@ function backendSummary(
   };
 }
 
+const emptySummary: TeamPointSummary = {
+  lockedPoints: 0,
+  pendingPoints: 0,
+  reviewedCount: 0,
+  uploadCount: 0,
+  pendingQualityCount: 0,
+  effectiveSeconds: 0,
+  pointsPerMinute: 0,
+  members: [],
+};
+
 export function TeamIncomePage() {
-  const { accounts, currentAccount, teams } = useIdentity();
-  const { state } = useDemoStore();
-  const currentTeam = teams.find((team) => team.id === currentAccount.teamId);
+  const { accounts } = useIdentity();
+  const { currentTeam } = useDemoStore();
   const pointsPerMinute = currentTeam?.unitPricePerMinute ?? 0;
   const members = useMemo(
     () =>
@@ -249,18 +214,7 @@ export function TeamIncomePage() {
       ),
     [accounts, currentTeam?.id],
   );
-  const teamSubmissions = useMemo(
-    () =>
-      state.submissions.filter(
-        (submission) => submission.teamId === currentTeam?.id,
-      ),
-    [currentTeam?.id, state.submissions],
-  );
-  const fallback = useMemo(
-    () => demoSummary(members, teamSubmissions, pointsPerMinute),
-    [members, pointsPerMinute, teamSubmissions],
-  );
-  const [summary, setSummary] = useState<TeamPointSummary>(fallback);
+  const [summary, setSummary] = useState<TeamPointSummary>(emptySummary);
   const [mode, setMode] = useState<PageMode>("loading");
 
   useEffect(() => {
@@ -291,13 +245,13 @@ export function TeamIncomePage() {
       })
       .catch(() => {
         if (!active) return;
-        setSummary(fallback);
-        setMode("demo");
+        setSummary(emptySummary);
+        setMode("unavailable");
       });
     return () => {
       active = false;
     };
-  }, [fallback, members, pointsPerMinute]);
+  }, [members, pointsPerMinute]);
 
   return (
     <div className="page-stack">

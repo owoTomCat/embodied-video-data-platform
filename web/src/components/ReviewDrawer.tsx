@@ -16,7 +16,6 @@ import {
 import { type FormEvent, useEffect, useState } from "react";
 
 import { useDemoStore } from "../data/DemoStoreContext";
-import { demoFallbackEnabled } from "../config/demoFallback";
 import { dimensionLabel, hardVetoReasonLabel } from "../ai-quality/dimensionLabels";
 import { formatDuration } from "../features/team/teamMetrics";
 import {
@@ -93,7 +92,7 @@ export function ReviewDrawer({
   readOnly?: boolean;
   variant?: "drawer" | "page";
 }) {
-  const { adjustQuality, state, upsertSubmission } = useDemoStore();
+  const { teams } = useDemoStore();
   const { notify } = useInteractions();
   const [score, setScore] = useState(String(submission.finalScore));
   const [reason, setReason] = useState("");
@@ -114,13 +113,13 @@ export function ReviewDrawer({
   const [previewState, setPreviewState] = useState<
     "loading" | "ready" | "unavailable"
   >("loading");
-  const team = state.teams.find((item) => item.id === submission.teamId);
+  const team = teams.find((item) => item.id === submission.teamId);
   const duplicateCandidate = submission.duplicateCandidates?.find(
     (candidate) => candidate.status === "candidate",
   );
   const finalScore = Math.min(100, Math.max(0, Number(score) || 0));
   const passThreshold =
-    submission.qualityResult?.passThreshold ?? state.rule.passThreshold;
+    submission.qualityResult?.passThreshold ?? 60;
   const finalInvalidSeconds = unionSeconds(issues);
   const teamPointsPerMinute = team?.unitPricePerMinute ?? 0;
   const pointsPerMinute =
@@ -217,22 +216,17 @@ export function ReviewDrawer({
     }));
     try {
       setSaving(true);
-      if (submission.qualityResult) {
-        const updated = await reviewSubmissionQuality(submission.id, {
-          finalScore,
-          reason: trimmedReason,
-          issues: nextIssues,
-          expectedReviewRevision: submission.qualityResult.reviewRevision,
-          quarantine,
-        });
-        upsertSubmission(updated);
-        notify("success", "复核结果已保存");
-      } else {
-        if (!demoFallbackEnabled) {
-          throw new Error("质检结果尚未就绪，当前不能人工复核");
-        }
-        adjustQuality(submission.id, finalScore, trimmedReason);
+      if (!submission.qualityResult) {
+        throw new Error("质检结果尚未就绪，当前不能人工复核");
       }
+      await reviewSubmissionQuality(submission.id, {
+        finalScore,
+        reason: trimmedReason,
+        issues: nextIssues,
+        expectedReviewRevision: submission.qualityResult.reviewRevision,
+        quarantine,
+      });
+      notify("success", "复核结果已保存");
       onClose();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "保存失败");
@@ -251,12 +245,11 @@ export function ReviewDrawer({
     if (!duplicateCandidate) return;
     try {
       setDuplicateSaving(true);
-      const updated = await clearDuplicateCandidate(
+      await clearDuplicateCandidate(
         submission.id,
         duplicateCandidate.id,
         { reason: trimmedReason },
       );
-      upsertSubmission(updated);
       notify("success", "近似重复候选已解除");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "解除失败");

@@ -3,7 +3,6 @@
 import { useState, type FormEvent, type RefObject } from "react";
 
 import {
-  AiQualityApiError,
   publishScarcityConfig,
 } from "../../ai-quality/client/aiQualityApi";
 import type {
@@ -11,7 +10,6 @@ import type {
   ScarcityTier,
 } from "../../ai-quality/contracts";
 import { Modal } from "../../components/Modal";
-import { demoFallbackEnabled } from "../../config/demoFallback";
 import { useInteractions } from "../../interactions/InteractionContext";
 
 function newTier(): ScarcityTier {
@@ -126,23 +124,8 @@ export function ScarcityConfigModal({
         weights: { scene, standardTask: task, variant },
         description: description.trim() || "稀缺奖励配置",
       };
-      try {
-        const published = await publishScarcityConfig(input);
-        onPublished(published);
-      } catch (caught) {
-        if (
-          !demoFallbackEnabled ||
-          (caught instanceof AiQualityApiError && caught.status < 500)
-        ) {
-          throw caught;
-        }
-        onPublished({
-          ...config,
-          revision: config.revision + 1,
-          version: `SCARCITY-REV-${config.revision + 1}`,
-          ...input,
-        });
-      }
+      const published = await publishScarcityConfig(input);
+      onPublished(published);
       notify("success", "稀缺奖励配置已发布");
       onClose();
     } catch (reason) {

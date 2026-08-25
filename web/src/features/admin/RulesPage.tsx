@@ -11,8 +11,6 @@ import {
 } from "../../ai-quality/client/aiQualityApi";
 import type { LabelSet, QualityRule, ScarcityConfig } from "../../ai-quality/contracts";
 import { StatusBadge } from "../../components/StatusBadge";
-import { demoFallbackEnabled } from "../../config/demoFallback";
-import { useDemoStore } from "../../data/DemoStoreContext";
 import type { LabelConfig } from "../../domain/types";
 import { useInteractions } from "../../interactions/InteractionContext";
 import { RuleFormModal } from "./RuleFormModal";
@@ -22,13 +20,12 @@ import { ScarcityConfigModal } from "./ScarcityConfigModal";
 const typeLabel = { scene: "场景", action: "动作", object: "对象", issue: "质量问题" };
 
 export function RulesPage() {
-  const { state } = useDemoStore();
   const { notify } = useInteractions();
   const [qualityRule, setQualityRule] = useState<QualityRule>();
   const [labelSet, setLabelSet] = useState<LabelSet>();
   const [scarcityConfig, setScarcityConfig] = useState<ScarcityConfig>();
   const [ruleMode, setRuleMode] = useState<
-    "loading" | "live" | "demo" | "unavailable"
+    "loading" | "live" | "unavailable"
   >(
     "loading",
   );
@@ -43,13 +40,13 @@ export function RulesPage() {
   const labelCreateTriggerRef = useRef<HTMLButtonElement>(null);
   const scarcityTriggerRef = useRef<HTMLButtonElement>(null);
   const visibleRule = qualityRule ?? {
-    version: state.rule.version,
-    passThreshold: state.rule.passThreshold,
-    description: state.rule.description,
+    version: "",
+    passThreshold: 0,
+    description: "",
     revision: 0,
-    createdByName: "系统",
+    createdByName: "",
   };
-  const visibleLabels = labelSet?.labels ?? state.labels;
+  const visibleLabels = labelSet?.labels ?? [];
 
   useEffect(() => {
     let active = true;
@@ -62,7 +59,7 @@ export function RulesPage() {
       .catch(() => {
         if (!active) return;
         setQualityRule(undefined);
-        setRuleMode(demoFallbackEnabled ? "demo" : "unavailable");
+        setRuleMode("unavailable");
       });
     return () => {
       active = false;
@@ -138,10 +135,10 @@ export function RulesPage() {
         <button ref={ruleTriggerRef} className="button button-primary" disabled={ruleMode === "unavailable"} onClick={() => setRuleOpen(true)}>新建规则版本</button>
       </div>
       <div className="rule-cards">
-        <article className="content-card"><span><Tags size={19}/></span><div><small>标签体系</small><strong>{labelSet ? `V${labelSet.revision}` : demoFallbackEnabled ? state.rule.version : "—"}</strong><em>{visibleLabels.filter((label) => label.enabled).length} 个核心标签启用</em></div></article>
+        <article className="content-card"><span><Tags size={19}/></span><div><small>标签体系</small><strong>{labelSet ? `V${labelSet.revision}` : "—"}</strong><em>{visibleLabels.filter((label) => label.enabled).length} 个核心标签启用</em></div></article>
         <article className="content-card"><span><Bot size={19}/></span><div><small>AI 模型</small><strong>Qwen3.7</strong><em>Plus 初检 · Flash 条件复核</em></div></article>
         <article className="content-card"><span><CircleGauge size={19}/></span><div><small>通过阈值</small><strong>{ruleMode === "unavailable" ? "—" : `${visibleRule.passThreshold} 分`}</strong><em>{ruleMode === "unavailable" ? "规则服务不可用" : "质量系数分 3 档"}</em></div></article>
-        <article className="content-card"><span><BadgeCheck size={19}/></span><div><small>当前规则</small><strong>{ruleMode === "unavailable" ? "读取失败" : visibleRule.version}</strong><em>{ruleMode === "live" ? `V${visibleRule.revision} · 已生效` : ruleMode === "loading" ? "正在读取后端规则" : ruleMode === "demo" ? "本地示例配置" : "请检查后端服务"}</em></div></article>
+        <article className="content-card"><span><BadgeCheck size={19}/></span><div><small>当前规则</small><strong>{ruleMode === "unavailable" ? "读取失败" : visibleRule.version}</strong><em>{ruleMode === "live" ? `V${visibleRule.revision} · 已生效` : ruleMode === "loading" ? "正在读取后端规则" : "请检查后端服务"}</em></div></article>
       </div>
       <AiSystemPromptCard />
       <section className="content-card table-card">

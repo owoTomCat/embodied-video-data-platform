@@ -65,11 +65,11 @@ function IdentityProbe() {
 }
 
 function DemoStoreProbe() {
-  const { state } = useDemoStore();
+  const { currentAccount, teams } = useDemoStore();
   return (
     <div>
-      <span>Demo 账号 {state.users[0]?.name}</span>
-      <span>Demo 团队 {state.teams[0]?.name}</span>
+      <span>Demo 账号 {currentAccount.displayName}</span>
+      <span>Demo 团队 {teams[0]?.name}</span>
     </div>
   );
 }

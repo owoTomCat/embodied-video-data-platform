@@ -2,7 +2,7 @@
 
 import type { RefObject } from "react";
 import { Modal } from "../../components/Modal";
-import type { Team, User } from "../../domain/types";
+import type { User } from "../../domain/types";
 
 export type MemberMetrics = {
   uploads: number;
@@ -21,7 +21,7 @@ export function MemberDetailModal({
   returnFocusRef,
 }: {
   member?: User;
-  team?: Team;
+  team?: { id: string; name: string };
   metrics: MemberMetrics;
   periodLabel: string;
   open: boolean;

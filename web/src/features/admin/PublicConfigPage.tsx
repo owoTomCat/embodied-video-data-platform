@@ -8,12 +8,8 @@ import {
   publishPublicSiteSnapshot,
 } from "../../public-site/client/publicSiteApi";
 import type { PublicSiteSnapshot } from "../../public-site/contracts";
-import {
-  demoPublicSiteSnapshot,
-  unavailablePublicSiteSnapshot,
-} from "../../public-site/demoPublicSite";
+import { unavailablePublicSiteSnapshot } from "../../public-site/demoPublicSite";
 import { useInteractions } from "../../interactions/InteractionContext";
-import { demoFallbackEnabled } from "../../config/demoFallback";
 
 function formatNumber(value: number): string {
   return value.toLocaleString("zh-CN");
@@ -29,18 +25,14 @@ function formatHours(seconds: number): string {
 export function PublicConfigPage() {
   const { notify } = useInteractions();
   const [snapshot, setSnapshot] = useState<PublicSiteSnapshot>(
-    demoFallbackEnabled
-      ? demoPublicSiteSnapshot
-      : unavailablePublicSiteSnapshot,
+    unavailablePublicSiteSnapshot,
   );
   const [mode, setMode] = useState<
-    "loading" | "live" | "demo" | "unavailable"
+    "loading" | "live" | "unavailable"
   >("loading");
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(
-    demoFallbackEnabled
-      ? demoPublicSiteSnapshot.config
-      : unavailablePublicSiteSnapshot.config,
+    unavailablePublicSiteSnapshot.config,
   );
 
   useEffect(() => {
@@ -54,12 +46,9 @@ export function PublicConfigPage() {
       })
       .catch(() => {
         if (!active) return;
-        const fallback = demoFallbackEnabled
-          ? demoPublicSiteSnapshot
-          : unavailablePublicSiteSnapshot;
-        setSnapshot(fallback);
-        setForm(fallback.config);
-        setMode(demoFallbackEnabled ? "demo" : "unavailable");
+        setSnapshot(unavailablePublicSiteSnapshot);
+        setForm(unavailablePublicSiteSnapshot.config);
+        setMode("unavailable");
       });
     return () => {
       active = false;
@@ -91,9 +80,7 @@ export function PublicConfigPage() {
       ? `后端脱敏快照 V${snapshot.revision}`
       : mode === "loading"
         ? "正在读取公开快照"
-        : mode === "demo"
-          ? "当前展示本地示例快照"
-          : "公开快照服务不可用";
+        : "公开快照服务不可用";
 
   return (
     <div className="page-stack">

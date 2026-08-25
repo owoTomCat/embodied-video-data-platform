@@ -4,7 +4,6 @@ import { Archive, Boxes, Database, Download, HardDrive, Link2, PackageCheck } fr
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MetricCard } from "../../components/MetricCard";
 import { SubmissionTable } from "../../components/SubmissionTable";
-import { useDemoStore } from "../../data/DemoStoreContext";
 import { isActivePassedSubmission } from "../../domain/calculations";
 import {
   createDeliveryArchiveTask,
@@ -31,22 +30,6 @@ import { DeliveryPackageModal } from "./DeliveryPackageModal";
 import { loadAllSubmissions } from "../../submissions/client/submissionApi";
 import { backendSubmissionToDomain } from "../../submissions/submissionMapper";
 import type { Submission } from "../../domain/types";
-
-function packageFromDemo(
-  deliveryPackage: ReturnType<typeof useDemoStore>["state"]["deliveryPackages"][number],
-): BackendDeliveryPackage {
-  return {
-    id: deliveryPackage.id,
-    name: deliveryPackage.name,
-    status: "ready",
-    assetCount: deliveryPackage.assetCount,
-    totalSizeBytes: "0",
-    createdByAccountId: "demo",
-    createdByName: "系统",
-    createdAt: Date.now(),
-    items: [],
-  };
-}
 
 function archiveStatusLabel(status: BackendDeliveryArchiveTask["status"]): string {
   if (status === "completed") return "已完成";
@@ -91,12 +74,9 @@ function sumDeliveryBytes(
 }
 
 export function AssetsPage() {
-  const { state } = useDemoStore();
   const { notify } = useInteractions();
   const [packageOpen, setPackageOpen] = useState(false);
-  const [packages, setPackages] = useState<BackendDeliveryPackage[]>(() =>
-    state.deliveryPackages.map(packageFromDemo),
-  );
+  const [packages, setPackages] = useState<BackendDeliveryPackage[]>([]);
   const [preview, setPreview] = useState<BackendDeliveryPreview | null>(null);
   const [downloadLinks, setDownloadLinks] =
     useState<BackendDeliveryDownloadLinks | null>(null);
@@ -112,15 +92,11 @@ export function AssetsPage() {
   const [loadingArchiveLinkFor, setLoadingArchiveLinkFor] = useState<
     string | null
   >(null);
-  const [backendMode, setBackendMode] = useState<"loading" | "live" | "demo">(
+  const [backendMode, setBackendMode] = useState<"loading" | "live" | "unavailable">(
     "loading",
   );
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const fallbackAssets = useMemo(
-    () => state.submissions.filter(isDeliverableAsset),
-    [state.submissions],
-  );
-  const [assets, setAssets] = useState<Submission[]>(fallbackAssets);
+  const [assets, setAssets] = useState<Submission[]>([]);
   const totalPackageAssets = useMemo(
     () => packages.reduce((total, item) => total + item.assetCount, 0),
     [packages],
@@ -158,14 +134,14 @@ export function AssetsPage() {
       })
       .catch(() => {
         if (!active) return;
-        setPackages(state.deliveryPackages.map(packageFromDemo));
+        setPackages([]);
         setPreview(null);
-        setBackendMode("demo");
+        setBackendMode("unavailable");
       });
     return () => {
       active = false;
     };
-  }, [loadArchiveTasks, state.deliveryPackages]);
+  }, [loadArchiveTasks]);
 
   useEffect(() => {
     let active = true;
@@ -180,12 +156,12 @@ export function AssetsPage() {
       })
       .catch(() => {
         if (!active) return;
-        setAssets(fallbackAssets);
+        setAssets([]);
       });
     return () => {
       active = false;
     };
-  }, [fallbackAssets]);
+  }, []);
 
   function handleCreated(deliveryPackage: BackendDeliveryPackage) {
     setPackages((current) => [deliveryPackage, ...current]);
@@ -264,7 +240,7 @@ export function AssetsPage() {
     <div className="page-stack">
       <div className="page-heading"><div><p className="page-kicker">已锁定可交付数据</p><h1>数据资产</h1><span>仅包含质检通过且完成结算锁定的视频资产</span></div><button ref={triggerRef} className="button button-primary" onClick={() => setPackageOpen(true)}>创建交付包</button></div>
       <div className="metric-grid"><MetricCard label="待交付资产" value={String(preview?.assetCount ?? assets.length)} detail="已锁定且未入包" icon={Archive}/><MetricCard label="已入包资产" value={String(totalPackageAssets)} detail={`${packages.length} 个交付包`} icon={Database} tone="green"/><MetricCard label="本月交付包" value={String(monthlyPackageCount)} detail="可导出清单" icon={Boxes} tone="violet"/><MetricCard label="存储占用" value={formatBytes(totalDeliveryBytes)} detail="待交付与已入包合计" icon={HardDrive} tone="amber"/></div>
-      <div className="audit-summary"><Boxes size={18}/><span><strong>{backendMode === "live" ? "交付包数据已同步" : backendMode === "loading" ? "正在读取交付包" : "当前显示本地示例数据"}</strong><small>{backendMode === "live" ? "创建交付包后可在线下载清单与资产链接，归档过程全程可追踪。" : backendMode === "loading" ? "页面会在接口返回后切换为真实数据。" : "数据服务暂不可用，请稍后重试。"}</small></span></div>
+      <div className="audit-summary"><Boxes size={18}/><span><strong>{backendMode === "live" ? "交付包数据已同步" : backendMode === "loading" ? "正在读取交付包" : "交付包数据暂不可用"}</strong><small>{backendMode === "live" ? "创建交付包后可在线下载清单与资产链接，归档过程全程可追踪。" : backendMode === "loading" ? "页面会在接口返回后切换为真实数据。" : "数据服务暂不可用，请稍后重试。"}</small></span></div>
       <section className="content-card table-card"><div className="card-heading"><div><h2>交付包</h2><p>已持久化的资产包、下载清单、短期资产链接和归档准备状态</p></div></div><div className="table-scroll"><table className="data-table"><thead><tr><th>交付包</th><th>资产数</th><th>创建人</th><th>状态</th><th>归档任务</th><th/></tr></thead><tbody>{packages.map((deliveryPackage) => {
         const tasks = archiveTasks[deliveryPackage.id] ?? [];
         const latestTask = tasks[0];

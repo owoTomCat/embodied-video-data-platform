@@ -3,162 +3,38 @@
 import {
   createContext,
   useContext,
-  useState,
-  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import type { AccountPublic, TeamPublic } from "../auth/contracts";
-import type { User } from "../domain/types";
-import type { BackendSubmission } from "../submissions/contracts";
-import { backendSubmissionToDomain } from "../submissions/submissionMapper";
-import {
-  createDemoStore,
-  demoSeed,
-  type DeliveryPackageInput,
-  type DemoStore,
-  type RuleVersionInput,
-  type UpdateLabelInput,
-} from "./demoStore";
 
-type DemoStoreValue = {
-  state: ReturnType<DemoStore["getState"]>;
-  currentUser: ReturnType<DemoStore["getState"]>["users"][number];
-  currentTeam?: ReturnType<DemoStore["getState"]>["teams"][number];
-  syncAccount(user: User): void;
-  upsertSubmission(submission: BackendSubmission): void;
-  createRuleVersion(
-    input: RuleVersionInput,
-  ): ReturnType<DemoStore["createRuleVersion"]>;
-  updateLabel(input: UpdateLabelInput): ReturnType<DemoStore["updateLabel"]>;
-  createPointCycle(): ReturnType<DemoStore["createPointCycle"]>;
-  createSettlementBatch(): ReturnType<DemoStore["createSettlementBatch"]>;
-  createDeliveryPackage(
-    input: DeliveryPackageInput,
-  ): ReturnType<DemoStore["createDeliveryPackage"]>;
-  addUploads(files: File[]): void;
-  adjustQuality(id: string, score: number, reason: string): void;
+/**
+ * 客户端身份快照。平台已移除演示兜底数据，所有业务数据一律来自后端接口；
+ * 这里只保留登录账号与团队（与 IdentityContext 一致），并提供派生当前团队。
+ */
+export type DemoStoreValue = {
+  currentAccount: AccountPublic;
+  accounts: AccountPublic[];
+  teams: TeamPublic[];
+  currentTeam?: TeamPublic;
 };
 
 const DemoStoreContext = createContext<DemoStoreValue | null>(null);
 
-export function accountToUser(
-  account: AccountPublic,
-  existing?: User,
-): User {
-  return {
-    id: account.id,
-    name: account.displayName,
-    account: account.username,
-    role: account.role,
-    teamId: account.teamId,
-    avatar: existing?.avatar ?? account.displayName.slice(0, 1),
-    phone: existing?.phone ?? "未设置",
-    alipayAccount: existing?.alipayAccount,
-    status: account.status,
-    updatedAt: account.updatedAt,
-  };
-}
-
-function authenticatedSeed(
-  currentAccount: AccountPublic,
-  accounts: AccountPublic[],
-  teams: TeamPublic[] | undefined,
-  backendSubmissions?: BackendSubmission[],
-) {
-  const snapshot = accounts.some(
-    (account) => account.id === currentAccount.id,
-  )
-    ? accounts
-    : [currentAccount, ...accounts];
-  const users = snapshot.map((account) =>
-    accountToUser(
-      account,
-      demoSeed.users.find((user) => user.id === account.id),
-    ),
-  );
-  const seed = structuredClone(demoSeed);
-  const hasBackendSnapshot = backendSubmissions !== undefined;
-  return {
-    ...seed,
-    currentUserId: currentAccount.id,
-    users,
-    teams: (teams === undefined ? demoSeed.teams : teams).map((team) => {
-      const assigned = users.filter((user) => user.teamId === team.id);
-      const leader = assigned.find((user) => user.role === "leader");
-      return {
-        id: team.id,
-        name: team.name,
-        leaderId: leader?.id ?? ("leaderId" in team ? team.leaderId : ""),
-        memberIds: assigned
-          .filter((user) => user.id !== leader?.id)
-          .map((user) => user.id),
-        unitPricePerMinute: team.unitPricePerMinute,
-      };
-    }),
-    submissions:
-      !hasBackendSnapshot
-        ? seed.submissions
-        : (backendSubmissions ?? []).map(backendSubmissionToDomain),
-    settlements: hasBackendSnapshot ? [] : seed.settlements,
-    deliveryPackages: hasBackendSnapshot ? [] : seed.deliveryPackages,
-    labels: hasBackendSnapshot ? [] : seed.labels,
-    operationLogs: hasBackendSnapshot ? [] : seed.operationLogs,
-  };
-}
-
 export function DemoStoreProvider({
   children,
   currentAccount,
-  accounts,
-  teams,
-  backendSubmissions,
+  accounts = [],
+  teams = [],
 }: {
   children: ReactNode;
-  currentAccount?: AccountPublic;
+  currentAccount: AccountPublic;
   accounts?: AccountPublic[];
   teams?: TeamPublic[];
-  backendSubmissions?: BackendSubmission[];
 }) {
-  const [store] = useState(() =>
-    createDemoStore(
-      currentAccount
-        ? authenticatedSeed(
-            currentAccount,
-            accounts ?? [currentAccount],
-            teams,
-            backendSubmissions,
-          )
-        : demoSeed,
-    ),
-  );
-  const state = useSyncExternalStore(
-    (listener) => store.subscribe(listener),
-    () => store.getState(),
-    () => store.getState(),
-  );
-  const currentUser = state.users.find(
-    (item) => item.id === state.currentUserId,
-  )!;
-  const currentTeam = state.teams.find((item) => item.id === currentUser.teamId);
-
+  const currentTeam = teams.find((team) => team.id === currentAccount.teamId);
   return (
     <DemoStoreContext.Provider
-      value={{
-        state,
-        currentUser,
-        currentTeam,
-        syncAccount: (user) => store.syncAccount(user),
-        upsertSubmission: (submission) =>
-          store.upsertSubmission(backendSubmissionToDomain(submission)),
-        createRuleVersion: (input) => store.createRuleVersion(input),
-        updateLabel: (input) => store.updateLabel(input),
-        createPointCycle: () => store.createPointCycle(),
-        createSettlementBatch: () => store.createSettlementBatch(),
-        createDeliveryPackage: (input) => store.createDeliveryPackage(input),
-        addUploads: (files) => store.addUploads(files),
-        adjustQuality: (id, score, reason) =>
-          store.adjustQuality(id, score, reason),
-      }}
+      value={{ currentAccount, accounts, teams, currentTeam }}
     >
       {children}
     </DemoStoreContext.Provider>

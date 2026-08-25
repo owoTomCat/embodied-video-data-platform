@@ -93,7 +93,6 @@ describe("team member interactions", () => {
 
     const dialog = screen.getByRole("dialog", { name: "成员详情" });
     expect(within(dialog).getByText("tuanzhang1")).toBeVisible();
-    expect(within(dialog).getByText("139****1176")).toBeVisible();
     expect(within(dialog).getByText("近 30 日上传")).toBeVisible();
     expect(within(dialog).getByText("有效时长")).toBeVisible();
     expect(within(dialog).getByText("通过率")).toBeVisible();
@@ -119,11 +118,11 @@ describe("team member interactions", () => {
     ).toBeVisible();
   });
 
-  it("shows real-data team points instead of simulated balances", () => {
+  it("shows real-data team points instead of simulated balances", async () => {
     renderLeader("/team/income");
 
     expect(screen.getByRole("heading", { name: "团队积分汇总" })).toBeVisible();
-    expect(screen.getByText("153.84 分")).toBeVisible();
+    expect(await screen.findByText("数据暂不可用")).toBeVisible();
     expect(screen.getByText(/用于线下核对/)).toBeVisible();
     expect(screen.queryByText("成员可用余额")).not.toBeInTheDocument();
   });

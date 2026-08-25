@@ -1,16 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Archive, BadgeCheck, FileVideo, Users } from "lucide-react";
 
 import { useIdentity } from "../../auth/client/IdentityContext";
 import { MetricCard } from "../../components/MetricCard";
-import { useDemoStore } from "../../data/DemoStoreContext";
 import type { Submission } from "../../domain/types";
 import { loadAllSubmissions } from "../../submissions/client/submissionApi";
 import { backendSubmissionToDomain } from "../../submissions/submissionMapper";
 
-type PageMode = "loading" | "live" | "demo";
+type PageMode = "loading" | "live" | "unavailable";
 
 type DashboardSummary = {
   totalSubmissions: number;
@@ -76,15 +75,12 @@ function summarize(submissions: Submission[], activeAccounts: number): Dashboard
 
 export function AdminDashboard() {
   const { accounts } = useIdentity();
-  const { state } = useDemoStore();
   const activeAccounts = accounts.filter(
     (account) => account.status === "active",
   ).length;
-  const fallbackSummary = useMemo(
-    () => summarize(state.submissions, activeAccounts),
-    [activeAccounts, state.submissions],
+  const [summary, setSummary] = useState<DashboardSummary>(() =>
+    summarize([], activeAccounts),
   );
-  const [summary, setSummary] = useState<DashboardSummary>(fallbackSummary);
   const [mode, setMode] = useState<PageMode>("loading");
 
   useEffect(() => {
@@ -98,13 +94,13 @@ export function AdminDashboard() {
       })
       .catch(() => {
         if (!active) return;
-        setSummary(fallbackSummary);
-        setMode("demo");
+        setSummary(summarize([], activeAccounts));
+        setMode("unavailable");
       });
     return () => {
       active = false;
     };
-  }, [activeAccounts, fallbackSummary]);
+  }, [activeAccounts]);
 
   return (
     <div className="page-stack">

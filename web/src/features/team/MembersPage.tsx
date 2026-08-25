@@ -1,7 +1,7 @@
 "use client";
 
 import { Search, UserPlus, Users } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import * as accountApi from "../../auth/client/accountApi";
 import { useIdentity } from "../../auth/client/IdentityContext";
@@ -12,8 +12,6 @@ import type {
 } from "../../auth/contracts";
 import { StatusBadge } from "../../components/StatusBadge";
 import type { Submission, User } from "../../domain/types";
-import { demoSeed } from "../../data/demoData";
-import { useDemoStore } from "../../data/DemoStoreContext";
 import { useInteractions } from "../../interactions/InteractionContext";
 import { loadAllSubmissions } from "../../submissions/client/submissionApi";
 import { backendSubmissionToDomain } from "../../submissions/submissionMapper";
@@ -32,7 +30,7 @@ import {
 } from "./teamMetrics";
 
 type MetricsPeriod = "today" | "7d" | "30d" | "all";
-type PageMode = "loading" | "live" | "demo";
+type PageMode = "loading" | "live" | "unavailable";
 
 const periodDays: Record<Exclude<MetricsPeriod, "all">, number> = {
   today: 1,
@@ -52,15 +50,14 @@ function csvCell(value: string | number): string {
 }
 
 function accountToMember(account: AccountPublic): User {
-  const compatibility = demoSeed.users.find((user) => user.id === account.id);
   return {
     id: account.id,
     name: account.displayName,
     account: account.username,
     role: account.role,
     teamId: account.teamId,
-    avatar: compatibility?.avatar ?? account.displayName.slice(0, 1),
-    phone: compatibility?.phone ?? "未设置",
+    avatar: account.displayName.slice(0, 1),
+    phone: "未设置",
     status: account.status,
     updatedAt: account.updatedAt,
   };
@@ -68,7 +65,6 @@ function accountToMember(account: AccountPublic): User {
 
 export function MembersPage() {
   const { accounts, currentAccount, teams, upsertAccount } = useIdentity();
-  const { state } = useDemoStore();
   const { notify } = useInteractions();
   const [query, setQuery] = useState("");
   const [period, setPeriod] = useState<MetricsPeriod>("30d");
@@ -91,15 +87,7 @@ export function MembersPage() {
   const members = teamMembers.filter((user) =>
     `${user.name}${user.account}`.toLowerCase().includes(query.toLowerCase()),
   );
-  const fallbackSubmissions = useMemo(
-    () =>
-      state.submissions.filter(
-        (submission) => submission.teamId === currentTeam?.id,
-      ),
-    [currentTeam?.id, state.submissions],
-  );
-  const [teamSubmissions, setTeamSubmissions] =
-    useState<Submission[]>(fallbackSubmissions);
+  const [teamSubmissions, setTeamSubmissions] = useState<Submission[]>([]);
 
   useEffect(() => {
     let active = true;
@@ -111,13 +99,13 @@ export function MembersPage() {
       })
       .catch(() => {
         if (!active) return;
-        setTeamSubmissions(fallbackSubmissions);
-        setMetricsMode("demo");
+        setTeamSubmissions([]);
+        setMetricsMode("unavailable");
       });
     return () => {
       active = false;
     };
-  }, [fallbackSubmissions]);
+  }, []);
 
   const scopedSubmissions =
     period === "all"
@@ -396,11 +384,7 @@ export function MembersPage() {
 
       <MemberDetailModal
         member={selectedMember}
-        team={
-          currentTeam
-            ? { ...currentTeam, leaderId: "", memberIds: [] }
-            : undefined
-        }
+        team={currentTeam}
         open={Boolean(selectedMember)}
         periodLabel={periodLabel[period]}
         metrics={selectedMember ? metricsFor(selectedMember.id) : {

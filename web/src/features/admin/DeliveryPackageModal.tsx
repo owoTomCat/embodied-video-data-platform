@@ -2,7 +2,6 @@
 
 import { useRef, useState, type FormEvent, type RefObject } from "react";
 import { Modal } from "../../components/Modal";
-import { useDemoStore } from "../../data/DemoStoreContext";
 import {
   createDeliveryPackage,
   DeliveryPackageApiError,
@@ -26,18 +25,13 @@ export function DeliveryPackageModal({
   preview?: BackendDeliveryPreview | null;
   onCreated?(deliveryPackage: BackendDeliveryPackage): void;
 }) {
-  const { state, createDeliveryPackage: createDemoDeliveryPackage } =
-    useDemoStore();
   const { notify } = useInteractions();
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
   const nameRef = useRef<HTMLInputElement>(null);
-  const demoAssetCount = state.submissions.filter(
-    (item) => item.settlementStatus === "settled" && item.qualityStatus === "passed",
-  ).length;
-  const assetCount = preview?.assetCount ?? demoAssetCount;
+  const assetCount = preview?.assetCount ?? 0;
 
   function close() {
     if (submittingRef.current) return;
@@ -60,11 +54,7 @@ export function DeliveryPackageModal({
     setSubmitting(true);
     setError("");
     try {
-      if (preview) {
-        onCreated?.(await createDeliveryPackage({ name: trimmedName }));
-      } else {
-        createDemoDeliveryPackage({ name: trimmedName });
-      }
+      onCreated?.(await createDeliveryPackage({ name: trimmedName }));
       notify("success", "交付包已创建");
       close();
     } catch (reason) {

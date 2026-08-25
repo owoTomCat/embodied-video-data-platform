@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { BadgeCheck, Clock3, FileVideo, Timer } from "lucide-react";
 import { MetricCard } from "../../components/MetricCard";
 import { useIdentity } from "../../auth/client/IdentityContext";
-import { useDemoStore } from "../../data/DemoStoreContext";
 import { useInteractions } from "../../interactions/InteractionContext";
 import type { Submission } from "../../domain/types";
 import { loadAllSubmissions } from "../../submissions/client/submissionApi";
@@ -17,7 +16,7 @@ import {
   submissionsSince,
 } from "./teamMetrics";
 
-type PageMode = "loading" | "live" | "demo";
+type PageMode = "loading" | "live" | "unavailable";
 
 function trendHeight(uploads: number, maxUploads: number): string {
   if (uploads === 0) return "0%";
@@ -44,21 +43,12 @@ export function TeamDashboard({
   navigate?(path: string): void;
 }) {
   const { accounts, currentAccount, teams } = useIdentity();
-  const { state } = useDemoStore();
   const { notify } = useInteractions();
   const currentTeam = teams.find((team) => team.id === currentAccount.teamId);
   const members = accounts.filter(
     (account) => account.teamId === currentTeam?.id,
   );
-  const fallbackSubmissions = useMemo(
-    () =>
-      state.submissions.filter(
-        (submission) => submission.teamId === currentTeam?.id,
-      ),
-    [currentTeam?.id, state.submissions],
-  );
-  const [teamSubmissions, setTeamSubmissions] =
-    useState<Submission[]>(fallbackSubmissions);
+  const [teamSubmissions, setTeamSubmissions] = useState<Submission[]>([]);
   const [mode, setMode] = useState<PageMode>("loading");
 
   useEffect(() => {
@@ -71,13 +61,13 @@ export function TeamDashboard({
       })
       .catch(() => {
         if (!active) return;
-        setTeamSubmissions(fallbackSubmissions);
-        setMode("demo");
+        setTeamSubmissions([]);
+        setMode("unavailable");
       });
     return () => {
       active = false;
     };
-  }, [fallbackSubmissions]);
+  }, []);
 
   const today = submissionsSince(teamSubmissions, 1);
   const month = submissionsSince(teamSubmissions, 30);

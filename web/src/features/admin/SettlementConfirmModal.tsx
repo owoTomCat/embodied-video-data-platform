@@ -1,13 +1,7 @@
 "use client";
 
-import { useMemo, useRef, useState, type RefObject } from "react";
+import { useRef, useState, type RefObject } from "react";
 import { Modal } from "../../components/Modal";
-import { useDemoStore } from "../../data/DemoStoreContext";
-import {
-  effectiveDuration,
-  estimatePoints,
-  isActivePassedSubmission,
-} from "../../domain/calculations";
 import { useInteractions } from "../../interactions/InteractionContext";
 import {
   createPointCycle,
@@ -36,39 +30,16 @@ export function SettlementConfirmModal({
   preview?: BackendPointCyclePreview | null;
   onCreated?(cycle: BackendPointCycle): void;
 }) {
-  const { state, createPointCycle: createDemoPointCycle } = useDemoStore();
   const { notify } = useInteractions();
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
   const cancelRef = useRef<HTMLButtonElement>(null);
-  const demoPreview = useMemo<PointCyclePreview>(() => {
-    const submissions = state.submissions.filter(
-      (item) =>
-        isActivePassedSubmission(item) &&
-        item.settlementStatus === "unsettled",
-    );
-    const effectiveSeconds = submissions.reduce(
-      (total, item) => total + effectiveDuration(item.durationSeconds, item.invalidSeconds),
-      0,
-    );
-    const points = submissions.reduce((total, item) => {
-      const team = state.teams.find((entry) => entry.id === item.teamId);
-      if (!team) return total;
-      return total + estimatePoints(
-        team.unitPricePerMinute,
-        item.durationSeconds,
-        item.invalidSeconds,
-        item.finalScore,
-      );
-    }, 0);
-    return {
-      submissionCount: submissions.length,
-      effectiveMinutes: Math.round((effectiveSeconds / 60) * 100) / 100,
-      totalPoints: Math.round(points * 100) / 100,
-    };
-  }, [state.submissions, state.teams]);
-  const preview = backendPreview ?? demoPreview;
+  const preview: PointCyclePreview = backendPreview ?? {
+    submissionCount: 0,
+    effectiveMinutes: 0,
+    totalPoints: 0,
+  };
 
   function close() {
     setError("");
@@ -83,11 +54,7 @@ export function SettlementConfirmModal({
     setSubmitting(true);
     setError("");
     try {
-      if (backendPreview) {
-        onCreated?.(await createPointCycle());
-      } else {
-        createDemoPointCycle();
-      }
+      onCreated?.(await createPointCycle());
       notify("success", "积分周期已生成并锁定");
       close();
     } catch (reason) {

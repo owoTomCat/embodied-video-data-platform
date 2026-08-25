@@ -4,12 +4,8 @@ import { ArrowRight, Bot, CheckCircle2, Database, Fingerprint, Layers3, PlayCirc
 import { useEffect, useMemo, useState } from "react";
 
 import { BrandMark } from "../../components/BrandMark";
-import { demoFallbackEnabled } from "../../config/demoFallback";
 import { getPublicSiteSnapshot } from "../../public-site/client/publicSiteApi";
-import {
-  demoPublicSiteSnapshot,
-  unavailablePublicSiteSnapshot,
-} from "../../public-site/demoPublicSite";
+import { unavailablePublicSiteSnapshot } from "../../public-site/demoPublicSite";
 import type { PublicSiteSnapshot } from "../../public-site/contracts";
 
 function formatNumber(value: number): string {
@@ -32,12 +28,10 @@ function trendHeights(snapshot: PublicSiteSnapshot): number[] {
 
 export function PublicHomePage({ navigate }: { navigate(path: string): void }) {
   const [snapshot, setSnapshot] = useState<PublicSiteSnapshot>(
-    demoFallbackEnabled
-      ? demoPublicSiteSnapshot
-      : unavailablePublicSiteSnapshot,
+    unavailablePublicSiteSnapshot,
   );
   const [mode, setMode] = useState<
-    "loading" | "live" | "demo" | "unavailable"
+    "loading" | "live" | "unavailable"
   >("loading");
 
   useEffect(() => {
@@ -50,12 +44,8 @@ export function PublicHomePage({ navigate }: { navigate(path: string): void }) {
       })
       .catch(() => {
         if (!active) return;
-        setSnapshot(
-          demoFallbackEnabled
-            ? demoPublicSiteSnapshot
-            : unavailablePublicSiteSnapshot,
-        );
-        setMode(demoFallbackEnabled ? "demo" : "unavailable");
+        setSnapshot(unavailablePublicSiteSnapshot);
+        setMode("unavailable");
       });
     return () => {
       active = false;
@@ -66,11 +56,10 @@ export function PublicHomePage({ navigate }: { navigate(path: string): void }) {
   const scenes =
     snapshot.sceneBreakdown.length > 0
       ? snapshot.sceneBreakdown
-      : demoFallbackEnabled
-        ? demoPublicSiteSnapshot.sceneBreakdown
-        : [{ name: "暂无数据", description: "公开快照暂不可用", videoCount: 0, share: 0 }];
+      : [{ name: "暂无数据", description: "公开快照暂不可用", videoCount: 0, share: 0 }];
   const trend = useMemo(() => trendHeights(snapshot), [snapshot]);
-  const primaryScene = scenes[0] ?? demoPublicSiteSnapshot.sceneBreakdown[0]!;
+  const primaryScene =
+    scenes[0] ?? { name: "暂无数据", description: "公开快照暂不可用", videoCount: 0, share: 0 };
 
   function scrollToProcess() {
     document
@@ -110,7 +99,7 @@ export function PublicHomePage({ navigate }: { navigate(path: string): void }) {
           <div className="hero-visual" aria-label="数据生产概览">
             <div className="visual-glow" />
             <div className="hero-dashboard-card">
-              <div className="mini-card-head"><span>数据生产公开概览</span><em>{mode === "live" ? "脱敏快照" : mode === "loading" ? "读取中" : mode === "demo" ? "示例" : "暂不可用"}</em></div>
+              <div className="mini-card-head"><span>数据生产公开概览</span><em>{mode === "live" ? "脱敏快照" : mode === "loading" ? "读取中" : "暂不可用"}</em></div>
               <div className="mini-metrics">
                 <div><small>已验收视频</small><strong>{formatNumber(metrics.deliverableVideoCount)}</strong><span>{snapshot.snapshotDate}</span></div>
                 <div><small>有效时长</small><strong>{formatHours(metrics.effectiveDurationSeconds)}</strong><span>累计数据</span></div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { BadgeCheck, CircleDollarSign, Clock3, FileCheck2 } from "lucide-react";
 
 import { MetricCard } from "../../components/MetricCard";
@@ -22,7 +22,7 @@ import {
 } from "../../submissions/client/submissionApi";
 import { backendSubmissionToDomain } from "../../submissions/submissionMapper";
 
-type PageMode = "loading" | "live" | "demo";
+type PageMode = "loading" | "live" | "unavailable";
 
 type PointRow = {
   id: string;
@@ -64,47 +64,6 @@ function pointsForSubmission(
         100,
     ) / 100
   );
-}
-
-function demoSummary(
-  submissions: Submission[],
-  pointsPerMinute: number,
-  lockedPoints: number,
-): EarningsSummary {
-  const reviewed = submissions.filter(
-    (item) => item.qualityStatus !== "pending",
-  );
-  const passed = reviewed.filter((item) => item.qualityStatus === "passed");
-  const rows = reviewed.slice(0, 8).map((item) => ({
-    id: item.id,
-    fileName: item.fileName,
-    finalScore: item.finalScore,
-    effectiveSeconds: effectiveDuration(
-      item.durationSeconds,
-      item.invalidSeconds,
-    ),
-    points: pointsForSubmission(item, pointsPerMinute),
-    status:
-      item.settlementStatus === "settled"
-        ? ("locked" as const)
-        : ("pending" as const),
-  }));
-  const totalEstimated = reviewed.reduce(
-    (total, item) => total + pointsForSubmission(item, pointsPerMinute),
-    0,
-  );
-  return {
-    lockedPoints,
-    pendingPoints: Math.max(0, totalEstimated - lockedPoints),
-    effectiveSeconds: passed.reduce(
-      (total, item) =>
-        total + effectiveDuration(item.durationSeconds, item.invalidSeconds),
-      0,
-    ),
-    reviewedCount: reviewed.length,
-    pendingQualityCount: submissions.length - reviewed.length,
-    rows,
-  };
 }
 
 function summaryFromBackend(
@@ -163,28 +122,19 @@ function summaryFromBackend(
   };
 }
 
+const emptySummary: EarningsSummary = {
+  lockedPoints: 0,
+  pendingPoints: 0,
+  effectiveSeconds: 0,
+  reviewedCount: 0,
+  pendingQualityCount: 0,
+  rows: [],
+};
+
 export function EarningsPage() {
-  const { state, currentUser, currentTeam } = useDemoStore();
+  const { currentTeam } = useDemoStore();
   const pointsPerMinute = currentTeam?.unitPricePerMinute ?? 12;
-  const ownSubmissions = useMemo(
-    () => state.submissions.filter((item) => item.ownerId === currentUser.id),
-    [currentUser.id, state.submissions],
-  );
-  const fallback = useMemo(
-    () =>
-      demoSummary(
-        ownSubmissions,
-        pointsPerMinute,
-        ownSubmissions
-          .filter((item) => item.settlementStatus === "settled")
-          .reduce(
-            (total, item) => total + pointsForSubmission(item, pointsPerMinute),
-            0,
-          ),
-      ),
-    [ownSubmissions, pointsPerMinute],
-  );
-  const [summary, setSummary] = useState<EarningsSummary>(fallback);
+  const [summary, setSummary] = useState<EarningsSummary>(emptySummary);
   const [mode, setMode] = useState<PageMode>("loading");
 
   useEffect(() => {
@@ -216,13 +166,13 @@ export function EarningsPage() {
       })
       .catch(() => {
         if (!active) return;
-        setSummary(fallback);
-        setMode("demo");
+        setSummary(emptySummary);
+        setMode("unavailable");
       });
     return () => {
       active = false;
     };
-  }, [fallback, pointsPerMinute]);
+  }, [pointsPerMinute]);
 
   return (
     <div className="page-stack">

@@ -54,7 +54,11 @@ function renderHall() {
       accounts={demoAccounts}
       teams={[]}
     >
-      <DemoStoreProvider>
+      <DemoStoreProvider
+        currentAccount={collector}
+        accounts={demoAccounts}
+        teams={[]}
+      >
         <PlatformApp initialPath="/collector/tasks" />
       </DemoStoreProvider>
     </IdentityProvider>,

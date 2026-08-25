@@ -2,7 +2,6 @@
 
 import { CheckCircle2, CloudUpload, FileVideo, Info, ShieldCheck, XCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useDemoStore } from "../../data/DemoStoreContext";
 import { listActiveUploads } from "../../submissions/client/submissionApi";
 import type { ActiveUploadResult } from "../../submissions/contracts";
 import { resumeUploadVideo, uploadVideo } from "../../submissions/upload/multipartUploader";
@@ -39,7 +38,6 @@ export function UploadPage() {
     controller?: AbortController;
     error?: string;
   }>>([]);
-  const { upsertSubmission } = useDemoStore();
   const selectedTask =
     tasks.find((task) => task.id === selectedTaskId) ?? null;
   const authorizationComplete =
@@ -95,7 +93,7 @@ export function UploadPage() {
     const controller = new AbortController();
     updateUpload(key, { file, controller });
     try {
-      const submission = await uploadVideo(file, {
+      await uploadVideo(file, {
         signal: controller.signal,
         authorization,
         task: {
@@ -105,7 +103,6 @@ export function UploadPage() {
         onProgress: (progress) =>
           updateUpload(key, { progress, status: "uploading" }),
       });
-      upsertSubmission(submission);
       updateUpload(key, { progress: 100, status: "queued", controller: undefined });
     } catch (reason) {
       if (controller.signal.aborted) {
@@ -152,12 +149,11 @@ export function UploadPage() {
       ...current.filter((item) => item.key !== key),
     ]);
     try {
-      const submission = await resumeUploadVideo(file, session, {
+      await resumeUploadVideo(file, session, {
         signal: controller.signal,
         onProgress: (progress) =>
           updateUpload(key, { progress, status: "uploading" }),
       });
-      upsertSubmission(submission);
       setActiveUploads((current) =>
         current.filter((item) => item.submission.id !== session.submission.id),
       );
