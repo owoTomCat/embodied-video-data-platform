@@ -2,7 +2,6 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { IdentityProvider } from "../../auth/client/IdentityContext";
-import { DemoStoreProvider } from "../../data/DemoStoreContext";
 import {
   listDeliveryArchiveTasks,
   listDeliveryPackages,
@@ -100,11 +99,9 @@ function renderPage() {
   const admin = accountForRole("admin");
   return render(
     <IdentityProvider currentAccount={admin} accounts={demoAccounts} teams={[]}>
-      <DemoStoreProvider currentAccount={admin} accounts={demoAccounts}>
-        <InteractionProvider>
-          <AssetsPage />
-        </InteractionProvider>
-      </DemoStoreProvider>
+      <InteractionProvider>
+        <AssetsPage />
+      </InteractionProvider>
     </IdentityProvider>,
   );
 }

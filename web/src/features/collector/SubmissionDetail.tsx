@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 
 import { QualityReportCard } from "../../components/QualityReportCard";
 import { StatusBadge } from "../../components/StatusBadge";
-import { useDemoStore } from "../../data/DemoStoreContext";
+import { useIdentity } from "../../auth/client/IdentityContext";
 import { estimatePoints } from "../../domain/calculations";
 import type { Submission } from "../../domain/types";
 import { getPointRule } from "../../points/client/pointCycleApi";
@@ -28,7 +28,7 @@ export function SubmissionDetail({
   backPath?: string;
   backLabel?: string;
 }) {
-  const { teams } = useDemoStore();
+  const { teams } = useIdentity();
   const [loadedItem, setLoadedItem] = useState<Submission | null>(null);
   const [loadedDetailId, setLoadedDetailId] = useState<string | null>(null);
   const [loadedDetailState, setLoadedDetailState] = useState<"ready" | "missing">("missing");

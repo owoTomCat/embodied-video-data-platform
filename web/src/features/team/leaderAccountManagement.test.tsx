@@ -5,7 +5,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import * as accountApi from "../../auth/client/accountApi";
 import { IdentityProvider } from "../../auth/client/IdentityContext";
 import type { AccountPublic } from "../../auth/contracts";
-import { DemoStoreProvider } from "../../data/DemoStoreContext";
 import { InteractionProvider } from "../../interactions/InteractionContext";
 import { MembersPage } from "./MembersPage";
 
@@ -60,13 +59,7 @@ function renderMembers() {
         accounts={[leader, collector]}
         teams={teams}
       >
-        <DemoStoreProvider
-          currentAccount={leader}
-          accounts={[leader, collector]}
-          teams={teams}
-        >
-          <MembersPage />
-        </DemoStoreProvider>
+        <MembersPage />
       </IdentityProvider>
     </InteractionProvider>,
   );

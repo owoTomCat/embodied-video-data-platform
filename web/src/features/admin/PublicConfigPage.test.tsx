@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PlatformApp } from "../../app/PlatformApp";
 import { IdentityProvider } from "../../auth/client/IdentityContext";
-import { DemoStoreProvider } from "../../data/DemoStoreContext";
 import { accountForRole, demoAccounts } from "../../test/accountFixtures";
 
 const publicSiteApi = vi.hoisted(() => ({
@@ -56,9 +55,7 @@ function renderAdmin() {
   const admin = accountForRole("admin");
   return render(
     <IdentityProvider currentAccount={admin} accounts={demoAccounts} teams={[]}>
-      <DemoStoreProvider currentAccount={admin} accounts={demoAccounts}>
-        <PlatformApp initialPath="/admin/public" />
-      </DemoStoreProvider>
+      <PlatformApp initialPath="/admin/public" />
     </IdentityProvider>,
   );
 }

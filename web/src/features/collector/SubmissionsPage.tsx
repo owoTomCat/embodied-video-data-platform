@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { FilterBar } from "../../components/FilterBar";
 import { SubmissionTable } from "../../components/SubmissionTable";
-import { useDemoStore } from "../../data/DemoStoreContext";
+import { useIdentity } from "../../auth/client/IdentityContext";
 import type { Submission } from "../../domain/types";
 import { searchSubmissions } from "../../submissions/client/submissionApi";
 import type { BackendSubmissionListPagination } from "../../submissions/contracts";
@@ -26,7 +26,7 @@ export function SubmissionsPage({
   qualityOnly?: boolean;
   navigate(path: string): void;
 }) {
-  const { currentAccount } = useDemoStore();
+  const { currentAccount } = useIdentity();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [taskId, setTaskId] = useState("all");

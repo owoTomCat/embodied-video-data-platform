@@ -3,7 +3,6 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PlatformApp } from "../../app/PlatformApp";
 import { IdentityProvider } from "../../auth/client/IdentityContext";
-import { DemoStoreProvider } from "../../data/DemoStoreContext";
 import { getPointRule } from "../../points/client/pointCycleApi";
 import { accountForRole, demoAccounts } from "../../test/accountFixtures";
 import {
@@ -237,9 +236,7 @@ function renderCollector(path: string) {
   const collector = accountForRole("collector");
   return render(
     <IdentityProvider currentAccount={collector} accounts={demoAccounts} teams={[]}>
-      <DemoStoreProvider currentAccount={collector} accounts={demoAccounts} teams={[]}>
-        <PlatformApp initialPath={path} />
-      </DemoStoreProvider>
+      <PlatformApp initialPath={path} />
     </IdentityProvider>,
   );
 }
@@ -264,13 +261,7 @@ function renderAdminDetail(unitPricePerMinute: number) {
       accounts={demoAccounts}
       teams={teams}
     >
-      <DemoStoreProvider
-        currentAccount={admin}
-        accounts={demoAccounts}
-        teams={teams}
-      >
-        <PlatformApp initialPath={path} />
-      </DemoStoreProvider>
+      <PlatformApp initialPath={path} />
     </IdentityProvider>,
   );
 }

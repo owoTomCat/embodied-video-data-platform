@@ -3,7 +3,6 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AccountPublic } from "../auth/contracts";
 import { IdentityProvider } from "../auth/client/IdentityContext";
-import { DemoStoreProvider } from "../data/DemoStoreContext";
 import { InteractionProvider } from "../interactions/InteractionContext";
 import { DashboardShell } from "./DashboardShell";
 
@@ -20,16 +19,6 @@ const admin: AccountPublic = {
   displayName: "管理员",
   username: "admin",
   role: "admin",
-  status: "active",
-  updatedAt: 1_722_708_000_000,
-};
-
-const demoCollector: AccountPublic = {
-  id: "U-COL-01",
-  displayName: "演示数采",
-  username: "demo-collector",
-  role: "collector",
-  teamId: "TEAM-01",
   status: "active",
   updatedAt: 1_722_708_000_000,
 };
@@ -81,20 +70,15 @@ describe("DashboardShell", () => {
     const onLogout = vi.fn().mockResolvedValue(undefined);
     render(
       <IdentityProvider currentAccount={admin} accounts={[admin]} teams={[]}>
-        <DemoStoreProvider
-          currentAccount={demoCollector}
-          accounts={[demoCollector]}
-        >
-          <InteractionProvider>
-            <DashboardShell
-              currentPath="/admin"
-              navigate={vi.fn()}
-              onLogout={onLogout}
-            >
-              <p>content</p>
-            </DashboardShell>
-          </InteractionProvider>
-        </DemoStoreProvider>
+        <InteractionProvider>
+          <DashboardShell
+            currentPath="/admin"
+            navigate={vi.fn()}
+            onLogout={onLogout}
+          >
+            <p>content</p>
+          </DashboardShell>
+        </InteractionProvider>
       </IdentityProvider>,
     );
 
@@ -112,17 +96,15 @@ describe("DashboardShell", () => {
     const navigate = vi.fn();
     render(
       <IdentityProvider currentAccount={admin} accounts={[admin]} teams={[]}>
-        <DemoStoreProvider currentAccount={admin} accounts={[admin]}>
-          <InteractionProvider>
-            <DashboardShell
-              currentPath="/admin"
-              navigate={navigate}
-              onLogout={vi.fn()}
-            >
-              <p>content</p>
-            </DashboardShell>
-          </InteractionProvider>
-        </DemoStoreProvider>
+        <InteractionProvider>
+          <DashboardShell
+            currentPath="/admin"
+            navigate={navigate}
+            onLogout={vi.fn()}
+          >
+            <p>content</p>
+          </DashboardShell>
+        </InteractionProvider>
       </IdentityProvider>,
     );
 
@@ -140,17 +122,15 @@ describe("DashboardShell", () => {
   it("highlights the parent navigation on detail pages and reports backend alerts", async () => {
     render(
       <IdentityProvider currentAccount={admin} accounts={[admin]} teams={[]}>
-        <DemoStoreProvider currentAccount={admin} accounts={[admin]}>
-          <InteractionProvider>
-            <DashboardShell
-              currentPath="/admin/review/SUB-001"
-              navigate={vi.fn()}
-              onLogout={vi.fn()}
-            >
-              <p>content</p>
-            </DashboardShell>
-          </InteractionProvider>
-        </DemoStoreProvider>
+        <InteractionProvider>
+          <DashboardShell
+            currentPath="/admin/review/SUB-001"
+            navigate={vi.fn()}
+            onLogout={vi.fn()}
+          >
+            <p>content</p>
+          </DashboardShell>
+        </InteractionProvider>
       </IdentityProvider>,
     );
 
@@ -164,13 +144,11 @@ describe("DashboardShell", () => {
     operationsApi.getStatus.mockRejectedValueOnce(new Error("offline"));
     render(
       <IdentityProvider currentAccount={admin} accounts={[admin]} teams={[]}>
-        <DemoStoreProvider currentAccount={admin} accounts={[admin]}>
-          <InteractionProvider>
-            <DashboardShell currentPath="/admin" navigate={vi.fn()} onLogout={vi.fn()}>
-              <p>content</p>
-            </DashboardShell>
-          </InteractionProvider>
-        </DemoStoreProvider>
+        <InteractionProvider>
+          <DashboardShell currentPath="/admin" navigate={vi.fn()} onLogout={vi.fn()}>
+            <p>content</p>
+          </DashboardShell>
+        </InteractionProvider>
       </IdentityProvider>,
     );
 

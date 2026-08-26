@@ -4,7 +4,6 @@ import { describe, expect, it, vi } from "vitest";
 import { PlatformApp } from "../../app/PlatformApp";
 import { IdentityProvider } from "../../auth/client/IdentityContext";
 import { searchAccountAudit } from "../../auth/client/accountApi";
-import { DemoStoreProvider } from "../../data/DemoStoreContext";
 import { accountForRole, demoAccounts } from "../../test/accountFixtures";
 
 vi.mock("../../auth/client/accountApi", async (importOriginal) => {
@@ -21,16 +20,21 @@ const searchAccountAuditMock = vi.mocked(searchAccountAudit);
 function renderPath(path: string, admin = false) {
   window.history.replaceState({}, "", path);
   const account = admin ? accountForRole("admin") : undefined;
-  const app = (
-    <DemoStoreProvider
-      currentAccount={account ?? accountForRole("collector")}
-      accounts={account ? demoAccounts : undefined}
-    >
-      <PlatformApp initialPath={path} />
-    </DemoStoreProvider>
-  );
+  const app = <PlatformApp initialPath={path} />;
   return render(
-    account ? <IdentityProvider currentAccount={account} accounts={demoAccounts} teams={[]}>{app}</IdentityProvider> : app,
+    account ? (
+      <IdentityProvider currentAccount={account} accounts={demoAccounts} teams={[]}>
+        {app}
+      </IdentityProvider>
+    ) : (
+      <IdentityProvider
+        currentAccount={accountForRole("collector")}
+        accounts={demoAccounts}
+        teams={[]}
+      >
+        {app}
+      </IdentityProvider>
+    ),
   );
 }
 

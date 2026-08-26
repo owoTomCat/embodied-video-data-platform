@@ -2,7 +2,6 @@ import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { IdentityProvider } from "../../auth/client/IdentityContext";
-import { DemoStoreProvider } from "../../data/DemoStoreContext";
 import { loadAllSubmissions } from "../../submissions/client/submissionApi";
 import type {
   BackendQualityStatus,
@@ -101,9 +100,7 @@ function renderPage() {
         },
       ]}
     >
-      <DemoStoreProvider currentAccount={admin} accounts={demoAccounts}>
-        <AdminDashboard />
-      </DemoStoreProvider>
+      <AdminDashboard />
     </IdentityProvider>,
   );
 }

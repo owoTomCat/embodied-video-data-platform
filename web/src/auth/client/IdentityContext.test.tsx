@@ -4,10 +4,6 @@ import { describe, expect, it } from "vitest";
 
 import type { AccountPublic, TeamPublic } from "../contracts";
 import {
-  DemoStoreProvider,
-  useDemoStore,
-} from "../../data/DemoStoreContext";
-import {
   IdentityProvider,
   useIdentity,
 } from "./IdentityContext";
@@ -28,16 +24,6 @@ const team: TeamPublic = {
   unitPricePerMinute: 18.5,
   createdAt: 1_722_708_000_000,
   updatedAt: 1_722_708_000_000,
-};
-
-const demoAccount: AccountPublic = {
-  ...account,
-  displayName: "演示管理员",
-};
-
-const demoTeam: TeamPublic = {
-  ...team,
-  name: "演示团队",
 };
 
 function IdentityProbe() {
@@ -64,16 +50,6 @@ function IdentityProbe() {
   );
 }
 
-function DemoStoreProbe() {
-  const { currentAccount, teams } = useDemoStore();
-  return (
-    <div>
-      <span>Demo 账号 {currentAccount.displayName}</span>
-      <span>Demo 团队 {teams[0]?.name}</span>
-    </div>
-  );
-}
-
 describe("IdentityProvider", () => {
   it("publishes backend identity snapshots and replaces upserts in its own state", async () => {
     const user = userEvent.setup();
@@ -94,35 +70,5 @@ describe("IdentityProvider", () => {
 
     expect(screen.getByText("账号 更新后的管理员")).toBeVisible();
     expect(screen.getByText("团队 更新后的团队")).toBeVisible();
-  });
-
-  it("keeps conflicting DemoStore snapshots unchanged after identity upserts", async () => {
-    const user = userEvent.setup();
-    render(
-      <IdentityProvider
-        currentAccount={account}
-        accounts={[account]}
-        teams={[team]}
-      >
-        <DemoStoreProvider
-          currentAccount={demoAccount}
-          accounts={[demoAccount]}
-          teams={[demoTeam]}
-        >
-          <IdentityProbe />
-          <DemoStoreProbe />
-        </DemoStoreProvider>
-      </IdentityProvider>,
-    );
-
-    expect(screen.getByText("Demo 账号 演示管理员")).toBeVisible();
-    expect(screen.getByText("Demo 团队 演示团队")).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "更新账号" }));
-    await user.click(screen.getByRole("button", { name: "更新团队" }));
-
-    expect(screen.getByText("账号 更新后的管理员")).toBeVisible();
-    expect(screen.getByText("团队 更新后的团队")).toBeVisible();
-    expect(screen.getByText("Demo 账号 演示管理员")).toBeVisible();
-    expect(screen.getByText("Demo 团队 演示团队")).toBeVisible();
   });
 });

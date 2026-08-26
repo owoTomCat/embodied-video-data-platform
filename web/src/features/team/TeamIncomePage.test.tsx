@@ -2,7 +2,6 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { IdentityProvider } from "../../auth/client/IdentityContext";
-import { DemoStoreProvider } from "../../data/DemoStoreContext";
 import type { BackendPointCycle } from "../../points/contracts";
 import {
   getPointRule,
@@ -173,13 +172,7 @@ function renderPage() {
       accounts={demoAccounts}
       teams={[team]}
     >
-      <DemoStoreProvider
-        currentAccount={leader}
-        accounts={demoAccounts}
-        teams={[team]}
-      >
-        <TeamIncomePage />
-      </DemoStoreProvider>
+      <TeamIncomePage />
     </IdentityProvider>,
   );
 }

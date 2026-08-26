@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DemoStoreProvider } from "../../data/DemoStoreContext";
+import { IdentityProvider } from "../../auth/client/IdentityContext";
 import type { BackendSubmission } from "../../submissions/contracts";
 import { searchSubmissions } from "../../submissions/client/submissionApi";
 import { accountForRole, demoAccounts } from "../../test/accountFixtures";
@@ -73,7 +73,7 @@ function backendSubmission(
 function renderPage() {
   const leader = accountForRole("leader");
   return render(
-    <DemoStoreProvider
+    <IdentityProvider
       currentAccount={leader}
       accounts={demoAccounts}
       teams={[
@@ -88,7 +88,7 @@ function renderPage() {
       ]}
     >
       <TeamSubmissionsPage />
-    </DemoStoreProvider>,
+    </IdentityProvider>,
   );
 }
 

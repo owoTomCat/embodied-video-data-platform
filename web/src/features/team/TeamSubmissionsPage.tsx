@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { FilterBar } from "../../components/FilterBar";
 import { SubmissionTable } from "../../components/SubmissionTable";
-import { useDemoStore } from "../../data/DemoStoreContext";
+import { useIdentity } from "../../auth/client/IdentityContext";
 import type { Submission } from "../../domain/types";
 import {
   searchSubmissions,
@@ -24,7 +24,8 @@ function processingCount(submissions: Submission[]): number {
 }
 
 export function TeamSubmissionsPage() {
-  const { currentTeam } = useDemoStore();
+  const { currentAccount, teams } = useIdentity();
+  const currentTeam = teams.find((team) => team.id === currentAccount.teamId);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [page, setPage] = useState(1);

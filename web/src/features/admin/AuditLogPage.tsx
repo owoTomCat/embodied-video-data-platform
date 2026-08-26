@@ -11,7 +11,7 @@ import type {
   AccountAuditPagination,
   KnownAccountAuditAction,
 } from "../../auth/contracts";
-import { useDemoStore } from "../../data/DemoStoreContext";
+import { useIdentity } from "../../auth/client/IdentityContext";
 
 const PAGE_SIZE = 20;
 
@@ -84,7 +84,7 @@ function accountLogToRow(log: AccountAuditLog): AuditRow {
 }
 
 export function AuditLogPage() {
-  const { currentAccount } = useDemoStore();
+  const { currentAccount } = useIdentity();
   const [query, setQuery] = useState("");
   const [actor, setActor] = useState("");
   const [action, setAction] = useState("all");

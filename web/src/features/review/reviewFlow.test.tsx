@@ -3,7 +3,6 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PlatformApp } from "../../app/PlatformApp";
 import { IdentityProvider } from "../../auth/client/IdentityContext";
-import { DemoStoreProvider } from "../../data/DemoStoreContext";
 import type { Role } from "../../domain/types";
 import { getPointRule } from "../../points/client/pointCycleApi";
 import type { BackendSubmission } from "../../submissions/contracts";
@@ -136,9 +135,7 @@ function renderRole(path: string, role: Role) {
   const account = accountForRole(role);
   return render(
     <IdentityProvider currentAccount={account} accounts={demoAccounts} teams={[]}>
-      <DemoStoreProvider currentAccount={account} accounts={demoAccounts}>
-        <PlatformApp initialPath={path} />
-      </DemoStoreProvider>
+      <PlatformApp initialPath={path} />
     </IdentityProvider>,
   );
 }
@@ -160,13 +157,7 @@ function renderAdminWithSubmissions(submissions: BackendSubmission[]) {
   });
   return render(
     <IdentityProvider currentAccount={admin} accounts={demoAccounts} teams={[]}>
-      <DemoStoreProvider
-        currentAccount={admin}
-        accounts={demoAccounts}
-        teams={[]}
-      >
-        <PlatformApp initialPath="/admin/review" />
-      </DemoStoreProvider>
+      <PlatformApp initialPath="/admin/review" />
     </IdentityProvider>,
   );
 }

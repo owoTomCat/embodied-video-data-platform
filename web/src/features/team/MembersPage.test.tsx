@@ -3,7 +3,6 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { IdentityProvider } from "../../auth/client/IdentityContext";
-import { DemoStoreProvider } from "../../data/DemoStoreContext";
 import { InteractionProvider } from "../../interactions/InteractionContext";
 import { loadAllSubmissions } from "../../submissions/client/submissionApi";
 import type {
@@ -99,15 +98,9 @@ function renderPage() {
       accounts={demoAccounts}
       teams={[team]}
     >
-      <DemoStoreProvider
-        currentAccount={leader}
-        accounts={demoAccounts}
-        teams={[team]}
-      >
-        <InteractionProvider>
-          <MembersPage />
-        </InteractionProvider>
-      </DemoStoreProvider>
+      <InteractionProvider>
+        <MembersPage />
+      </InteractionProvider>
     </IdentityProvider>,
   );
 }

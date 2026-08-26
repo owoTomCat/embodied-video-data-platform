@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DemoStoreProvider } from "../../data/DemoStoreContext";
+import { IdentityProvider } from "../../auth/client/IdentityContext";
 import type { BackendPointCycle } from "../../points/contracts";
 import {
   getPointRule,
@@ -125,7 +125,7 @@ function backendSubmission(): BackendSubmission {
 function renderPage() {
   const collector = accountForRole("collector");
   return render(
-    <DemoStoreProvider
+    <IdentityProvider
       currentAccount={collector}
       accounts={demoAccounts}
       teams={[
@@ -140,7 +140,7 @@ function renderPage() {
       ]}
     >
       <EarningsPage />
-    </DemoStoreProvider>,
+    </IdentityProvider>,
   );
 }
 

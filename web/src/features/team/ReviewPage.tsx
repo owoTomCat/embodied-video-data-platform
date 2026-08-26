@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 
 import { ReviewDrawer } from "../../components/ReviewDrawer";
 import { SubmissionTable } from "../../components/SubmissionTable";
-import { useDemoStore } from "../../data/DemoStoreContext";
+import { useIdentity } from "../../auth/client/IdentityContext";
 import type { Submission } from "../../domain/types";
 import { searchSubmissions } from "../../submissions/client/submissionApi";
 import type { BackendSubmissionListPagination } from "../../submissions/contracts";
@@ -22,7 +22,8 @@ export function ReviewPage({
   admin?: boolean;
   navigate?: (path: string) => void;
 }) {
-  const { currentTeam } = useDemoStore();
+  const { currentAccount, teams } = useIdentity();
+  const currentTeam = teams.find((team) => team.id === currentAccount.teamId);
   const [selected, setSelected] = useState<Submission | null>(null);
   const [page, setPage] = useState(1);
   const [mode, setMode] = useState<ListMode>("loading");

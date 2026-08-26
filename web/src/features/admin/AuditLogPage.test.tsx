@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { DemoStoreProvider } from "../../data/DemoStoreContext";
+import { IdentityProvider } from "../../auth/client/IdentityContext";
 import { InteractionProvider } from "../../interactions/InteractionContext";
 import { accountForRole, demoAccounts } from "../../test/accountFixtures";
 import { AuditLogPage } from "./AuditLogPage";
@@ -21,11 +21,11 @@ const searchAccountAuditMock = vi.mocked(searchAccountAudit);
 function renderPage() {
   const admin = accountForRole("admin");
   return render(
-    <DemoStoreProvider currentAccount={admin} accounts={demoAccounts}>
+    <IdentityProvider currentAccount={admin} accounts={demoAccounts} teams={[]}>
       <InteractionProvider>
         <AuditLogPage />
       </InteractionProvider>
-    </DemoStoreProvider>,
+    </IdentityProvider>,
   );
 }
 

@@ -4,7 +4,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AccountPublic } from "../../auth/contracts";
 import * as accountApi from "../../auth/client/accountApi";
 import { IdentityProvider } from "../../auth/client/IdentityContext";
-import { DemoStoreProvider } from "../../data/DemoStoreContext";
 import { InteractionProvider } from "../../interactions/InteractionContext";
 import { UsersTeamsPage } from "./UsersTeamsPage";
 
@@ -75,13 +74,7 @@ function renderAdminAccounts(
         accounts={accountList}
         teams={teams}
       >
-        <DemoStoreProvider
-          currentAccount={adminAccount}
-          accounts={accountList}
-          teams={teams}
-        >
-          <UsersTeamsPage />
-        </DemoStoreProvider>
+        <UsersTeamsPage />
       </IdentityProvider>
     </InteractionProvider>,
   );

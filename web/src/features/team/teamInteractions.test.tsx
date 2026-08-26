@@ -3,7 +3,6 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PlatformApp } from "../../app/PlatformApp";
 import { IdentityProvider } from "../../auth/client/IdentityContext";
-import { DemoStoreProvider } from "../../data/DemoStoreContext";
 import { accountForRole, demoAccounts } from "../../test/accountFixtures";
 
 afterEach(() => {
@@ -20,9 +19,7 @@ function renderLeader(path: string) {
       accounts={demoAccounts}
       teams={[{ id: "TEAM-01", name: "星火一队", status: "active", unitPricePerMinute: 12, createdAt: 1_722_708_000_000, updatedAt: 1_722_708_000_000 }]}
     >
-      <DemoStoreProvider currentAccount={leader} accounts={demoAccounts}>
-        <PlatformApp initialPath={path} />
-      </DemoStoreProvider>
+      <PlatformApp initialPath={path} />
     </IdentityProvider>,
   );
 }

@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PlatformApp } from "../../app/PlatformApp";
 import { IdentityProvider } from "../../auth/client/IdentityContext";
-import { DemoStoreProvider } from "../../data/DemoStoreContext";
 import { accountForRole, demoAccounts } from "../../test/accountFixtures";
 
 const taskApi = vi.hoisted(() => ({
@@ -54,13 +53,7 @@ function renderHall() {
       accounts={demoAccounts}
       teams={[]}
     >
-      <DemoStoreProvider
-        currentAccount={collector}
-        accounts={demoAccounts}
-        teams={[]}
-      >
-        <PlatformApp initialPath="/collector/tasks" />
-      </DemoStoreProvider>
+      <PlatformApp initialPath="/collector/tasks" />
     </IdentityProvider>,
   );
 }

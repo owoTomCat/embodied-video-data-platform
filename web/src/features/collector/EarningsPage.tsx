@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { BadgeCheck, CircleDollarSign, Clock3, FileCheck2 } from "lucide-react";
 
 import { MetricCard } from "../../components/MetricCard";
-import { useDemoStore } from "../../data/DemoStoreContext";
+import { useIdentity } from "../../auth/client/IdentityContext";
 import {
   effectiveDuration,
   qualityCoefficient,
@@ -132,7 +132,8 @@ const emptySummary: EarningsSummary = {
 };
 
 export function EarningsPage() {
-  const { currentTeam } = useDemoStore();
+  const { currentAccount, teams } = useIdentity();
+  const currentTeam = teams.find((team) => team.id === currentAccount.teamId);
   const pointsPerMinute = currentTeam?.unitPricePerMinute ?? 12;
   const [summary, setSummary] = useState<EarningsSummary>(emptySummary);
   const [mode, setMode] = useState<PageMode>("loading");

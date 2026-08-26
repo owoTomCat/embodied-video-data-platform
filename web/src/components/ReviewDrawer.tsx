@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 
-import { useDemoStore } from "../data/DemoStoreContext";
+import { useIdentity } from "../auth/client/IdentityContext";
 import { dimensionLabel, hardVetoReasonLabel } from "../ai-quality/dimensionLabels";
 import { formatDuration } from "../features/team/teamMetrics";
 import {
@@ -92,7 +92,7 @@ export function ReviewDrawer({
   readOnly?: boolean;
   variant?: "drawer" | "page";
 }) {
-  const { teams } = useDemoStore();
+  const { teams } = useIdentity();
   const { notify } = useInteractions();
   const [score, setScore] = useState(String(submission.finalScore));
   const [reason, setReason] = useState("");

@@ -3,7 +3,6 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AccountPublic } from "../auth/contracts";
 import { IdentityProvider } from "../auth/client/IdentityContext";
-import { DemoStoreProvider } from "../data/DemoStoreContext";
 import type { Role } from "../domain/types";
 import { PlatformApp } from "./PlatformApp";
 
@@ -64,21 +63,21 @@ function renderPlatform(path: string, role?: Role, demoRole = role) {
         },
       ]
     : [];
-  const app = (
-    <DemoStoreProvider
-      currentAccount={demoCurrent ?? account("collector")}
-      accounts={demoCurrent ? [demoCurrent] : undefined}
-      teams={teams}
-    >
-      <PlatformApp initialPath={path} />
-    </DemoStoreProvider>
-  );
+  const app = <PlatformApp initialPath={path} />;
   return render(
     current ? (
       <IdentityProvider currentAccount={current} accounts={[current]} teams={teams}>
         {app}
       </IdentityProvider>
-    ) : app,
+    ) : (
+      <IdentityProvider
+        currentAccount={demoCurrent ?? account("collector")}
+        accounts={demoCurrent ? [demoCurrent] : []}
+        teams={teams}
+      >
+        {app}
+      </IdentityProvider>
+    ),
   );
 }
 

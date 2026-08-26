@@ -6,7 +6,6 @@ import {
   listBackendTeams,
 } from "@/src/auth/server/backendClient";
 import { IdentityProvider } from "@/src/auth/client/IdentityContext";
-import { DemoStoreProvider } from "@/src/data/DemoStoreContext";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
@@ -52,13 +51,7 @@ export default async function Page({
       accounts={accounts}
       teams={teams}
     >
-      <DemoStoreProvider
-        currentAccount={currentAccount}
-        accounts={accounts}
-        teams={teams}
-      >
-        <PlatformApp initialPath={initialPath} />
-      </DemoStoreProvider>
+      <PlatformApp initialPath={initialPath} />
     </IdentityProvider>
   );
 }

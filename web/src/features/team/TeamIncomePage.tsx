@@ -5,7 +5,6 @@ import { CircleDollarSign, Clock3, FileCheck2, Timer } from "lucide-react";
 
 import { MetricCard } from "../../components/MetricCard";
 import { useIdentity } from "../../auth/client/IdentityContext";
-import { useDemoStore } from "../../data/DemoStoreContext";
 import {
   effectiveDuration,
   qualityCoefficient,
@@ -203,8 +202,8 @@ const emptySummary: TeamPointSummary = {
 };
 
 export function TeamIncomePage() {
-  const { accounts } = useIdentity();
-  const { currentTeam } = useDemoStore();
+  const { accounts, teams, currentAccount } = useIdentity();
+  const currentTeam = teams.find((team) => team.id === currentAccount.teamId);
   const pointsPerMinute = currentTeam?.unitPricePerMinute ?? 0;
   const members = useMemo(
     () =>

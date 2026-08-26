@@ -5,7 +5,7 @@ import { BadgeCheck, Clock3, FileVideo, Wallet } from "lucide-react";
 
 import { MetricCard } from "../../components/MetricCard";
 import { StatusBadge } from "../../components/StatusBadge";
-import { useDemoStore } from "../../data/DemoStoreContext";
+import { useIdentity } from "../../auth/client/IdentityContext";
 import {
   effectiveDuration,
   estimatePoints,
@@ -59,7 +59,8 @@ export function CollectorDashboard({
   navigate(path: string): void;
   title?: boolean;
 }) {
-  const { currentAccount, currentTeam } = useDemoStore();
+  const { currentAccount, teams } = useIdentity();
+  const currentTeam = teams.find((team) => team.id === currentAccount.teamId);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [pointRule, setPointRule] = useState<BackendPointRule | null>(null);
   const [pointRuleState, setPointRuleState] = useState<

@@ -2,7 +2,6 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { IdentityProvider } from "../../auth/client/IdentityContext";
-import { DemoStoreProvider } from "../../data/DemoStoreContext";
 import { loadAllSubmissions } from "../../submissions/client/submissionApi";
 import type {
   BackendQualityStatus,
@@ -109,13 +108,7 @@ function renderPage() {
       accounts={demoAccounts}
       teams={[team]}
     >
-      <DemoStoreProvider
-        currentAccount={leader}
-        accounts={demoAccounts}
-        teams={[team]}
-      >
-        <TeamAnalyticsPage />
-      </DemoStoreProvider>
+      <TeamAnalyticsPage />
     </IdentityProvider>,
   );
 }
