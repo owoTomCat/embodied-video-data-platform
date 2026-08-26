@@ -130,11 +130,10 @@ export function useMemberSettlementStats(teams: TeamPublic[]): {
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
-    setUnavailable(false);
     Promise.all([loadAllSubmissions({ status: "all" }), getPointRule()])
       .then(([submissions, pointRule]) => {
         if (!active) return;
+        setUnavailable(false);
         setStats(
           computeSettlementStats(
             submissions.map(backendSubmissionToDomain),

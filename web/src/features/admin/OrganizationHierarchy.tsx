@@ -18,12 +18,6 @@ import { StatusBadge } from "../../components/StatusBadge";
 import type { AccountStatus, Role } from "../../domain/types";
 import { useMemberSettlementStats } from "./useMemberSettlementStats";
 
-const roleLabel: Record<Role, string> = {
-  collector: "数采人员",
-  leader: "团长",
-  admin: "平台管理员",
-};
-
 function formatDuration(seconds: number): string {
   const rounded = Math.max(0, Math.round(seconds));
   const minutes = Math.floor(rounded / 60);
