@@ -147,10 +147,6 @@ describe("platform routing", () => {
       renderPlatform("/account/profile", role);
 
       expect(screen.getByRole("heading", { name: "个人资料" })).toBeVisible();
-      expect(screen.getByRole("link", { name: /^个人资料/ })).toHaveAttribute(
-        "href",
-        "/account/profile",
-      );
     },
   );
 

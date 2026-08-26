@@ -66,6 +66,13 @@ export class UpdateAccountDto {
   phone?: string;
 }
 
+export class UpdateOwnAccountDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  phone?: string;
+}
+
 export class ResetPasswordDto {
   @IsString()
   @MinLength(8)

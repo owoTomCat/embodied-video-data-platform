@@ -22,6 +22,7 @@ import type {
   CreateAccountDto,
   SetAccountStatusDto,
   UpdateAccountDto,
+  UpdateOwnAccountDto,
 } from "./dto/account.dto.js";
 import {
   IdentityFailure,
@@ -216,6 +217,18 @@ export class AccountsService {
       }
       throw error;
     }
+  }
+
+  async updateOwn(
+    actor: PublicUser,
+    input: UpdateOwnAccountDto,
+  ): Promise<PublicUser> {
+    const target = await this.users.findOneByOrFail({ id: actor.id });
+    if (input.phone !== undefined) {
+      target.phone = input.phone.trim() || null;
+    }
+    const saved = await this.users.save(target);
+    return toPublicUser(saved);
   }
 
   async resetPassword(

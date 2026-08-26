@@ -57,7 +57,7 @@ function accountToMember(account: AccountPublic): User {
     role: account.role,
     teamId: account.teamId,
     avatar: account.displayName.slice(0, 1),
-    phone: "未设置",
+    phone: account.phone ?? "未填写",
     status: account.status,
     updatedAt: account.updatedAt,
   };
