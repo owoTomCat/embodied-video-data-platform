@@ -188,7 +188,7 @@ export class WorkerHeartbeatService {
     const result = await this.workers
       .createQueryBuilder()
       .delete()
-      .where('status = :stopped OR "lastSeenAt" < :staleBefore', {
+      .where('"status" = :stopped OR "last_seen_at" < :staleBefore', {
         stopped: "stopped",
         staleBefore: new Date(Date.now() - STALE_AFTER_MS),
       })

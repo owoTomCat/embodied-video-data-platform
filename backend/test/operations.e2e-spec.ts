@@ -694,4 +694,73 @@ describe("operations API", () => {
       ]),
     );
   });
+
+  it("prunes only stopped or stale worker heartbeat history", async () => {
+    const adminCookie = await login("ops-admin");
+    await dataSource.getRepository(WorkerHeartbeatEntity).save([
+      {
+        id: "prune-stopped-1",
+        kind: "ai_quality",
+        hostName: "prune-host",
+        processId: 201,
+        status: "stopped",
+        startedAt: new Date(Date.now() - 10 * 60_000),
+        lastSeenAt: new Date(Date.now() - 10 * 60_000),
+      },
+      {
+        id: "prune-stale-1",
+        kind: "ai_quality",
+        hostName: "prune-host",
+        processId: 202,
+        status: "running",
+        startedAt: new Date(Date.now() - 10 * 60_000),
+        lastSeenAt: new Date(Date.now() - 5 * 60_000),
+      },
+      {
+        id: "prune-active-1",
+        kind: "ai_quality",
+        hostName: "prune-host",
+        processId: 203,
+        status: "idle",
+        startedAt: new Date(),
+        lastSeenAt: new Date(),
+      },
+    ]);
+
+    const response = await request(app.getHttpServer())
+      .post("/api/v1/operations/workers/prune-inactive")
+      .set("Origin", WEB_ORIGIN)
+      .set("Cookie", adminCookie)
+      .expect(201);
+
+    expect(response.body.removed).toBeGreaterThanOrEqual(2);
+    await expect(
+      dataSource
+        .getRepository(WorkerHeartbeatEntity)
+        .findOneBy({ id: "prune-stopped-1" }),
+    ).resolves.toBeNull();
+    await expect(
+      dataSource
+        .getRepository(WorkerHeartbeatEntity)
+        .findOneBy({ id: "prune-stale-1" }),
+    ).resolves.toBeNull();
+    await expect(
+      dataSource
+        .getRepository(WorkerHeartbeatEntity)
+        .findOneBy({ id: "prune-active-1" }),
+    ).resolves.toMatchObject({ id: "prune-active-1" });
+
+    await dataSource
+      .getRepository(WorkerHeartbeatEntity)
+      .delete({ id: "prune-active-1" });
+  });
+
+  it("rejects non-admin worker history pruning", async () => {
+    const collectorCookie = await login("ops-collector");
+    await request(app.getHttpServer())
+      .post("/api/v1/operations/workers/prune-inactive")
+      .set("Origin", WEB_ORIGIN)
+      .set("Cookie", collectorCookie)
+      .expect(403);
+  });
 });
