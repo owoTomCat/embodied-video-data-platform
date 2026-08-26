@@ -27,6 +27,8 @@ type PageMode = "loading" | "live" | "unavailable";
 type PointRow = {
   id: string;
   fileName: string;
+  taskName?: string | null;
+  taskSceneName?: string | null;
   finalScore: number;
   effectiveSeconds: number;
   points: number;
@@ -78,6 +80,8 @@ function summaryFromBackend(
     cycle.items.map((item) => ({
       id: item.id,
       fileName: item.fileName,
+      taskName: item.taskName,
+      taskSceneName: item.taskSceneName,
       finalScore: item.finalScore,
       effectiveSeconds: Math.round(item.effectiveDurationMs / 1_000),
       points: item.points,
@@ -94,6 +98,8 @@ function summaryFromBackend(
     .map((item) => ({
       id: item.id,
       fileName: item.fileName,
+      taskName: item.task?.title,
+      taskSceneName: item.task?.sceneName,
       finalScore: item.finalScore,
       effectiveSeconds: effectiveDuration(
         item.durationSeconds,
@@ -233,6 +239,7 @@ export function EarningsPage() {
             <thead>
               <tr>
                 <th>视频</th>
+                <th>任务</th>
                 <th>最终分</th>
                 <th>有效时长</th>
                 <th>积分</th>
@@ -245,6 +252,18 @@ export function EarningsPage() {
                   <td>
                     <strong>{item.fileName}</strong>
                   </td>
+                  <td className="task-title-cell">
+                    {item.taskName ? (
+                      <>
+                        <strong>{item.taskName}</strong>
+                        {item.taskSceneName && (
+                          <small className="row-sub">{item.taskSceneName}</small>
+                        )}
+                      </>
+                    ) : (
+                      <span className="muted">未关联任务</span>
+                    )}
+                  </td>
                   <td>{item.finalScore}/100</td>
                   <td>{Math.round((item.effectiveSeconds / 60) * 100) / 100} 分钟</td>
                   <td>
@@ -255,7 +274,7 @@ export function EarningsPage() {
               ))}
               {summary.rows.length === 0 && (
                 <tr>
-                  <td colSpan={5}>暂无积分明细</td>
+                  <td colSpan={6}>暂无积分明细</td>
                 </tr>
               )}
             </tbody>

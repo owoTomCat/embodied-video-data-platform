@@ -1,5 +1,27 @@
 export type CollectionTaskStatus = "draft" | "published" | "paused" | "closed";
 export type TaskNormalizationStatus = "pending" | "ready" | "failed";
+export type CollectionTaskType = "generic" | "preset" | "custom";
+
+export type PresetScene = {
+  key: string;
+  name: string;
+  tagline: string;
+  defaultTitle: string;
+  description: string;
+  requirements: string[];
+  qualityNotes: string[];
+};
+
+/** 任务类型选择器数据源：预设场景目录 + 通用任务模板 */
+export type TaskTypeCatalog = {
+  presetScenes: PresetScene[];
+  generic: {
+    sceneName: string;
+    defaultTitle: string;
+    description: string;
+    requirements: string[];
+  };
+};
 
 export type NormalizedRequirementItem = {
   type: "hard" | "soft";
@@ -20,6 +42,7 @@ export type CollectionTask = {
   description: string;
   sceneName: string;
   sceneLabelId: string | null;
+  taskType: CollectionTaskType;
   rawRequirements: string;
   normalizedRequirements: NormalizedTaskRequirements | null;
   normalizationStatus: TaskNormalizationStatus;
@@ -40,6 +63,7 @@ export type CollectionTaskForCollector = {
   description: string;
   sceneName: string;
   sceneLabelId: string | null;
+  taskType: CollectionTaskType;
   normalizedRequirements: NormalizedTaskRequirements | null;
   pricePointsPerMinute: number | null;
   status: CollectionTaskStatus;
@@ -51,6 +75,7 @@ export type CreateTaskInput = {
   title: string;
   description?: string;
   sceneName: string;
+  taskType?: CollectionTaskType;
   rawRequirements: string;
   pricePointsPerMinute?: number | null;
 };

@@ -519,6 +519,7 @@ describe("collector journey", () => {
             title: "厨房数据采集",
             revision: 1,
             sceneName: "家庭厨房",
+            taskType: "custom",
             pricePointsPerMinute: 15.5,
           },
         }),

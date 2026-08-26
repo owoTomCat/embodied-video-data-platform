@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { BadgeCheck, ChartNoAxesCombined, RotateCcw, Target } from "lucide-react";
 import { MetricCard } from "../../components/MetricCard";
+import { TaskTypeBadge } from "../../components/TaskTypeBadge";
 import { useIdentity } from "../../auth/client/IdentityContext";
 import type { Submission } from "../../domain/types";
 import { loadAllSubmissions } from "../../submissions/client/submissionApi";
@@ -13,6 +14,7 @@ import {
   formatRate,
   sceneContributions,
   submissionsSince,
+  taskContributions,
 } from "./teamMetrics";
 
 const sceneColors = ["#4775ef", "#805de2", "#39b985", "#e5a03f"];
@@ -73,6 +75,7 @@ export function TeamAnalyticsPage() {
   const monthSubmissions = submissionsSince(teamSubmissions, 30);
   const metrics = contributionMetrics(monthSubmissions);
   const scenes = sceneContributions(monthSubmissions);
+  const tasks = taskContributions(monthSubmissions);
   const displayedScenes = visibleScenes(scenes);
   const contributions = members
     .map((member) => ({
@@ -153,6 +156,50 @@ export function TeamAnalyticsPage() {
           ) : <div className="empty-state compact-empty"><strong>暂无成员贡献</strong><span>成员上传视频后将在这里汇总</span></div>}
         </aside>
       </div>
+      <section className="content-card">
+        <div className="card-heading">
+          <div><h2>任务分布</h2><p>近 30 日按任务维度汇总的提交与有效时长</p></div>
+        </div>
+        {tasks.length > 0 ? (
+          <div className="table-scroll">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>任务</th>
+                  <th>类型</th>
+                  <th>提交</th>
+                  <th>通过率</th>
+                  <th>有效时长</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tasks.map((task) => (
+                  <tr key={task.taskId ?? "__none__"}>
+                    <td>
+                      <strong>{task.title}</strong>
+                      {task.sceneName && <small className="row-sub">{task.sceneName}</small>}
+                    </td>
+                    <td className="nowrap-cell">
+                      {task.taskId === null ? (
+                        <span className="task-type-badge task-type-badge-neutral">未关联</span>
+                      ) : (
+                        <TaskTypeBadge type={task.taskType} />
+                      )}
+                    </td>
+                    <td>{task.uploads}</td>
+                    <td className="nowrap-cell">
+                      {task.reviewed === 0
+                        ? "—"
+                        : formatRate((task.passed / task.reviewed) * 100)}
+                    </td>
+                    <td className="nowrap-cell">{formatDuration(task.effectiveSeconds)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : <div className="empty-state compact-empty"><strong>暂无任务数据</strong><span>成员按任务提交视频后将在这里按任务维度汇总</span></div>}
+      </section>
     </div>
   );
 }

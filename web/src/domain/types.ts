@@ -198,6 +198,7 @@ export interface Submission {
     title?: string;
     revision: number | null;
     sceneName: string;
+    taskType: "generic" | "preset" | "custom";
     pricePointsPerMinute: number | null;
   } | null;
   createdAt: string;

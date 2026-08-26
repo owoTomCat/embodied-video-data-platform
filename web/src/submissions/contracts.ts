@@ -192,6 +192,7 @@ export type BackendSubmission = {
     title?: string;
     revision: number | null;
     sceneName: string;
+    taskType: "generic" | "preset" | "custom";
     requirements?: unknown;
     pricePointsPerMinute: number | null;
   } | null;
@@ -349,3 +350,20 @@ export interface SubmissionUploadApi {
   ): Promise<BackendSubmission>;
   abortUpload(id: string): Promise<void>;
 }
+
+/** 任务维度统计（按任务汇总提交/质检/积分；taskId 为 null 表示未关联任务） */
+export type BackendSubmissionTaskStat = {
+  taskId: string | null;
+  title: string;
+  sceneName: string;
+  taskType: "generic" | "preset" | "custom" | "none";
+  total: number;
+  reviewed: number;
+  passed: number;
+  failed: number;
+  pending: number;
+  passRate: number | null;
+  avgScore: number | null;
+  effectiveMinutes: number;
+  lockedPoints: number;
+};

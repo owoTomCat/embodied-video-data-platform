@@ -7,6 +7,7 @@ import { FilterBar } from "../../components/FilterBar";
 import { Modal } from "../../components/Modal";
 import { ReviewDrawer } from "../../components/ReviewDrawer";
 import { SubmissionTable } from "../../components/SubmissionTable";
+import { TaskDimensionStats } from "../../components/TaskDimensionStats";
 import type { Submission } from "../../domain/types";
 import { useInteractions } from "../../interactions/InteractionContext";
 import {
@@ -15,6 +16,7 @@ import {
   searchSubmissions,
   submissionsExportUrl,
 } from "../../submissions/client/submissionApi";
+import { useTaskStats } from "../../submissions/client/useTaskStats";
 import type {
   BackendSubmission,
   BackendSubmissionListPagination,
@@ -261,10 +263,15 @@ export function SubmissionsAdminPage({
 }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
+  const [taskId, setTaskId] = useState("all");
   const [page, setPage] = useState(1);
   const [refreshKey, setRefreshKey] = useState(0);
   const [mode, setMode] = useState<ListMode>("loading");
   const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [taskSources, setTaskSources] = useState<
+    Array<{ taskId: string; title: string; sceneName: string }>
+  >([]);
+  const { stats: taskStats, loading: taskStatsLoading } = useTaskStats();
   const [rerunTarget, setRerunTarget] = useState<Submission | null>(null);
   const [reviewTarget, setReviewTarget] = useState<Submission | null>(null);
   const [renameTarget, setRenameTarget] = useState<Submission | null>(null);
@@ -285,23 +292,26 @@ export function SubmissionsAdminPage({
       page,
       pageSize: PAGE_SIZE,
       includeThumbnails: true,
+      ...(taskId !== "all" ? { taskId } : {}),
     })
       .then((result) => {
         if (!active) return;
         setSubmissions(result.submissions.map(backendSubmissionToDomain));
+        setTaskSources(result.taskSources ?? []);
         setPagination(result.pagination);
         setMode("live");
       })
       .catch(() => {
         if (!active) return;
         setSubmissions([]);
+        setTaskSources([]);
         setPagination({ page: 1, pageSize: PAGE_SIZE, total: 0, totalPages: 1 });
         setMode("unavailable");
       });
     return () => {
       active = false;
     };
-  }, [page, query, refreshKey, status]);
+  }, [page, query, refreshKey, status, taskId]);
 
   const range = useMemo(() => {
     if (pagination.total === 0) return "0";
@@ -313,8 +323,8 @@ export function SubmissionsAdminPage({
     return `${start}-${end}`;
   }, [pagination, submissions.length]);
   const exportUrl = useMemo(
-    () => submissionsExportUrl({ q: query, status }),
-    [query, status],
+    () => submissionsExportUrl({ q: query, status, ...(taskId !== "all" ? { taskId } : {}) }),
+    [query, status, taskId],
   );
 
   function refresh() {
@@ -430,6 +440,15 @@ export function SubmissionsAdminPage({
           导出当前结果
         </a>
       </div>
+      <TaskDimensionStats
+        stats={taskStats}
+        active={taskId}
+        loading={taskStatsLoading}
+        onSelect={(value) => {
+          setTaskId(value);
+          setPage(1);
+        }}
+      />
       <section className="content-card table-card">
         <FilterBar
           value={query}
@@ -442,6 +461,12 @@ export function SubmissionsAdminPage({
             setStatus(value);
             setPage(1);
           }}
+          taskId={taskId}
+          onTaskChange={(value) => {
+            setTaskId(value);
+            setPage(1);
+          }}
+          taskSources={taskSources}
           placeholder="搜索编号、视频、成员、团队或场景"
         />
         <div className="table-summary">

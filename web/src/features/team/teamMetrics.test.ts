@@ -5,6 +5,7 @@ import {
   dailyContributions,
   sceneContributions,
   submissionsSince,
+  taskContributions,
 } from "./teamMetrics";
 
 function submission(
@@ -80,5 +81,38 @@ describe("team metrics", () => {
     ]);
     expect(scenes.map((item) => item.scene)).toEqual(["厨房", "工作台"]);
     expect(scenes[0]?.percentage).toBe(50);
+  });
+
+  it("groups submissions by task dimension with pass rate", () => {
+    const withTask = (
+      id: string,
+      status: Submission["qualityStatus"],
+      score: number,
+      taskId: string,
+      title: string,
+      taskType: "generic" | "preset" | "custom",
+    ): Submission => ({
+      ...submission(id, "2026-08-13 09:00", status, score),
+      task: { taskId, title, revision: 1, sceneName: "家庭-厨房", taskType, pricePointsPerMinute: 12 },
+    });
+    const tasks = taskContributions([
+      withTask("A", "passed", 88, "TASK-1", "厨房任务", "preset"),
+      withTask("B", "failed", 40, "TASK-1", "厨房任务", "preset"),
+      withTask("C", "passed", 76, "TASK-2", "通用采集", "generic"),
+      submission("D", "2026-08-13 09:00", "passed", 88),
+    ]);
+    expect(tasks).toHaveLength(3);
+    const kitchen = tasks.find((task) => task.taskId === "TASK-1");
+    expect(kitchen).toMatchObject({
+      title: "厨房任务",
+      taskType: "preset",
+      uploads: 2,
+      reviewed: 2,
+      passed: 1,
+    });
+    expect(kitchen?.effectiveSeconds).toBe(200);
+    const legacy = tasks.find((task) => task.taskId === null);
+    expect(legacy?.title).toBe("未关联任务");
+    expect(legacy?.uploads).toBe(1);
   });
 });

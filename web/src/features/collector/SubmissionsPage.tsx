@@ -4,9 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 
 import { FilterBar } from "../../components/FilterBar";
 import { SubmissionTable } from "../../components/SubmissionTable";
+import { TaskDimensionStats } from "../../components/TaskDimensionStats";
 import { useIdentity } from "../../auth/client/IdentityContext";
 import type { Submission } from "../../domain/types";
 import { searchSubmissions } from "../../submissions/client/submissionApi";
+import { useTaskStats } from "../../submissions/client/useTaskStats";
 import type { BackendSubmissionListPagination } from "../../submissions/contracts";
 import { backendSubmissionToDomain } from "../../submissions/submissionMapper";
 
@@ -27,6 +29,7 @@ export function SubmissionsPage({
   navigate(path: string): void;
 }) {
   const { currentAccount } = useIdentity();
+  const { stats: taskStats, loading: taskStatsLoading } = useTaskStats();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [taskId, setTaskId] = useState("all");
@@ -52,7 +55,7 @@ export function SubmissionsPage({
       page,
       pageSize: PAGE_SIZE,
       includeThumbnails: true,
-      ...(!qualityOnly && taskId !== "all" ? { taskId } : {}),
+      ...(taskId !== "all" ? { taskId } : {}),
     })
       .then((result) => {
         if (!active) return;
@@ -108,6 +111,15 @@ export function SubmissionsPage({
           </button>
         )}
       </div>
+      <TaskDimensionStats
+        stats={taskStats}
+        active={taskId}
+        loading={taskStatsLoading}
+        onSelect={(value) => {
+          setTaskId(value);
+          setPage(1);
+        }}
+      />
       <section className="content-card table-card">
         <FilterBar
           value={query}

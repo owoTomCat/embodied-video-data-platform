@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { StatusBadge } from "../../components/StatusBadge";
+import { TaskTypeBadge } from "../../components/TaskTypeBadge";
 import { useInteractions } from "../../interactions/InteractionContext";
 import { listTasksForCollector } from "../../tasks/client/taskApi";
 import type { CollectionTaskForCollector } from "../../tasks/contracts";
@@ -145,7 +146,19 @@ export function TaskHallPage({ navigate }: { navigate(path: string): void }) {
             <article className="content-card task-card" key={task.id}>
               <div className="task-card-head">
                 <div>
-                  <p className="task-card-eyebrow">场景：{task.sceneName}</p>
+                  <p className="task-card-eyebrow">
+                    {task.taskType === "generic" ? (
+                      <>
+                        <TaskTypeBadge type="generic" />
+                        <span>不限具体场景</span>
+                      </>
+                    ) : (
+                      <>
+                        <TaskTypeBadge type={task.taskType} label={task.taskType === "preset" ? "场景任务" : "自定义"} />
+                        <span>场景：{task.sceneName}</span>
+                      </>
+                    )}
+                  </p>
                   <h2>{task.title}</h2>
                 </div>
                 <StatusBadge

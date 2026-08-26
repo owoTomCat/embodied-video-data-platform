@@ -4,12 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 
 import { FilterBar } from "../../components/FilterBar";
 import { SubmissionTable } from "../../components/SubmissionTable";
+import { TaskDimensionStats } from "../../components/TaskDimensionStats";
 import { useIdentity } from "../../auth/client/IdentityContext";
 import type { Submission } from "../../domain/types";
 import {
   searchSubmissions,
   submissionsExportUrl,
 } from "../../submissions/client/submissionApi";
+import { useTaskStats } from "../../submissions/client/useTaskStats";
 import type { BackendSubmissionListPagination } from "../../submissions/contracts";
 import { backendSubmissionToDomain } from "../../submissions/submissionMapper";
 
@@ -26,11 +28,16 @@ function processingCount(submissions: Submission[]): number {
 export function TeamSubmissionsPage() {
   const { currentAccount, teams } = useIdentity();
   const currentTeam = teams.find((team) => team.id === currentAccount.teamId);
+  const { stats: taskStats, loading: taskStatsLoading } = useTaskStats();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
+  const [taskId, setTaskId] = useState("all");
   const [page, setPage] = useState(1);
   const [mode, setMode] = useState<ListMode>("loading");
   const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [taskSources, setTaskSources] = useState<
+    Array<{ taskId: string; title: string; sceneName: string }>
+  >([]);
   const [pagination, setPagination] =
     useState<BackendSubmissionListPagination>({
       page: 1,
@@ -47,23 +54,26 @@ export function TeamSubmissionsPage() {
       page,
       pageSize: PAGE_SIZE,
       includeThumbnails: true,
+      ...(taskId !== "all" ? { taskId } : {}),
     })
       .then((result) => {
         if (!active) return;
         setSubmissions(result.submissions.map(backendSubmissionToDomain));
+        setTaskSources(result.taskSources ?? []);
         setPagination(result.pagination);
         setMode("live");
       })
       .catch(() => {
         if (!active) return;
         setSubmissions([]);
+        setTaskSources([]);
         setPagination({ page: 1, pageSize: PAGE_SIZE, total: 0, totalPages: 1 });
         setMode("unavailable");
       });
     return () => {
       active = false;
     };
-  }, [currentTeam?.id, page, query, status]);
+  }, [currentTeam?.id, page, query, status, taskId]);
 
   const range = useMemo(() => {
     if (pagination.total === 0) return "0";
@@ -75,8 +85,8 @@ export function TeamSubmissionsPage() {
     return `${start}-${end}`;
   }, [pagination, submissions.length]);
   const exportUrl = useMemo(
-    () => submissionsExportUrl({ q: query, status }),
-    [query, status],
+    () => submissionsExportUrl({ q: query, status, ...(taskId !== "all" ? { taskId } : {}) }),
+    [query, status, taskId],
   );
 
   return (
@@ -102,6 +112,15 @@ export function TeamSubmissionsPage() {
           </button>
         )}
       </div>
+      <TaskDimensionStats
+        stats={taskStats}
+        active={taskId}
+        loading={taskStatsLoading}
+        onSelect={(value) => {
+          setTaskId(value);
+          setPage(1);
+        }}
+      />
       <section className="content-card table-card">
         <FilterBar
           value={query}
@@ -114,6 +133,12 @@ export function TeamSubmissionsPage() {
             setStatus(value);
             setPage(1);
           }}
+          taskId={taskId}
+          onTaskChange={(value) => {
+            setTaskId(value);
+            setPage(1);
+          }}
+          taskSources={taskSources}
           placeholder="搜索成员、文件或场景"
         />
         <div className="table-summary">

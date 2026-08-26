@@ -3,6 +3,7 @@ import type {
   BackendSubmissionPreview,
   BackendSubmission,
   BackendSubmissionListResult,
+  BackendSubmissionTaskStat,
   ClearDuplicateCandidateInput,
   CreateUploadResult,
   DeleteSubmissionInput,
@@ -149,6 +150,14 @@ export async function listActiveUploads(): Promise<ActiveUploadResult[]> {
     "/submissions/uploads/active",
   );
   return result.uploads;
+}
+
+/** 任务维度统计（范围与当前角色可见的提交列表一致） */
+export async function fetchTaskStats(): Promise<BackendSubmissionTaskStat[]> {
+  const result = await requestJson<{ stats: BackendSubmissionTaskStat[] }>(
+    "/submissions/task-stats",
+  );
+  return result.stats;
 }
 
 export async function listSubmissions(): Promise<BackendSubmission[]> {

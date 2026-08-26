@@ -383,6 +383,7 @@ function publicSubmission(submission: SubmissionEntity) {
           title: collectionTask?.title ?? undefined,
           revision: submission.taskRevision,
           sceneName: submission.taskSceneName ?? "",
+          taskType: collectionTask?.taskType ?? "custom",
           requirements: submission.taskRequirementsSnapshot ?? undefined,
           pricePointsPerMinute:
             submission.taskPricePointsPerMinute === null ||

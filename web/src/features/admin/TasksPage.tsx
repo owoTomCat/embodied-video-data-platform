@@ -15,7 +15,9 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { StatusBadge } from "../../components/StatusBadge";
 import { Modal } from "../../components/Modal";
+import { TaskTypeBadge } from "../../components/TaskTypeBadge";
 import { useInteractions } from "../../interactions/InteractionContext";
+import { useTaskStats } from "../../submissions/client/useTaskStats";
 import type {
   CollectionTask,
   CollectionTaskStatus,
@@ -65,6 +67,7 @@ function formatTime(timestamp: number): string {
 
 export function TasksPage() {
   const { notify } = useInteractions();
+  const { stats: taskStats } = useTaskStats();
   const [mode, setMode] = useState<"loading" | "live" | "unavailable">(
     "loading",
   );
@@ -202,6 +205,25 @@ export function TasksPage() {
   }
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const statByTask = new Map(
+    taskStats
+      .filter((stat) => stat.taskId !== null)
+      .map((stat) => [stat.taskId as string, stat]),
+  );
+
+  function taskStatCell(taskId: string) {
+    const stat = statByTask.get(taskId);
+    if (!stat) {
+      return <span className="muted">—</span>;
+    }
+    return (
+      <span className="task-stat-cell">
+        <span><em>提交</em><b>{stat.total}</b></span>
+        <span><em>通过率</em><b>{stat.passRate === null ? "—" : `${stat.passRate}%`}</b></span>
+        <span><em>锁定积分</em><b>{stat.lockedPoints.toFixed(2)}</b></span>
+      </span>
+    );
+  }
 
   return (
     <div className="page-stack">
@@ -272,7 +294,9 @@ export function TasksPage() {
               <thead>
                 <tr>
                   <th>任务</th>
+                  <th>类型</th>
                   <th>场景</th>
+                  <th>任务数据</th>
                   <th>单价</th>
                   <th>状态</th>
                   <th>规范化</th>
@@ -288,7 +312,11 @@ export function TasksPage() {
                       <strong>{task.title}</strong>
                       <small className="row-sub">{task.id}</small>
                     </td>
+                    <td className="nowrap-cell">
+                      <TaskTypeBadge type={task.taskType} />
+                    </td>
                     <td>{task.sceneName}</td>
+                    <td className="nowrap-cell">{taskStatCell(task.id)}</td>
                     <td className="nowrap-cell">
                       {task.pricePointsPerMinute !== null ? (
                         <span className="mono">
@@ -432,7 +460,7 @@ export function TasksPage() {
                 ))}
                 {tasks.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="empty-cell">
+                    <td colSpan={10} className="empty-cell">
                       暂无任务
                     </td>
                   </tr>

@@ -162,3 +162,47 @@ export function sceneContributions(submissions: Submission[]) {
     }))
     .sort((left, right) => right.seconds - left.seconds);
 }
+
+/** 任务维度分布：按提交所属任务汇总（含未关联任务），用于团队分析的任务维度呈现 */
+export function taskContributions(submissions: Submission[]) {
+  const byTask = new Map<
+    string,
+    {
+      taskId: string | null;
+      title: string;
+      sceneName: string;
+      taskType: "generic" | "preset" | "custom";
+      uploads: number;
+      effectiveSeconds: number;
+      reviewed: number;
+      passed: number;
+    }
+  >();
+  for (const submission of submissions) {
+    const key = submission.task?.taskId ?? "__none__";
+    const entry = byTask.get(key) ?? {
+      taskId: submission.task?.taskId ?? null,
+      title: submission.task?.title ?? "未关联任务",
+      sceneName: submission.task?.sceneName ?? "",
+      taskType: submission.task?.taskType ?? "custom",
+      uploads: 0,
+      effectiveSeconds: 0,
+      reviewed: 0,
+      passed: 0,
+    };
+    entry.uploads += 1;
+    entry.effectiveSeconds += effectiveDuration(
+      submission.durationSeconds,
+      submission.invalidSeconds,
+    );
+    if (submission.qualityStatus !== "pending") {
+      entry.reviewed += 1;
+      if (submission.qualityStatus === "passed") entry.passed += 1;
+    }
+    byTask.set(key, entry);
+  }
+  return [...byTask.values()].sort(
+    (left, right) =>
+      right.uploads - left.uploads || right.effectiveSeconds - left.effectiveSeconds,
+  );
+}

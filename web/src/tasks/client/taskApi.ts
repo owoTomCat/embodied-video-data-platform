@@ -6,6 +6,7 @@ import type {
   NormalizedTaskRequirements,
   TaskListQuery,
   TaskListResult,
+  TaskTypeCatalog,
   UpdateTaskInput,
 } from "../contracts";
 
@@ -84,6 +85,11 @@ export async function listTasksForCollector(): Promise<
     "tasks",
   );
   return payload.tasks;
+}
+
+/** 任务类型选择器数据源：预设场景目录 + 通用任务模板（管理员） */
+export async function listTaskTypeCatalog(): Promise<TaskTypeCatalog> {
+  return requestJson<TaskTypeCatalog>("tasks/preset-scenes");
 }
 
 export async function listManageTasks(

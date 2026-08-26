@@ -17,6 +17,7 @@ const taskApi = vi.hoisted(() => ({
   resume: vi.fn(),
   close: vi.fn(),
   normalize: vi.fn(),
+  listTaskTypeCatalog: vi.fn(),
 }));
 
 vi.mock("../../tasks/client/taskApi", () => ({
@@ -30,6 +31,7 @@ vi.mock("../../tasks/client/taskApi", () => ({
   resumeTask: taskApi.resume,
   closeTask: taskApi.close,
   normalizeTaskRequirements: taskApi.normalize,
+  listTaskTypeCatalog: taskApi.listTaskTypeCatalog,
   taskErrorMessage: (error: unknown) =>
     error instanceof Error ? error.message : "操作失败，请重试",
 }));
@@ -48,6 +50,7 @@ const draftTask = {
   description: "",
   sceneName: "家庭厨房",
   sceneLabelId: null,
+  taskType: "preset",
   rawRequirements: "第一人称，出现双手",
   normalizedRequirements: null,
   normalizationStatus: "pending",
@@ -109,6 +112,34 @@ describe("TasksPage", () => {
       createdByName: "管理员",
       createdAt: 0,
     });
+    taskApi.listTaskTypeCatalog.mockResolvedValue({
+      presetScenes: [
+        {
+          key: "family-kitchen",
+          name: "家庭-厨房",
+          tagline: "做饭备餐等厨房操作",
+          defaultTitle: "家庭厨房备餐做饭数据采集",
+          description: "采集家庭厨房中的真实操作。",
+          requirements: ["必须使用第一人称视角拍摄。", "双手全程可见。"],
+          qualityNotes: ["场景边界：家庭厨房。"],
+        },
+        {
+          key: "family-living",
+          name: "家庭-客厅",
+          tagline: "整理清洁等客厅操作",
+          defaultTitle: "家庭客厅整理清洁数据采集",
+          description: "采集家庭客厅中的真实操作。",
+          requirements: ["必须使用第一人称视角拍摄。"],
+          qualityNotes: ["场景边界：家庭客厅。"],
+        },
+      ],
+      generic: {
+        sceneName: "通用",
+        defaultTitle: "通用任务：不限场景的具身操作采集",
+        description: "通用任务说明。",
+        requirements: ["必须使用第一人称视角拍摄。"],
+      },
+    });
   });
 
   it("renders the task list with status and price", async () => {
@@ -128,28 +159,31 @@ describe("TasksPage", () => {
     await screen.findByText("厨房数据采集");
 
     await user.click(screen.getByRole("button", { name: "创建任务" }));
-    await user.type(
-      screen.getByLabelText(/任务标题/),
-      "新任务",
+    // 创建模式默认选中「通用任务」并自动带出模板内容
+    expect(screen.getByLabelText(/任务标题/)).toHaveValue(
+      "通用任务：不限场景的具身操作采集",
     );
-    await user.type(
-      screen.getByLabelText(/场景名称/),
-      "户外街道",
-    );
-    await user.type(
-      screen.getByLabelText(/任务要求/),
-      "第一人称拍摄",
-    );
+    // 切到自定义后自行填写场景与要求
+    await user.click(screen.getByRole("button", { name: /自定义任务/ }));
+    const titleInput = screen.getByLabelText(/任务标题/);
+    await user.clear(titleInput);
+    await user.type(titleInput, "新任务");
+    await user.type(screen.getByLabelText(/场景名称/), "户外街道");
+    const requirementsInput = screen.getByLabelText(/任务要求/);
+    await user.clear(requirementsInput);
+    await user.type(requirementsInput, "第一人称拍摄");
     await user.click(screen.getByRole("button", { name: "保存" }));
 
     await waitFor(() => {
-      expect(taskApi.create).toHaveBeenCalledWith({
-        title: "新任务",
-        description: "",
-        sceneName: "户外街道",
-        rawRequirements: "第一人称拍摄",
-        pricePointsPerMinute: null,
-      });
+      expect(taskApi.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "新任务",
+          sceneName: "户外街道",
+          taskType: "custom",
+          rawRequirements: "第一人称拍摄",
+          pricePointsPerMinute: null,
+        }),
+      );
     });
   });
 
@@ -163,7 +197,7 @@ describe("TasksPage", () => {
     expect(screen.getByRole("heading", { name: "编辑采集任务" })).toBeInTheDocument();
     const titleInput = screen.getByLabelText(/任务标题/);
     expect(titleInput).toHaveValue("厨房数据采集");
-    expect(screen.getByLabelText(/场景名称/)).toHaveValue("家庭厨房");
+    expect(screen.getByText(/预设场景 · 家庭厨房/)).toBeInTheDocument();
 
     await user.clear(titleInput);
     await user.type(titleInput, "厨房采集更新版");
@@ -201,11 +235,16 @@ describe("TasksPage", () => {
     await screen.findByText("厨房数据采集");
 
     await user.click(screen.getByRole("button", { name: "创建任务" }));
-    await user.type(screen.getByLabelText(/任务标题/), "未保存任务");
+    const titleInput = screen.getByLabelText(/任务标题/);
+    await user.clear(titleInput);
+    await user.type(titleInput, "未保存任务");
     await user.click(screen.getByRole("button", { name: "取消" }));
     await user.click(screen.getByRole("button", { name: "创建任务" }));
 
-    expect(screen.getByLabelText(/任务标题/)).toHaveValue("");
+    // 重新打开后恢复为通用任务模板默认标题
+    expect(screen.getByLabelText(/任务标题/)).toHaveValue(
+      "通用任务：不限场景的具身操作采集",
+    );
   });
 
   it("opens the normalize modal and confirms AI requirements", async () => {
