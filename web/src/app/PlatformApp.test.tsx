@@ -111,8 +111,16 @@ describe("platform routing", () => {
 
   it("redirects a collector away from the admin area in the client fallback", () => {
     renderPlatform("/admin", "collector", "admin");
-    expect(screen.getByRole("heading", { name: "我的工作台" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: /，测试人员1/ })).toBeVisible();
     expect(screen.queryByText("提现审核")).not.toBeInTheDocument();
+    expect(window.location.pathname).toBe("/collector");
+  });
+
+  it("normalizes an unknown client route to the current role home", () => {
+    renderPlatform("/unknown-page", "leader");
+
+    expect(screen.getByRole("heading", { name: "真实团队" })).toBeVisible();
+    expect(window.location.pathname).toBe("/team");
   });
 
   it("shows team review navigation to a leader", () => {

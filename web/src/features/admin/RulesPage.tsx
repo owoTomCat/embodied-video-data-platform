@@ -6,17 +6,16 @@ import {
   getQualityRule,
   getScarcityConfig,
 } from "../../ai-quality/client/aiQualityApi";
-import type { QualityRule, ScarcityConfig } from "../../ai-quality/contracts";
+import type { AiQualityPrompt, QualityRule, ScarcityConfig } from "../../ai-quality/contracts";
 import { StatusBadge } from "../../components/StatusBadge";
-import { useInteractions } from "../../interactions/InteractionContext";
 import { RuleFormModal } from "./RuleFormModal";
 import { AiSystemPromptCard } from "./AiSystemPromptCard";
 import { ScarcityConfigModal } from "./ScarcityConfigModal";
 
 export function RulesPage() {
-  const { notify } = useInteractions();
   const [qualityRule, setQualityRule] = useState<QualityRule>();
   const [scarcityConfig, setScarcityConfig] = useState<ScarcityConfig>();
+  const [prompt, setPrompt] = useState<AiQualityPrompt>();
   const [ruleMode, setRuleMode] = useState<
     "loading" | "live" | "unavailable"
   >(
@@ -75,12 +74,12 @@ export function RulesPage() {
         <button ref={ruleTriggerRef} className="button button-primary" disabled={ruleMode === "unavailable"} onClick={() => setRuleOpen(true)}>新建规则版本</button>
       </div>
       <div className="rule-cards">
-        <article className="content-card"><span><Bot size={19}/></span><div><small>AI 模型</small><strong>Qwen3.7</strong><em>Plus 初检 · Flash 条件复核</em></div></article>
+        <article className="content-card"><span><Bot size={19}/></span><div><small>AI 模型</small><strong>{prompt?.initialModel ?? "正在读取"}</strong><em>{prompt ? `${prompt.reviewModel} 条件复核` : "以当前提示词版本为准"}</em></div></article>
         <article className="content-card"><span><CircleGauge size={19}/></span><div><small>通过阈值</small><strong>{ruleMode === "unavailable" ? "—" : `${visibleRule.passThreshold} 分`}</strong><em>{ruleMode === "unavailable" ? "规则服务不可用" : "质量系数分 3 档"}</em></div></article>
         <article className="content-card"><span><BadgeCheck size={19}/></span><div><small>当前规则</small><strong>{ruleMode === "unavailable" ? "读取失败" : visibleRule.version}</strong><em>{ruleMode === "live" ? `V${visibleRule.revision} · 已生效` : ruleMode === "loading" ? "正在读取后端规则" : "请检查后端服务"}</em></div></article>
         <article className="content-card"><span><ScrollText size={19}/></span><div><small>系统提示词</small><strong>版本化发布</strong><em>仅影响之后新开始的任务</em></div></article>
       </div>
-      <AiSystemPromptCard />
+      <AiSystemPromptCard onPromptChange={setPrompt} />
       <section className="content-card table-card">
         <div className="card-heading"><div><h2>稀缺奖励</h2><p>按场景/任务/变体有效存量分档计酬，存量越少奖励越高</p></div>{scarcityConfig ? <button ref={scarcityTriggerRef} className="button button-secondary" onClick={() => setScarcityOpen(true)}>编辑配置（V{scarcityConfig.revision}）</button> : null}</div>
         <div className="table-scroll"><table className="data-table"><thead><tr><th>档位</th><th>存量区间</th><th>系数</th><th>状态</th></tr></thead><tbody>

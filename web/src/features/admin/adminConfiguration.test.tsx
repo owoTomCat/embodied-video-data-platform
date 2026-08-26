@@ -131,8 +131,8 @@ describe("administrator rule and prompt configuration", () => {
     const user = userEvent.setup();
     renderAdmin("/admin/rules");
 
-    expect(await screen.findByText("qwen3.7-plus")).toBeVisible();
-    expect(screen.getByText("qwen3.7-flash")).toBeVisible();
+    expect((await screen.findAllByText("qwen3.7-plus")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("qwen3.7-flash").length).toBeGreaterThan(0);
     const editor = screen.getByLabelText("AI 系统提示词");
     await user.type(editor, "\n重点检查手部完整性。");
     await user.click(screen.getByRole("button", { name: "发布新版本" }));

@@ -296,6 +296,23 @@ async function confirmAllUploadRequirements(
 }
 
 describe("collector journey", () => {
+  it("distinguishes a task-service failure from an empty task list and retries", async () => {
+    const user = userEvent.setup();
+    taskApi.listTasksForCollector
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce([publishedTask]);
+
+    renderCollector("/collector/upload");
+
+    expect(await screen.findByText("任务服务暂不可用")).toBeVisible();
+    expect(
+      screen.queryByText("当前没有可提交的采集任务，请稍后再试。"),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "重试" }));
+    expect(await screen.findByLabelText(/任务（场景）/)).toBeVisible();
+    expect(taskApi.listTasksForCollector).toHaveBeenCalledTimes(2);
+  });
+
   it("rejects unsupported upload formats without creating a submission", async () => {
     const user = userEvent.setup({ applyAccept: false });
     renderCollector("/collector/upload");

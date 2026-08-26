@@ -21,6 +21,8 @@ import {
 } from "lucide-react";
 import type { Role } from "../domain/types";
 
+export { roleHome } from "./routes";
+
 export type NavigationItem = {
   label: string;
   path: string;
@@ -31,12 +33,6 @@ export type NavigationItem = {
 export type NavigationGroup = {
   label: string;
   items: NavigationItem[];
-};
-
-export const roleHome: Record<Role, string> = {
-  collector: "/collector",
-  leader: "/team",
-  admin: "/admin",
 };
 
 export const navigationByRole: Record<Role, NavigationGroup[]> = {

@@ -1,3 +1,8 @@
+import {
+  isKnownAuthenticatedPath,
+  requiredRole,
+  roleHome as roleHomeByRole,
+} from "../../app/routes";
 import type { Role } from "../../domain/types";
 import type { AccountPublic } from "../contracts";
 
@@ -6,19 +11,7 @@ export type RouteAccess =
   | { kind: "redirect"; location: string };
 
 export function roleHome(role: Role): string {
-  if (role === "admin") return "/admin";
-  if (role === "leader") return "/team";
-  return "/collector";
-}
-
-function requiredRole(path: string): Role | null {
-  if (path === "/account/profile") return null;
-  if (path === "/admin" || path.startsWith("/admin/")) return "admin";
-  if (path === "/team" || path.startsWith("/team/")) return "leader";
-  if (path === "/collector" || path.startsWith("/collector/")) {
-    return "collector";
-  }
-  return null;
+  return roleHomeByRole[role];
 }
 
 export function resolveRouteAccess(
@@ -39,6 +32,13 @@ export function resolveRouteAccess(
 
   const role = requiredRole(path);
   if (role && role !== account.role) {
+    return {
+      kind: "redirect",
+      location: roleHome(account.role),
+    };
+  }
+
+  if (!isKnownAuthenticatedPath(path, account.role)) {
     return {
       kind: "redirect",
       location: roleHome(account.role),

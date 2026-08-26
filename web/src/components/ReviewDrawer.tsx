@@ -272,7 +272,7 @@ export function ReviewDrawer({
         <div>
           <FileVideo size={42} />
           <strong>{previewState === "loading" ? "正在生成预览地址" : "已保存原始视频"}</strong>
-          <small>{previewState === "unavailable" ? "预览暂时无法生成" : "视频已安全保存至云端"}</small>
+          <small>{previewState === "unavailable" ? "预览暂时无法生成" : "视频已保存至平台对象存储"}</small>
         </div>
       )}
       {!preview ? <span>{Math.floor(submission.durationSeconds / 60)}:{String(submission.durationSeconds % 60).padStart(2, "0")}</span> : null}

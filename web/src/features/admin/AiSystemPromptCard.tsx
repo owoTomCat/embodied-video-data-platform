@@ -21,7 +21,11 @@ function createdAt(value: number): string {
   }).format(new Date(value));
 }
 
-export function AiSystemPromptCard() {
+export function AiSystemPromptCard({
+  onPromptChange,
+}: {
+  onPromptChange?(prompt: AiQualityPrompt): void;
+}) {
   const [prompt, setPrompt] = useState<AiQualityPrompt>();
   const [draft, setDraft] = useState("");
   const [loading, setLoading] = useState(true);
@@ -37,6 +41,7 @@ export function AiSystemPromptCard() {
         if (!active) return;
         setPrompt(loaded);
         setDraft(loaded.systemPrompt);
+        onPromptChange?.(loaded);
       })
       .catch((caught: unknown) => {
         if (active) {
@@ -49,7 +54,7 @@ export function AiSystemPromptCard() {
     return () => {
       active = false;
     };
-  }, [reloadKey]);
+  }, [onPromptChange, reloadKey]);
 
   async function save() {
     setSaving(true);
@@ -59,6 +64,7 @@ export function AiSystemPromptCard() {
       const updated = await updateAiQualityPrompt(draft);
       setPrompt(updated);
       setDraft(updated.systemPrompt);
+      onPromptChange?.(updated);
       setMessage(`版本 ${updated.revision} 已发布，仅影响之后新开始的任务`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "保存失败");

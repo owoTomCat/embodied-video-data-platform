@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PlatformApp } from "../../app/PlatformApp";
@@ -174,18 +174,21 @@ describe("LabelSetPage", () => {
 
   it("deletes a label after explicit confirmation", async () => {
     const user = userEvent.setup();
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     renderAdmin();
     await screen.findByText("家庭厨房");
 
     await user.click(
       await screen.findByRole("button", { name: "删除标签 家庭客厅" }),
     );
+    expect(screen.getByRole("heading", { name: "删除标签" })).toBeInTheDocument();
+    expect(labelApi.deleteLabel).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "确认删除" }));
 
-    expect(labelApi.deleteLabel).toHaveBeenCalledWith("SCENE-002");
+    await waitFor(() => {
+      expect(labelApi.deleteLabel).toHaveBeenCalledWith("SCENE-002");
+    });
     expect(await screen.findByText("标签已删除")).toBeVisible();
     expect(screen.queryByText("家庭客厅")).not.toBeInTheDocument();
-    vi.restoreAllMocks();
   });
 
   it("shows real association counts per label", async () => {

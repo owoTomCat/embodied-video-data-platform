@@ -44,6 +44,21 @@ describe("server route access", () => {
     });
   });
 
+  it("redirects unknown authenticated routes to the current role home", () => {
+    expect(
+      resolveRouteAccess(
+        "/admin/not-a-real-page",
+        makeAccountPublic({ role: "admin" }),
+      ),
+    ).toEqual({ kind: "redirect", location: "/admin" });
+    expect(
+      resolveRouteAccess(
+        "/collector/submissions/SUB-1/extra",
+        makeAccountPublic({ role: "collector" }),
+      ),
+    ).toEqual({ kind: "redirect", location: "/collector" });
+  });
+
   it.each(["admin", "leader", "collector"] as const)(
     "allows an authenticated %s to open the role-neutral account profile",
     (role) => {

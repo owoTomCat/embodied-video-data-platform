@@ -53,13 +53,10 @@ export function PublicHomePage({ navigate }: { navigate(path: string): void }) {
   }, []);
 
   const metrics = snapshot.metrics;
-  const scenes =
-    snapshot.sceneBreakdown.length > 0
-      ? snapshot.sceneBreakdown
-      : [{ name: "暂无数据", description: "公开快照暂不可用", videoCount: 0, share: 0 }];
+  const metricsAvailable = mode === "live";
+  const scenes = metricsAvailable ? snapshot.sceneBreakdown : [];
   const trend = useMemo(() => trendHeights(snapshot), [snapshot]);
-  const primaryScene =
-    scenes[0] ?? { name: "暂无数据", description: "公开快照暂不可用", videoCount: 0, share: 0 };
+  const primaryScene = scenes[0];
 
   function scrollToProcess() {
     document
@@ -101,29 +98,31 @@ export function PublicHomePage({ navigate }: { navigate(path: string): void }) {
             <div className="hero-dashboard-card">
               <div className="mini-card-head"><span>数据生产公开概览</span><em>{mode === "live" ? "脱敏快照" : mode === "loading" ? "读取中" : "暂不可用"}</em></div>
               <div className="mini-metrics">
-                <div><small>已验收视频</small><strong>{formatNumber(metrics.deliverableVideoCount)}</strong><span>{snapshot.snapshotDate}</span></div>
-                <div><small>有效时长</small><strong>{formatHours(metrics.effectiveDurationSeconds)}</strong><span>累计数据</span></div>
+                <div><small>已验收视频</small><strong>{metricsAvailable ? formatNumber(metrics.deliverableVideoCount) : "—"}</strong><span>{metricsAvailable ? snapshot.snapshotDate : "等待公开快照"}</span></div>
+                <div><small>有效时长</small><strong>{metricsAvailable ? formatHours(metrics.effectiveDurationSeconds) : "—"}</strong><span>{metricsAvailable ? "累计数据" : "服务恢复后更新"}</span></div>
               </div>
               <div className="mini-chart">
-                {trend.map((height, index) => <i key={`${index}-${height}`} style={{ height }} />)}
+                {trend.length > 0
+                  ? trend.map((height, index) => <i key={`${index}-${height}`} style={{ height }} />)
+                  : <span className="mini-chart-empty">{mode === "loading" ? "正在读取公开趋势…" : "公开趋势暂不可用"}</span>}
               </div>
               <div className="mini-flow">
                 {["上传完成", "AI 标注", "质量通过", "资产入库"].map((item, index) => <div key={item}><span>{index + 1}</span><small>{item}</small></div>)}
               </div>
             </div>
-            <div className="floating-card floating-card-quality"><span>{metrics.qualityPassRate.toFixed(1)}%</span><small>质量通过率</small></div>
-            <div className="floating-card floating-card-scene"><strong>高频场景</strong><span>{primaryScene.name}</span><span>{primaryScene.description}</span></div>
+            <div className="floating-card floating-card-quality"><span>{metricsAvailable ? `${metrics.qualityPassRate.toFixed(1)}%` : "—"}</span><small>质量通过率</small></div>
+            <div className="floating-card floating-card-scene"><strong>高频场景</strong><span>{primaryScene?.name ?? "等待公开快照"}</span><span>{primaryScene?.description ?? "服务恢复后自动更新"}</span></div>
           </div>
         </section>
         <section className="public-metrics" id="capabilities">
-          <div><strong>{formatNumber(metrics.deliverableVideoCount)}</strong><span>可交付视频</span></div>
-          <div><strong>{formatHours(metrics.effectiveDurationSeconds)}</strong><span>有效数据时长</span></div>
-          <div><strong>{formatNumber(metrics.sceneCount)}</strong><span>高频作业场景</span></div>
-          <div><strong>{metrics.qualityPassRate.toFixed(1)}%</strong><span>质量通过率</span></div>
+          <div><strong>{metricsAvailable ? formatNumber(metrics.deliverableVideoCount) : "—"}</strong><span>可交付视频</span></div>
+          <div><strong>{metricsAvailable ? formatHours(metrics.effectiveDurationSeconds) : "—"}</strong><span>有效数据时长</span></div>
+          <div><strong>{metricsAvailable ? formatNumber(metrics.sceneCount) : "—"}</strong><span>高频作业场景</span></div>
+          <div><strong>{metricsAvailable ? `${metrics.qualityPassRate.toFixed(1)}%` : "—"}</strong><span>质量通过率</span></div>
         </section>
         <section className="public-content-section public-scenes">
           <div className="public-section-heading"><span>DATA CAPABILITIES</span><h2>覆盖真实世界中的高价值操作场景</h2><p>持续补充操作密度高、对象状态变化明显、可用于具身模型训练与评测的视频数据。</p></div>
-          <div className="scene-showcase"><article className="scene-primary"><div><small>高频场景</small><strong>{snapshot.config.primarySceneName}</strong><span>{snapshot.config.primarySceneDescription}</span></div></article><div className="scene-list">{scenes.slice(0, 4).map((scene) => <div key={scene.name}><strong>{scene.name}</strong><span>{scene.description}</span><em>{scene.share.toFixed(scene.share % 1 === 0 ? 0 : 1)}%</em></div>)}</div></div>
+          <div className="scene-showcase"><article className="scene-primary"><div><small>高频场景</small><strong>{metricsAvailable ? snapshot.config.primarySceneName : "公开快照暂不可用"}</strong><span>{metricsAvailable ? snapshot.config.primarySceneDescription : "数据服务恢复后，这里会自动展示最新公开场景。"}</span></div></article><div className="scene-list">{scenes.length > 0 ? scenes.slice(0, 4).map((scene) => <div key={scene.name}><strong>{scene.name}</strong><span>{scene.description}</span><em>{scene.share.toFixed(scene.share % 1 === 0 ? 0 : 1)}%</em></div>) : <div className="scene-list-empty"><strong>{mode === "loading" ? "正在读取场景…" : "场景数据暂不可用"}</strong><span>页面不会用 0 代替未知数据</span></div>}</div></div>
         </section>
         <section className="public-content-section public-process" id="process">
           <div className="public-section-heading"><span>PRODUCTION PIPELINE</span><h2>从原始视频到可交付资产的标准流水线</h2><p>每个环节保留状态、版本和人工操作记录，形成可解释、可复核的数据闭环。</p></div>
@@ -138,7 +137,7 @@ export function PublicHomePage({ navigate }: { navigate(path: string): void }) {
         <section className="public-content-section public-quality" id="quality">
           <div className="quality-copy"><span>QUALITY & SECURITY</span><h2>质量结论有依据，数据流转有边界</h2><p>评分规则、无效区间和人工调整全部可追踪；不同角色的数据范围严格隔离，公开页面只展示脱敏汇总。</p><div><span><Fingerprint size={18} /><em><strong>全流程审计</strong><small>每次调整均保留人员、时间、原因和前后结果</small></em></span><span><Layers3 size={18} /><em><strong>版本化规则</strong><small>模型、标签、积分和质检阈值均可按版本管理</small></em></span></div></div><div className="quality-panel"><header><span>质量评估样例</span><em>已通过</em></header><strong>88<small>/ 100</small></strong><div className="quality-radar">{["画面稳定", "主体完整", "动作有效", "隐私安全"].map((item, index) => <div key={item}><span>{item}</span><i><b style={{ width: `${[91, 86, 92, 100][index]}%` }} /></i><em>{[91, 86, 92, 100][index]}</em></div>)}</div></div>
         </section>
-        <section className="public-cta"><div><span>{snapshot.config.ctaCopy}</span><h2>从真实任务出发，建立可持续的数据供给</h2></div><button className="button button-primary" onClick={() => navigate("/login")}>体验完整平台 <ArrowRight size={17} /></button></section>
+        <section className="public-cta"><div><span>{metricsAvailable ? snapshot.config.ctaCopy : "登录工作台查看实时数据与任务"}</span><h2>从真实任务出发，建立可持续的数据供给</h2></div><button className="button button-primary" onClick={() => navigate("/login")}>体验完整平台 <ArrowRight size={17} /></button></section>
       </main>
       <footer className="public-footer"><BrandMark /><span>具身数据管理与 AI 质检平台</span></footer>
     </div>

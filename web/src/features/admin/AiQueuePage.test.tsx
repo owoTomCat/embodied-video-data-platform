@@ -258,6 +258,17 @@ describe("AiQueuePage", () => {
     expect(screen.getByText("暂无正式 AI 任务")).toBeVisible();
   });
 
+  it("does not present a failed task request as an empty queue", async () => {
+    getQueueSnapshotMock.mockRejectedValue(new Error("offline"));
+    loadAllSubmissionsMock.mockRejectedValue(new Error("offline"));
+
+    renderQueuePage();
+
+    expect(await screen.findByText("任务数据暂不可用")).toBeVisible();
+    expect(screen.queryByText("暂无正式 AI 任务")).not.toBeInTheDocument();
+    expect(screen.getAllByText("任务数据尚未加载").length).toBeGreaterThan(0);
+  });
+
   it("reruns failed AI quality submissions with an operator reason", async () => {
     const user = userEvent.setup();
     getQueueSnapshotMock.mockRejectedValue(new Error("offline"));

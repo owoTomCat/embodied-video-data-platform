@@ -18,6 +18,7 @@ import {
 } from "../../ai-quality/client/aiQualityApi";
 import type { LabelSet } from "../../ai-quality/contracts";
 import { StatusBadge } from "../../components/StatusBadge";
+import { ConfirmModal } from "../../components/ConfirmModal";
 import type { LabelConfig } from "../../domain/types";
 import { useInteractions } from "../../interactions/InteractionContext";
 import { LabelFormModal, labelTypeLabel } from "./LabelFormModal";
@@ -42,9 +43,11 @@ export function LabelSetPage() {
   const [createType, setCreateType] = useState<LabelType>();
   const [selectedLabel, setSelectedLabel] = useState<LabelConfig>();
   const [deletingLabelId, setDeletingLabelId] = useState<string>();
+  const [deleteTarget, setDeleteTarget] = useState<LabelConfig>();
   const [togglingLabelId, setTogglingLabelId] = useState<string>();
   const [createAnchor, setCreateAnchor] = useState<HTMLButtonElement | null>(null);
   const editTriggerRef = useRef<HTMLButtonElement>(null);
+  const deleteTriggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     let active = true;
@@ -64,14 +67,14 @@ export function LabelSetPage() {
     };
   }, []);
 
-  async function handleDeleteLabel(label: LabelConfig) {
-    if (!window.confirm(`确定删除${labelTypeLabel(label.type)}标签「${label.name}」？该操作会发布一个新的标签体系版本。`)) {
-      return;
-    }
+  async function handleDeleteLabel() {
+    if (!deleteTarget) return;
+    const label = deleteTarget;
     setDeletingLabelId(label.id);
     try {
       const next = await deleteQualityLabel(label.id);
       setLabelSet(next);
+      setDeleteTarget(undefined);
       notify("success", "标签已删除");
     } catch (reason) {
       notify("error", reason instanceof Error ? reason.message : "删除失败，请重试");
@@ -239,7 +242,10 @@ export function LabelSetPage() {
                                 className="table-action table-action-danger"
                                 disabled={deletingLabelId === label.id || togglingLabelId === label.id}
                                 aria-label={`删除标签 ${label.name}`}
-                                onClick={() => void handleDeleteLabel(label)}
+                                onClick={(event) => {
+                                  deleteTriggerRef.current = event.currentTarget;
+                                  setDeleteTarget(label);
+                                }}
                               >
                                 {deletingLabelId === label.id ? "删除中…" : "删除"}
                               </button>
@@ -286,6 +292,23 @@ export function LabelSetPage() {
           onPublished={setLabelSet}
           onClose={() => setSelectedLabel(undefined)}
           returnFocusRef={editTriggerRef}
+        />
+      )}
+      {deleteTarget && (
+        <ConfirmModal
+          open
+          title="删除标签"
+          heading={`确认删除${labelTypeLabel(deleteTarget.type)}标签“${deleteTarget.name}”？`}
+          description={`当前关联 ${deleteTarget.associationCount} 条视频。删除会发布新的标签体系版本；历史版本和已有视频记录仍保留。`}
+          confirmLabel="确认删除"
+          busyLabel="删除中…"
+          tone="danger"
+          busy={deletingLabelId === deleteTarget.id}
+          onClose={() => {
+            if (!deletingLabelId) setDeleteTarget(undefined);
+          }}
+          onConfirm={() => void handleDeleteLabel()}
+          returnFocusRef={deleteTriggerRef}
         />
       )}
     </div>

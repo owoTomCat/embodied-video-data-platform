@@ -114,7 +114,7 @@ function formatDurationMs(milliseconds?: number): string {
 export function AiQueuePage() {
   const { notify } = useInteractions();
   const [liveSubmissions, setLiveSubmissions] = useState<Submission[] | null>(null);
-  const jobs = liveSubmissions ?? [];
+  const jobs = useMemo(() => liveSubmissions ?? [], [liveSubmissions]);
   const [snapshot, setSnapshot] = useState<BackendQueueSnapshot | null>(null);
   const [queueMode, setQueueMode] = useState<QueueMode>("loading");
   const [tasksMode, setTasksMode] = useState<QueueMode>("loading");
@@ -251,6 +251,8 @@ export function AiQueuePage() {
   }
 
   const stuckCount = liveSubmissions ? stuckTasks.length : fallbackMetrics.stuck;
+  const taskMetricValue = (value: number) =>
+    tasksMode === "live" ? String(value) : "—";
 
   return (
     <div className="page-stack">
@@ -281,13 +283,13 @@ export function AiQueuePage() {
           </>
         ) : (
           <>
-            <MetricCard label="等待处理" value={String(fallbackMetrics.queued)} detail="等待媒体或 AI 队列" icon={Clock3} tone="amber" />
-            <MetricCard label="AI 执行中" value={String(fallbackMetrics.aiRunning)} detail={`最多同时执行 3 条 · 媒体分析中 ${fallbackMetrics.mediaRunning} 条`} icon={Cpu} />
-            <MetricCard label="已出结果" value={String(fallbackMetrics.completed)} detail="包含通过、退回和待复核" icon={CheckCircle2} tone="green" />
-            <MetricCard label="异常任务" value={String(fallbackMetrics.failed)} detail="已持久化失败原因" icon={CircleX} tone="red" />
+            <MetricCard label="等待处理" value={taskMetricValue(fallbackMetrics.queued)} detail={tasksMode === "live" ? "等待媒体或 AI 队列" : "任务数据尚未加载"} icon={Clock3} tone="amber" />
+            <MetricCard label="AI 执行中" value={taskMetricValue(fallbackMetrics.aiRunning)} detail={tasksMode === "live" ? `并发以 Worker 配置为准 · 媒体分析中 ${fallbackMetrics.mediaRunning} 条` : "任务数据尚未加载"} icon={Cpu} />
+            <MetricCard label="已出结果" value={taskMetricValue(fallbackMetrics.completed)} detail={tasksMode === "live" ? "包含通过、退回和待复核" : "任务数据尚未加载"} icon={CheckCircle2} tone="green" />
+            <MetricCard label="异常任务" value={taskMetricValue(fallbackMetrics.failed)} detail={tasksMode === "live" ? "已持久化失败原因" : "任务数据尚未加载"} icon={CircleX} tone="red" />
           </>
         )}
-        <MetricCard label="卡住任务" value={String(stuckCount)} detail="超时或心跳过期，可重新排队" icon={CircleX} tone={stuckCount > 0 ? "amber" : "green"} />
+        <MetricCard label="卡住任务" value={taskMetricValue(stuckCount)} detail={tasksMode === "live" ? "超时或心跳过期，可重新排队" : "任务数据尚未加载"} icon={CircleX} tone={stuckCount > 0 ? "amber" : "green"} />
       </div>
       {snapshot && (
         <section className="content-card table-card">
@@ -413,7 +415,7 @@ export function AiQueuePage() {
               })}
             </tbody>
           </table>
-          {!jobs.length && <div className="empty-state"><Cpu size={26} /><strong>暂无正式 AI 任务</strong><span>视频上传并完成媒体解析后会自动进入这里</span></div>}
+          {!jobs.length && <div className="empty-state"><Cpu size={26} /><strong>{tasksMode === "loading" ? "正在读取 AI 任务" : tasksMode === "unavailable" ? "任务数据暂不可用" : "暂无正式 AI 任务"}</strong><span>{tasksMode === "unavailable" ? "请检查后端服务后重试" : "视频上传并完成媒体解析后会自动进入这里"}</span></div>}
         </div>
       </section>
       <section className="content-card table-card">
@@ -443,7 +445,7 @@ export function AiQueuePage() {
               ))}
             </tbody>
           </table>
-          {!stuckTasks.length && <div className="empty-state compact-empty"><CircleX size={26} /><strong>暂无卡住任务</strong><span>任务卡住后会自动出现在这里，并触发通知提醒</span></div>}
+          {!stuckTasks.length && <div className="empty-state compact-empty"><CircleX size={26} /><strong>{tasksMode === "unavailable" ? "卡住任务数据暂不可用" : "暂无卡住任务"}</strong><span>{tasksMode === "unavailable" ? "请检查后端服务后重试" : "任务卡住后会自动出现在这里，并触发通知提醒"}</span></div>}
         </div>
       </section>
       <section className="content-card table-card">
@@ -473,7 +475,7 @@ export function AiQueuePage() {
               ))}
             </tbody>
           </table>
-          {!failedSubmissions.length && <div className="empty-state compact-empty"><Cpu size={26} /><strong>暂无异常任务</strong><span>AI 质检失败后会在这里提供重跑入口</span></div>}
+          {!failedSubmissions.length && <div className="empty-state compact-empty"><Cpu size={26} /><strong>{tasksMode === "unavailable" ? "异常任务数据暂不可用" : "暂无异常任务"}</strong><span>{tasksMode === "unavailable" ? "请检查后端服务后重试" : "AI 质检失败后会在这里提供重跑入口"}</span></div>}
         </div>
       </section>
       {rerunTarget && (

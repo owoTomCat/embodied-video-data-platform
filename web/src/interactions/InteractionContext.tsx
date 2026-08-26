@@ -91,6 +91,7 @@ function savePersisted(seenCounts: Map<string, number>, readIds: Set<string>) {
 export function InteractionProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [notifications, setNotifications] = useState<DemoNotification[]>([]);
+  const notificationsRef = useRef<DemoNotification[]>([]);
   const [navigationBadges, setNavigationBadges] = useState<
     BackendNavigationBadge[]
   >([]);
@@ -141,10 +142,12 @@ export function InteractionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const markAllRead = useCallback(() => {
-    setNotifications((current) => {
-      for (const notification of current) readIdsRef.current.add(notification.id);
-      return current.map((notification) => ({ ...notification, read: true }));
+    const next = notificationsRef.current.map((notification) => {
+      readIdsRef.current.add(notification.id);
+      return { ...notification, read: true };
     });
+    notificationsRef.current = next;
+    setNotifications(next);
     persist();
   }, [persist]);
 
@@ -153,13 +156,13 @@ export function InteractionProvider({ children }: { children: ReactNode }) {
       const rawCount =
         rawBadgesRef.current.find((badge) => badge.path === path)?.count ?? 0;
       seenCountsRef.current.set(path, rawCount);
-      setNotifications((current) =>
-        current.map((notification) => {
-          if (notification.path !== path) return notification;
-          readIdsRef.current.add(notification.id);
-          return { ...notification, read: true };
-        }),
-      );
+      const next = notificationsRef.current.map((notification) => {
+        if (notification.path !== path) return notification;
+        readIdsRef.current.add(notification.id);
+        return { ...notification, read: true };
+      });
+      notificationsRef.current = next;
+      setNotifications(next);
       recomputeBadges();
       persist();
     },
@@ -169,25 +172,25 @@ export function InteractionProvider({ children }: { children: ReactNode }) {
   const syncOperationsStatus = useCallback(
     (status: BackendOperationsStatus) => {
       rawBadgesRef.current = status.navigationBadges;
-      setNotifications((current) => {
-        const readInMemory = new Set(
-          current
-            .filter((notification) => notification.read)
-            .map((notification) => notification.id),
-        );
-        const read = new Set<string>([
-          ...readIdsRef.current,
-          ...readInMemory,
-        ]);
-        return status.notifications.map((notification) => ({
-          id: notification.id,
-          title: notification.title,
-          detail: notification.detail,
-          path: notification.path,
-          tone: notification.tone,
-          read: read.has(notification.id),
-        }));
-      });
+      const readInMemory = new Set(
+        notificationsRef.current
+          .filter((notification) => notification.read)
+          .map((notification) => notification.id),
+      );
+      const read = new Set<string>([
+        ...readIdsRef.current,
+        ...readInMemory,
+      ]);
+      const next = status.notifications.map((notification) => ({
+        id: notification.id,
+        title: notification.title,
+        detail: notification.detail,
+        path: notification.path,
+        tone: notification.tone,
+        read: read.has(notification.id),
+      }));
+      notificationsRef.current = next;
+      setNotifications(next);
       recomputeBadges();
     },
     [recomputeBadges],

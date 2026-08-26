@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  AlertTriangle,
   ClipboardList,
   Pause,
   Play,
@@ -14,7 +13,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { StatusBadge } from "../../components/StatusBadge";
-import { Modal } from "../../components/Modal";
+import { ConfirmModal } from "../../components/ConfirmModal";
 import { TaskTypeBadge } from "../../components/TaskTypeBadge";
 import { useInteractions } from "../../interactions/InteractionContext";
 import { useTaskStats } from "../../submissions/client/useTaskStats";
@@ -81,6 +80,10 @@ export function TasksPage() {
   const [editTarget, setEditTarget] = useState<CollectionTask>();
   const [normalizeTarget, setNormalizeTarget] = useState<CollectionTask>();
   const [deleteTarget, setDeleteTarget] = useState<CollectionTask>();
+  const [confirmTarget, setConfirmTarget] = useState<{
+    task: CollectionTask;
+    action: "publish" | "close";
+  }>();
   const [actingId, setActingId] = useState<string>();
   const createTriggerRef = useRef<HTMLButtonElement>(null);
   const actionTriggerRef = useRef<HTMLButtonElement>(null);
@@ -152,8 +155,8 @@ export function TasksPage() {
     id: string,
     operation: () => Promise<CollectionTask>,
     successMessage: string,
-  ) {
-    if (actingId) return;
+  ): Promise<boolean> {
+    if (actingId) return false;
     setActingId(id);
     try {
       const task = await operation();
@@ -161,16 +164,13 @@ export function TasksPage() {
         current.map((item) => (item.id === id ? task : item)),
       );
       notify("success", successMessage);
+      return true;
     } catch (reason) {
       notify("error", taskErrorMessage(reason));
+      return false;
     } finally {
       setActingId(undefined);
     }
-  }
-
-  async function publish(id: string) {
-    if (!window.confirm("发布后数采人员将可见并可提交，全新场景会自动加入标签字典。确认发布？")) return;
-    await act(id, () => publishTask(id), "任务已发布");
   }
 
   async function pause(id: string) {
@@ -181,9 +181,15 @@ export function TasksPage() {
     await act(id, () => resumeTask(id), "任务已恢复");
   }
 
-  async function close(id: string) {
-    if (!window.confirm("关闭后任务不可恢复、不可再提交，已提交数据继续正常处理。确认关闭？")) return;
-    await act(id, () => closeTask(id), "任务已关闭");
+  async function confirmTaskAction() {
+    if (!confirmTarget || actingId) return;
+    const { task, action } = confirmTarget;
+    const succeeded = await act(
+      task.id,
+      () => (action === "publish" ? publishTask(task.id) : closeTask(task.id)),
+      action === "publish" ? "任务已发布" : "任务已关闭",
+    );
+    if (succeeded) setConfirmTarget(undefined);
   }
 
   async function removeDraft() {
@@ -250,17 +256,19 @@ export function TasksPage() {
         <div className="search-field">
           <Search size={16} />
           <input
+            aria-label="搜索标题或场景"
             value={search}
             onChange={(event) => changeSearch(event.target.value)}
             placeholder="搜索标题或场景"
           />
         </div>
-        <div className="segmented-control">
+        <div className="segmented-control" role="group" aria-label="按任务状态筛选">
           {(["all", "draft", "published", "paused", "closed"] as const).map(
             (status) => (
               <button
                 key={status}
                 className={statusFilter === status ? "active" : ""}
+                aria-pressed={statusFilter === status}
                 onClick={() => changeStatus(status)}
               >
                 {status === "all" ? "全部" : statusLabel[status]}
@@ -373,7 +381,10 @@ export function TasksPage() {
                             <button
                               className="table-action"
                               disabled={actingId === task.id}
-                              onClick={() => void publish(task.id)}
+                              onClick={(event) => {
+                                actionTriggerRef.current = event.currentTarget;
+                                setConfirmTarget({ task, action: "publish" });
+                              }}
                             >
                               发布
                             </button>
@@ -414,7 +425,10 @@ export function TasksPage() {
                             <button
                               className="table-action danger"
                               disabled={actingId === task.id}
-                              onClick={() => void close(task.id)}
+                              onClick={(event) => {
+                                actionTriggerRef.current = event.currentTarget;
+                                setConfirmTarget({ task, action: "close" });
+                              }}
                             >
                               <Square size={14} />
                               关闭
@@ -444,7 +458,10 @@ export function TasksPage() {
                             <button
                               className="table-action danger"
                               disabled={actingId === task.id}
-                              onClick={() => void close(task.id)}
+                              onClick={(event) => {
+                                actionTriggerRef.current = event.currentTarget;
+                                setConfirmTarget({ task, action: "close" });
+                              }}
                             >
                               <Square size={14} />
                               关闭
@@ -528,46 +545,46 @@ export function TasksPage() {
         />
       )}
       {deleteTarget && (
-        <Modal
+        <ConfirmModal
           open
           title="删除草稿任务"
-          className="task-delete-modal"
+          heading={`确认删除“${deleteTarget.title}”？`}
+          description={`任务编号 ${deleteTarget.id}。删除后无法恢复；已发布任务不会提供删除入口，以确保提交数据可追溯。`}
+          confirmLabel="确认删除"
+          busyLabel="删除中…"
+          tone="danger"
+          busy={actingId === deleteTarget.id}
           onClose={() => {
             if (!actingId) setDeleteTarget(undefined);
           }}
+          onConfirm={() => void removeDraft()}
           returnFocusRef={actionTriggerRef}
-        >
-          <div className="task-delete-content">
-            <span className="task-delete-icon" aria-hidden="true">
-              <AlertTriangle size={22} />
-            </span>
-            <div>
-              <strong>确认删除“{deleteTarget.title}”？</strong>
-              <p>
-                任务编号 {deleteTarget.id}。删除后无法恢复；已发布任务不会提供删除入口，以确保提交数据可追溯。
-              </p>
-            </div>
-          </div>
-          <div className="modal-actions">
-            <button
-              type="button"
-              className="button button-secondary"
-              disabled={actingId === deleteTarget.id}
-              onClick={() => setDeleteTarget(undefined)}
-            >
-              取消
-            </button>
-            <button
-              type="button"
-              className="button button-danger"
-              disabled={actingId === deleteTarget.id}
-              onClick={() => void removeDraft()}
-            >
-              <Trash2 size={15} />
-              {actingId === deleteTarget.id ? "删除中…" : "确认删除"}
-            </button>
-          </div>
-        </Modal>
+        />
+      )}
+      {confirmTarget && (
+        <ConfirmModal
+          open
+          title={confirmTarget.action === "publish" ? "发布采集任务" : "关闭采集任务"}
+          heading={
+            confirmTarget.action === "publish"
+              ? `确认发布“${confirmTarget.task.title}”？`
+              : `确认关闭“${confirmTarget.task.title}”？`
+          }
+          description={
+            confirmTarget.action === "publish"
+              ? "发布后数采人员即可看到并提交此任务；新的场景名称会自动加入标签字典。"
+              : "关闭后任务不可恢复，也不再接受新提交；已经提交的数据仍会继续处理。"
+          }
+          confirmLabel={confirmTarget.action === "publish" ? "确认发布" : "确认关闭"}
+          busyLabel={confirmTarget.action === "publish" ? "发布中…" : "关闭中…"}
+          tone={confirmTarget.action === "close" ? "danger" : "primary"}
+          busy={actingId === confirmTarget.task.id}
+          onClose={() => {
+            if (!actingId) setConfirmTarget(undefined);
+          }}
+          onConfirm={() => void confirmTaskAction()}
+          returnFocusRef={actionTriggerRef}
+        />
       )}
     </div>
   );

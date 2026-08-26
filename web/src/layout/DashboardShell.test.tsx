@@ -87,7 +87,7 @@ describe("DashboardShell", () => {
     expect(screen.queryByLabelText("演示角色")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /用户菜单/ }));
     await user.dblClick(
-      screen.getByRole("button", { name: "退出登录" }),
+      screen.getByRole("menuitem", { name: "退出登录" }),
     );
     expect(onLogout).toHaveBeenCalledTimes(1);
   });
@@ -138,6 +138,11 @@ describe("DashboardShell", () => {
     expect(screen.getByRole("link", { name: /^质量复核/ })).toHaveClass(
       "nav-link-active",
     );
+    expect(screen.getByRole("link", { name: /^质量复核/ })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByRole("main", { name: "页面内容" })).toHaveFocus();
     expect(await screen.findByText("系统有待处理异常")).toBeVisible();
   });
 

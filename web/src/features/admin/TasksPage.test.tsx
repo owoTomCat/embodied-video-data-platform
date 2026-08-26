@@ -277,12 +277,17 @@ describe("TasksPage", () => {
     });
     expect(await screen.findByDisplayValue("必须出现双手操作")).toBeInTheDocument();
 
+    const firstRequirement = screen.getByLabelText("第 1 条要求内容");
+    await user.clear(firstRequirement);
+    await user.type(firstRequirement, "必须完整拍摄操作流程");
+    expect(firstRequirement).toHaveValue("必须完整拍摄操作流程");
+
     await user.click(screen.getByRole("button", { name: "确认并保存" }));
     await waitFor(() => {
       expect(taskApi.confirm).toHaveBeenCalledWith("TASK-draft1", {
         scene_description: "厨房场景描述",
         requirements: [
-          { type: "hard", content: "必须出现双手操作" },
+          { type: "hard", content: "必须完整拍摄操作流程" },
           { type: "soft", content: "光线充足" },
         ],
         quality_notes: [],
@@ -293,14 +298,15 @@ describe("TasksPage", () => {
   it("publishes a task after confirming requirements", async () => {
     const user = userEvent.setup();
     taskApi.publish.mockResolvedValue({ ...draftTask, status: "published" });
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     renderAdmin();
     await screen.findByText("厨房数据采集");
 
     await user.click(screen.getByRole("button", { name: "发布" }));
+    expect(screen.getByRole("heading", { name: "发布采集任务" })).toBeInTheDocument();
+    expect(taskApi.publish).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "确认发布" }));
     await waitFor(() => {
       expect(taskApi.publish).toHaveBeenCalledWith("TASK-draft1");
     });
-    vi.restoreAllMocks();
   });
 });

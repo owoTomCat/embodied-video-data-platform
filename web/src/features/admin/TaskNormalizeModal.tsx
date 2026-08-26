@@ -175,7 +175,7 @@ export function TaskNormalizeModal({
                 </button>
               </div>
               {normalized.requirements.map((item, index) => (
-                <div className="normalize-item" key={`${index}-${item.content}`}>
+                <div className="normalize-item" key={index}>
                   <select
                     value={item.type}
                     onChange={(event) =>
@@ -190,6 +190,7 @@ export function TaskNormalizeModal({
                   </select>
                   <div className="normalize-item-fields">
                     <input
+                      aria-label={`第 ${index + 1} 条要求内容`}
                       value={item.content}
                       onChange={(event) =>
                         updateItem(index, { content: event.target.value })
@@ -198,6 +199,7 @@ export function TaskNormalizeModal({
                       maxLength={2000}
                     />
                     <input
+                      aria-label={`第 ${index + 1} 条判定依据`}
                       value={item.rationale ?? ""}
                       onChange={(event) =>
                         updateItem(index, { rationale: event.target.value })

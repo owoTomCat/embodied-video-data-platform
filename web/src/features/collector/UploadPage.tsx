@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, CloudUpload, FileVideo, Info, ShieldCheck, XCircle } from "lucide-react";
+import { CheckCircle2, CloudUpload, FileVideo, Info, RefreshCw, ShieldCheck, XCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { listActiveUploads } from "../../submissions/client/submissionApi";
 import type { ActiveUploadResult } from "../../submissions/contracts";
@@ -24,6 +24,8 @@ export function UploadPage() {
     sensitiveContentConfirmed: false,
   });
   const [tasks, setTasks] = useState<CollectionTaskForCollector[]>([]);
+  const [taskMode, setTaskMode] = useState<"loading" | "live" | "unavailable">("loading");
+  const [taskReloadKey, setTaskReloadKey] = useState(0);
   const [selectedTaskId, setSelectedTaskId] = useState("");
   const [taskRequirementsConfirmed, setTaskRequirementsConfirmed] =
     useState(false);
@@ -53,17 +55,22 @@ export function UploadPage() {
       .then((items) => {
         if (!active) return;
         setTasks(items);
+        setTaskMode("live");
         const preselected = sessionStorage.getItem(SELECTED_TASK_STORAGE_KEY);
         if (preselected && items.some((task) => task.id === preselected)) {
           setSelectedTaskId(preselected);
           sessionStorage.removeItem(SELECTED_TASK_STORAGE_KEY);
         }
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (!active) return;
+        setTasks([]);
+        setTaskMode("unavailable");
+      });
     return () => {
       active = false;
     };
-  }, []);
+  }, [taskReloadKey]);
 
   useEffect(() => {
     let active = true;
@@ -281,7 +288,19 @@ export function UploadPage() {
               <div><h2>选择采集任务</h2><p>本次选择会作为“任务来源”写入视频记录，并决定 AI 质检标准。</p></div>
             </div>
             <div className="upload-step-body">
-              {tasks.length === 0 ? (
+              {taskMode === "loading" ? (
+                <p className="modal-hint task-load-state"><RefreshCw className="spin" size={16} />正在读取可提交任务…</p>
+              ) : taskMode === "unavailable" ? (
+                <div className="task-load-state" role="status">
+                  <div><strong>任务服务暂不可用</strong><span>任务列表未加载，无法确认视频归属。</span></div>
+                  <button type="button" className="button button-secondary button-small" onClick={() => {
+                    setTaskMode("loading");
+                    setTaskReloadKey((current) => current + 1);
+                  }}>
+                    <RefreshCw size={14} />重试
+                  </button>
+                </div>
+              ) : tasks.length === 0 ? (
                 <p className="modal-hint">当前没有可提交的采集任务，请稍后再试。</p>
               ) : (
                 <>

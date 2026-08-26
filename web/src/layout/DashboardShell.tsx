@@ -60,6 +60,9 @@ export function DashboardShell({
   const [loggingOut, setLoggingOut] = useState(false);
   const [systemStatus, setSystemStatus] = useState<SystemStatus>("loading");
   const loggingOutRef = useRef(false);
+  const contentRef = useRef<HTMLElement>(null);
+  const userMenuTriggerRef = useRef<HTMLButtonElement>(null);
+  const firstMenuItemRef = useRef<HTMLButtonElement>(null);
   const { currentAccount } = useIdentity();
   const { notify, unreadCount, navigationBadges, syncOperationsStatus, markPathVisited } =
     useInteractions();
@@ -132,7 +135,14 @@ export function DashboardShell({
   }, [notificationsOpen]);
 
   useEffect(() => {
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+    contentRef.current?.focus({ preventScroll: true });
+  }, [currentPath]);
+
+  useEffect(() => {
     if (!userMenuOpen) return;
+    firstMenuItemRef.current?.focus();
     function closeOnOutside(event: MouseEvent) {
       const target = event.target as HTMLElement | null;
       if (target && !target.closest(".user-menu")) {
@@ -140,7 +150,10 @@ export function DashboardShell({
       }
     }
     function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") setUserMenuOpen(false);
+      if (event.key === "Escape") {
+        setUserMenuOpen(false);
+        userMenuTriggerRef.current?.focus();
+      }
     }
     document.addEventListener("mousedown", closeOnOutside);
     document.addEventListener("keydown", closeOnEscape);
@@ -227,6 +240,7 @@ export function DashboardShell({
                         key={item.path}
                         href={item.path}
                         className={`nav-link ${active ? "nav-link-active" : ""}`}
+                        aria-current={active ? "page" : undefined}
                         onClick={(event) => {
                           event.preventDefault();
                           go(item.path);
@@ -294,12 +308,20 @@ export function DashboardShell({
             {notificationsOpen && <NotificationPanel navigate={go} />}
             <div className="user-menu">
               <button
+                ref={userMenuTriggerRef}
                 className="user-chip user-menu-trigger"
                 type="button"
                 aria-label={`用户菜单，${currentAccount.displayName}`}
                 aria-haspopup="menu"
                 aria-expanded={userMenuOpen}
+                aria-controls="account-menu"
                 onClick={() => setUserMenuOpen((open) => !open)}
+                onKeyDown={(event) => {
+                  if (event.key === "ArrowDown") {
+                    event.preventDefault();
+                    setUserMenuOpen(true);
+                  }
+                }}
               >
                 <span>{currentAccount.displayName.slice(0, 1)}</span>
                 <div>
@@ -309,12 +331,32 @@ export function DashboardShell({
                 <ChevronDown size={15} />
               </button>
               {userMenuOpen && (
-                <div className="user-menu-dropdown">
-                  <button type="button" onClick={() => go("/account/profile")}>
+                <div
+                  id="account-menu"
+                  className="user-menu-dropdown"
+                  role="menu"
+                  aria-label="账号操作"
+                  onKeyDown={(event) => {
+                    if (!["ArrowDown", "ArrowUp"].includes(event.key)) return;
+                    event.preventDefault();
+                    const items = Array.from(
+                      event.currentTarget.querySelectorAll<HTMLButtonElement>(
+                        '[role="menuitem"]:not(:disabled)',
+                      ),
+                    );
+                    const index = items.indexOf(
+                      document.activeElement as HTMLButtonElement,
+                    );
+                    const offset = event.key === "ArrowDown" ? 1 : -1;
+                    items[(index + offset + items.length) % items.length]?.focus();
+                  }}
+                >
+                  <button ref={firstMenuItemRef} role="menuitem" type="button" onClick={() => go("/account/profile")}>
                     <UserRound size={15} />
                     个人资料
                   </button>
                   <button
+                    role="menuitem"
                     type="button"
                     onClick={signOut}
                     disabled={loggingOut}
@@ -327,7 +369,7 @@ export function DashboardShell({
             </div>
           </div>
         </header>
-        <main className="dashboard-content">{children}</main>
+        <main ref={contentRef} className="dashboard-content" tabIndex={-1} aria-label="页面内容">{children}</main>
       </section>
     </div>
   );

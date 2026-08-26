@@ -102,12 +102,13 @@ export function TaskHallPage({ navigate }: { navigate(path: string): void }) {
                 onChange={(event) => setQuery(event.target.value)}
               />
             </label>
-            <div className="segmented-control" aria-label="任务状态筛选">
+            <div className="segmented-control" role="group" aria-label="任务状态筛选">
               {(["all", "published", "paused"] as const).map((value) => (
                 <button
                   type="button"
                   key={value}
                   className={status === value ? "active" : ""}
+                  aria-pressed={status === value}
                   onClick={() => setStatus(value)}
                 >
                   {value === "all" ? "全部" : value === "published" ? "可提交" : "暂停中"}

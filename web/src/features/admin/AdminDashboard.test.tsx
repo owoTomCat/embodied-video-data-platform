@@ -8,7 +8,12 @@ import type {
   BackendSubmission,
 } from "../../submissions/contracts";
 import { accountForRole, demoAccounts } from "../../test/accountFixtures";
+import { getAiQualityPrompt } from "../../ai-quality/client/aiQualityApi";
 import { AdminDashboard } from "./AdminDashboard";
+
+vi.mock("../../ai-quality/client/aiQualityApi", () => ({
+  getAiQualityPrompt: vi.fn(),
+}));
 
 vi.mock("../../submissions/client/submissionApi", async (importOriginal) => {
   const actual =
@@ -20,6 +25,7 @@ vi.mock("../../submissions/client/submissionApi", async (importOriginal) => {
 });
 
 const loadAllSubmissionsMock = vi.mocked(loadAllSubmissions);
+const getAiQualityPromptMock = vi.mocked(getAiQualityPrompt);
 
 function backendSubmission(input: {
   id: string;
@@ -108,6 +114,19 @@ function renderPage() {
 describe("AdminDashboard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    getAiQualityPromptMock.mockResolvedValue({
+      id: "PROMPT-7",
+      revision: 7,
+      systemPrompt: "测试提示词",
+      contentSha256: "a".repeat(64),
+      promptVersion: "prompt-v7",
+      ruleVersion: "rule-v2",
+      outputSchema: "quality-v1",
+      initialModel: "model-primary-live",
+      reviewModel: "model-review-live",
+      createdByName: "管理员",
+      createdAt: 1,
+    });
     loadAllSubmissionsMock.mockResolvedValue([
         backendSubmission({
           id: "SUB-ADMIN-001",
@@ -152,6 +171,10 @@ describe("AdminDashboard", () => {
     expect(loadAllSubmissionsMock).toHaveBeenCalledWith({
       status: "all",
     });
+    expect(await screen.findByText("model-primary-live")).toBeVisible();
+    expect(screen.getByText("model-review-live")).toBeVisible();
+    expect(screen.getByText("Worker 配置")).toBeVisible();
+    expect(screen.getByText("PostgreSQL")).toBeVisible();
   });
 
   it("includes records after the first 100 in dashboard metrics", async () => {
