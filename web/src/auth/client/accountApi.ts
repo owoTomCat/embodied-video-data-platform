@@ -177,6 +177,19 @@ export async function updateAccount(
   return result.account;
 }
 
+export async function updateOwnAccount(input: {
+  phone?: string;
+}): Promise<AccountPublic> {
+  const result = await requestJson<{ account: AccountPublic }>(
+    "/accounts/me",
+    {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    },
+  );
+  return result.account;
+}
+
 export function resetAccountPassword(
   id: string,
   password: string,

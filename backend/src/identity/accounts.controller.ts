@@ -26,6 +26,7 @@ import {
   ResetPasswordDto,
   SetAccountStatusDto,
   UpdateAccountDto,
+  UpdateOwnAccountDto,
 } from "./dto/account.dto.js";
 import { IdentityFailureFilter } from "./identity-failure.filter.js";
 
@@ -47,6 +48,15 @@ export class AccountsController {
     @Body() input: CreateAccountDto,
   ) {
     return { account: await this.accounts.create(actor, input) };
+  }
+
+  @Patch("me")
+  @UseGuards(AllowedOriginGuard, SensitiveActionRateLimitGuard)
+  async updateOwn(
+    @CurrentUser() actor: PublicUser,
+    @Body() input: UpdateOwnAccountDto,
+  ) {
+    return { account: await this.accounts.updateOwn(actor, input) };
   }
 
   @Patch(":id")

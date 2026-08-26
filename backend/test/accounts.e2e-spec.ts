@@ -16,6 +16,7 @@ import { TeamEntity } from "../src/database/entities/team.entity.js";
 import { UserEntity } from "../src/database/entities/user.entity.js";
 import { configureApplication } from "../src/http/configure-application.js";
 import { IdentityModule } from "../src/identity/identity.module.js";
+import { RateLimitService } from "../src/security/rate-limit.service.js";
 
 const TEST_DATABASE_URL =
   process.env.TEST_DATABASE_URL ??
@@ -72,6 +73,8 @@ describe("account and team API", () => {
   });
 
   beforeEach(async () => {
+    // 登录限流是进程内桶，累计多次测试会触发 429；每个用例前重置。
+    await app.get(RateLimitService).reset();
     await dataSource.query(
       "TRUNCATE sessions, audit_logs, users, teams RESTART IDENTITY CASCADE",
     );
@@ -132,6 +135,7 @@ describe("account and team API", () => {
         password: TEST_PASSWORD,
         role: "leader",
         teamId: "TEAM-02",
+        phone: "13900001111",
       })
       .expect(201);
 
@@ -140,6 +144,7 @@ describe("account and team API", () => {
       username: "leader-two",
       role: "leader",
       teamId: "TEAM-02",
+      phone: "13900001111",
       status: "active",
     });
     const log = await dataSource.getRepository(AuditLogEntity).findOneByOrFail({
@@ -147,6 +152,62 @@ describe("account and team API", () => {
     });
     expect(log.action).toBe("create");
     expect(log.actorAccountId).toBe("U-ADMIN");
+  });
+
+  it("rejects an invalid phone number when creating or updating an account", async () => {
+    const cookie = await login("admin");
+    await request(app.getHttpServer())
+      .post("/api/v1/accounts")
+      .set("Origin", WEB_ORIGIN)
+      .set("Cookie", cookie)
+      .send({
+        displayName: "手机号错误",
+        username: "phone-bad",
+        password: TEST_PASSWORD,
+        role: "collector",
+        teamId: "TEAM-02",
+        phone: "12345",
+      })
+      .expect(400);
+  });
+
+  it("lets an administrator edit a leader profile without tripping the unique-leader check", async () => {
+    const cookie = await login("admin");
+    const team = await dataSource.getRepository(TeamEntity).save({
+      id: "TEAM-LEAD-EDIT",
+      name: "团长编辑测试团队",
+    });
+    const created = await request(app.getHttpServer())
+      .post("/api/v1/accounts")
+      .set("Origin", WEB_ORIGIN)
+      .set("Cookie", cookie)
+      .send({
+        displayName: "编辑团长",
+        username: "leader-edit",
+        password: TEST_PASSWORD,
+        role: "leader",
+        teamId: "TEAM-LEAD-EDIT",
+      })
+      .expect(201);
+    const leaderId = created.body.account.id;
+
+    const updated = await request(app.getHttpServer())
+      .patch(`/api/v1/accounts/${leaderId}`)
+      .set("Origin", WEB_ORIGIN)
+      .set("Cookie", cookie)
+      .send({
+        displayName: "编辑团长-改",
+        username: "leader-edit",
+        role: "leader",
+        teamId: "TEAM-LEAD-EDIT",
+        phone: "13800000001",
+      })
+      .expect(200);
+
+    expect(updated.body.account.displayName).toBe("编辑团长-改");
+    expect(updated.body.account.phone).toBe("13800000001");
+    await dataSource.getRepository(UserEntity).delete({ id: leaderId });
+    await dataSource.getRepository(TeamEntity).delete({ id: "TEAM-LEAD-EDIT" });
   });
 
   it("only permanently deletes disabled accounts without business history", async () => {

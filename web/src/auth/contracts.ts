@@ -6,6 +6,7 @@ export type AccountPublic = {
   username: string;
   role: Role;
   teamId?: string;
+  phone?: string;
   status: AccountStatus;
   updatedAt: number;
 };
@@ -97,6 +98,7 @@ export type CreateAccountInput = {
   password: string;
   role: Role;
   teamId?: string;
+  phone?: string;
 };
 
 export type UpdateAccountInput = Omit<CreateAccountInput, "password">;

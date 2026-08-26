@@ -27,6 +27,10 @@ export class UserEntity {
   @Column({ type: "varchar", length: 80 })
   username!: string;
 
+  /** 手机号（可选，用于人员管理快速联系） */
+  @Column({ type: "varchar", length: 30, nullable: true })
+  phone: string | null = null;
+
   @Index("idx_users_username_normalized", { unique: true })
   @Column({ name: "username_normalized", type: "citext" })
   usernameNormalized!: string;

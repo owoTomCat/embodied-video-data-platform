@@ -2,9 +2,7 @@
 
 import {
   Building2,
-  ShieldCheck,
   UserRoundPlus,
-  Users,
 } from "lucide-react";
 import { useRef, useState } from "react";
 import * as accountApi from "../../auth/client/accountApi";
@@ -112,36 +110,6 @@ export function UsersTeamsPage() {
             <UserRoundPlus size={16} />
             新增账号
           </button>
-        </div>
-      </div>
-
-      <div className="people-summary">
-        <article>
-          <Users size={22} />
-          <span>
-            <strong>{accounts.length}</strong>
-            <small>登录账号</small>
-          </span>
-        </article>
-        <article>
-          <ShieldCheck size={22} />
-          <span>
-            <strong>{teams.length}</strong>
-            <small>运营团队</small>
-          </span>
-        </article>
-        <div>
-          {teams.map((team) => (
-            <span key={team.id}>
-              <strong>
-                {team.name}{team.status === "disabled" ? " · 已停用" : ""}
-              </strong>
-              <small>
-                {accounts.filter((account) => account.teamId === team.id).length} 名成员 ·
-                {team.unitPricePerMinute} 分/分钟
-              </small>
-            </span>
-          ))}
         </div>
       </div>
 

@@ -85,6 +85,7 @@ describe("DashboardShell", () => {
     expect(screen.getByText("管理员")).toBeVisible();
     expect(screen.getByRole("link", { name: /^AI 任务/ })).toBeVisible();
     expect(screen.queryByLabelText("演示角色")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /用户菜单/ }));
     await user.dblClick(
       screen.getByRole("button", { name: "退出登录" }),
     );

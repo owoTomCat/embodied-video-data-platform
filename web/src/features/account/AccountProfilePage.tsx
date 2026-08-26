@@ -1,11 +1,12 @@
 "use client";
 
-import { ShieldCheck, UserRound } from "lucide-react";
+import { Phone, ShieldCheck, UserRound } from "lucide-react";
 import { useRef, useState, type FormEvent } from "react";
 
 import {
   AccountApiError,
   changeOwnPassword,
+  updateOwnAccount,
 } from "../../auth/client/accountApi";
 import { useIdentity } from "../../auth/client/IdentityContext";
 import { useInteractions } from "../../interactions/InteractionContext";
@@ -22,8 +23,12 @@ const statusLabels = {
 };
 
 export function AccountProfilePage() {
-  const { currentAccount, teams } = useIdentity();
+  const { currentAccount, teams, upsertAccount } = useIdentity();
   const { notify } = useInteractions();
+  const [phone, setPhone] = useState(currentAccount.phone ?? "");
+  const [phoneError, setPhoneError] = useState("");
+  const [phoneSaving, setPhoneSaving] = useState(false);
+  const phoneSavingRef = useRef(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
@@ -36,6 +41,34 @@ export function AccountProfilePage() {
     setCurrentPassword("");
     setNewPassword("");
     setConfirmation("");
+  }
+
+  async function savePhone(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (phoneSavingRef.current) return;
+    const trimmedPhone = phone.trim();
+    if (trimmedPhone && !/^1[3-9]\d{9}$/.test(trimmedPhone)) {
+      setPhoneError("手机号格式不正确");
+      return;
+    }
+    phoneSavingRef.current = true;
+    setPhoneSaving(true);
+    setPhoneError("");
+    try {
+      const updated = await updateOwnAccount({ phone: trimmedPhone || undefined });
+      upsertAccount(updated);
+      setPhone(updated.phone ?? "");
+      notify("success", "手机号已保存");
+    } catch (reason) {
+      setPhoneError(
+        reason instanceof AccountApiError
+          ? reason.message
+          : "保存手机号失败，请稍后重试",
+      );
+    } finally {
+      phoneSavingRef.current = false;
+      setPhoneSaving(false);
+    }
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -121,10 +154,41 @@ export function AccountProfilePage() {
               <strong>{team?.name ?? "未分配团队"}</strong>
             </div>
             <div>
+              <small>手机号</small>
+              <strong>{currentAccount.phone || "未填写"}</strong>
+            </div>
+            <div>
               <small>账号状态</small>
               <strong>{statusLabels[currentAccount.status]}</strong>
             </div>
           </dl>
+          <form className="profile-form" onSubmit={savePhone}>
+            <div className="form-section-title">修改手机号</div>
+            <label>
+              <span>手机号</span>
+              <input
+                type="tel"
+                autoComplete="tel"
+                maxLength={30}
+                value={phone}
+                onChange={(event) => setPhone(event.target.value)}
+                placeholder="用于人员管理快速联系（选填）"
+              />
+            </label>
+            {phoneError && (
+              <p className="form-alert" role="alert">
+                {phoneError}
+              </p>
+            )}
+            <button
+              className="button button-secondary"
+              type="submit"
+              disabled={phoneSaving}
+            >
+              <Phone size={15} />
+              {phoneSaving ? "保存中…" : "保存手机号"}
+            </button>
+          </form>
           <form className="profile-form" onSubmit={submit}>
             <div className="form-section-title">修改密码</div>
             <label>

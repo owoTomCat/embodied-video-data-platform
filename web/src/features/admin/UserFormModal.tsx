@@ -43,6 +43,7 @@ export function UserFormModal({
     account?.displayName ?? "",
   );
   const [username, setUsername] = useState(account?.username ?? "");
+  const [phone, setPhone] = useState(account?.phone ?? "");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<Role>(
     account?.role ?? "collector",
@@ -65,6 +66,11 @@ export function UserFormModal({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (submittingRef.current) return;
+    const trimmedPhone = phone.trim();
+    if (trimmedPhone && !/^1[3-9]\d{9}$/.test(trimmedPhone)) {
+      setError("手机号格式不正确");
+      return;
+    }
     submittingRef.current = true;
     setSubmitting(true);
     setError("");
@@ -74,6 +80,7 @@ export function UserFormModal({
       username,
       role,
       teamId: role === "admin" ? undefined : teamId,
+      phone: trimmedPhone || undefined,
     };
 
     try {
@@ -122,6 +129,16 @@ export function UserFormModal({
             onChange={(event) => setUsername(event.target.value)}
             autoComplete="username"
             required
+          />
+        </label>
+        <label>
+          手机号
+          <input
+            value={phone}
+            onChange={(event) => setPhone(event.target.value)}
+            autoComplete="tel"
+            maxLength={30}
+            placeholder="用于快速联系（选填）"
           />
         </label>
         {mode === "create" && (

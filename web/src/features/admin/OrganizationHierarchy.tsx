@@ -5,6 +5,7 @@ import {
   ChevronDown,
   ChevronRight,
   Crown,
+  Download,
   Search,
   ShieldCheck,
   UserCog,
@@ -15,6 +16,7 @@ import { useMemo, useState } from "react";
 import type { AccountPublic, TeamPublic } from "../../auth/contracts";
 import { StatusBadge } from "../../components/StatusBadge";
 import type { AccountStatus, Role } from "../../domain/types";
+import { useMemberSettlementStats } from "./useMemberSettlementStats";
 
 const roleLabel: Record<Role, string> = {
   collector: "数采人员",
@@ -22,20 +24,28 @@ const roleLabel: Record<Role, string> = {
   admin: "平台管理员",
 };
 
-function formatUpdatedAt(timestamp: number): string {
-  return new Intl.DateTimeFormat("zh-CN", {
-    timeZone: "Asia/Shanghai",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(timestamp);
+function formatDuration(seconds: number): string {
+  const rounded = Math.max(0, Math.round(seconds));
+  const minutes = Math.floor(rounded / 60);
+  const rest = rounded % 60;
+  return minutes > 0 ? `${minutes}分${rest}秒` : `${rest}秒`;
 }
 
-function AccountRows({
+function formatPoints(points: number): string {
+  return `${points.toLocaleString("zh-CN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })} 分`;
+}
+
+function MemberStatsCell({ value }: { value: number }) {
+  return <span className="mono">{value}</span>;
+}
+
+function MemberTable({
   accounts,
   currentAccountId,
+  stats,
   onEdit,
   onResetPassword,
   onToggleStatus,
@@ -43,26 +53,30 @@ function AccountRows({
 }: {
   accounts: AccountPublic[];
   currentAccountId: string;
+  stats?: Record<string, { videoCount: number; effectiveSeconds: number; avgScore: number | null; points: number }>;
   onEdit(account: AccountPublic, button: HTMLButtonElement): void;
   onResetPassword(account: AccountPublic, button: HTMLButtonElement): void;
   onToggleStatus(account: AccountPublic, button: HTMLButtonElement): void;
   onDelete(account: AccountPublic, button: HTMLButtonElement): void;
 }) {
   return (
-    <div className="table-scroll hierarchy-account-table-wrap">
-      <table className="data-table hierarchy-account-table">
+    <div className="table-scroll people-table-wrap">
+      <table className="data-table people-table">
         <thead>
           <tr>
-            <th>账号</th>
+            <th>成员</th>
             <th>用户名</th>
-            <th>角色</th>
             <th>状态</th>
-            <th>更新时间</th>
+            <th>视频数</th>
+            <th>有效时长</th>
+            <th>均分</th>
+            <th>结算积分</th>
             <th>操作</th>
           </tr>
         </thead>
         <tbody>
           {accounts.map((account) => {
+            const memberStats = stats?.[account.id];
             const isCurrent = account.id === currentAccountId;
             const canDelete = !isCurrent && account.status === "disabled";
             return (
@@ -72,21 +86,23 @@ function AccountRows({
                     <span>{account.displayName.slice(0, 1)}</span>
                     <div>
                       <strong>{account.displayName}</strong>
-                      <small>{account.id}</small>
+                      <small>{account.phone || "未填写手机号"}</small>
                     </div>
                   </div>
                 </td>
                 <td><span className="mono">{account.username}</span></td>
-                <td>{roleLabel[account.role]}</td>
                 <td>
                   <StatusBadge
                     label={account.status === "active" ? "已启用" : "已停用"}
                     tone={account.status === "active" ? "success" : "neutral"}
                   />
                 </td>
-                <td>{formatUpdatedAt(account.updatedAt)}</td>
+                <td><MemberStatsCell value={memberStats?.videoCount ?? 0} /></td>
+                <td>{memberStats ? formatDuration(memberStats.effectiveSeconds) : "—"}</td>
+                <td>{memberStats?.avgScore ?? "—"}</td>
+                <td><strong className="settle-points">{memberStats ? memberStats.points.toFixed(2) : "0.00"}</strong></td>
                 <td className="table-actions-cell">
-                  <div className="account-row-actions">
+                  <span className="row-actions people-actions">
                     <button className="table-action" onClick={(event) => onEdit(account, event.currentTarget)}>编辑</button>
                     <button className="table-action" onClick={(event) => onResetPassword(account, event.currentTarget)}>重置密码</button>
                     <button
@@ -111,7 +127,7 @@ function AccountRows({
                     >
                       删除
                     </button>
-                  </div>
+                  </span>
                 </td>
               </tr>
             );
@@ -152,9 +168,11 @@ export function OrganizationHierarchy({
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<Role | "all">("all");
   const [statusFilter, setStatusFilter] = useState<AccountStatus | "all">("all");
+  const [teamFilter, setTeamFilter] = useState<string>("all");
   const [expanded, setExpanded] = useState<Set<string>>(
     () => new Set(["platform", ...teams.map((team) => team.id)]),
   );
+  const { stats, loading, unavailable } = useMemberSettlementStats(teams);
 
   const view = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -164,6 +182,7 @@ export function OrganizationHierarchy({
         groupMatches ||
         account.displayName.toLowerCase().includes(query) ||
         account.username.toLowerCase().includes(query) ||
+        (account.phone ?? "").toLowerCase().includes(query) ||
         account.id.toLowerCase().includes(query);
       return (
         matchesSearch &&
@@ -173,6 +192,7 @@ export function OrganizationHierarchy({
     };
 
     const teamGroups = teams.flatMap((team) => {
+      if (teamFilter !== "all" && team.id !== teamFilter) return [];
       const members = accounts.filter((account) => account.teamId === team.id);
       const leaders = members.filter((account) => account.role === "leader");
       const groupMatches =
@@ -182,7 +202,7 @@ export function OrganizationHierarchy({
           leaders.some(
             (leader) =>
               leader.displayName.toLowerCase().includes(query) ||
-              leader.username.toLowerCase().includes(query),
+              (leader.phone ?? "").toLowerCase().includes(query),
           ));
       const visibleMembers = members.filter((account) =>
         matchesAccount(account, groupMatches),
@@ -203,7 +223,7 @@ export function OrganizationHierarchy({
         platformAccounts.length +
         teamGroups.reduce((total, group) => total + group.visibleMembers.length, 0),
     };
-  }, [accounts, roleFilter, search, statusFilter, teams]);
+  }, [accounts, roleFilter, search, statusFilter, teamFilter, teams]);
 
   function toggle(id: string) {
     setExpanded((current) => {
@@ -214,23 +234,35 @@ export function OrganizationHierarchy({
     });
   }
 
-  const accountRowProps = {
+  const memberTableProps = {
     currentAccountId,
+    stats: stats?.byOwner,
     onEdit: onEditAccount,
     onResetPassword,
     onToggleStatus,
     onDelete: onDeleteAccount,
   };
 
+  const overall = stats?.overall;
+
   return (
-    <section className="content-card organization-hierarchy">
-      <div className="card-heading">
-        <div>
-          <h2>团队与账号层级</h2>
-          <p>先查看团队和团长，再展开管理团队内账号</p>
+    <section className="content-card organizations">
+      <div className="people-overview">
+        <div className="overview-stats">
+          <span><strong>{accounts.length}</strong><small>账号</small></span>
+          <span><strong>{teams.length}</strong><small>团队</small></span>
+          <span><strong>{overall?.videoCount ?? "—"}</strong><small>视频</small></span>
+          <span><strong>{overall ? formatDuration(overall.effectiveSeconds) : "—"}</strong><small>有效时长</small></span>
+          <span><strong>{overall?.avgScore ?? "—"}</strong><small>均分</small></span>
+          <span><strong>{overall?.points.toFixed(2) ?? "—"}</strong><small>结算积分</small></span>
+        </div>
+        <div className="overview-actions">
+          <span className="overview-total">合计 {overall ? formatPoints(overall.points) : "—"}</span>
+          <span className="overview-mode">{unavailable ? "结算数据暂不可用" : loading ? "统计读取中" : "已连接结算数据"}</span>
         </div>
       </div>
-      <div className="filter-bar account-filter-bar">
+
+      <div className="people-filters">
         <label className="search-field">
           <Search size={15} />
           <span className="sr-only">搜索账号</span>
@@ -238,7 +270,7 @@ export function OrganizationHierarchy({
             aria-label="搜索账号"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="搜索团队、团长、显示名称或用户名"
+            placeholder="搜索姓名、手机号、用户名或团队"
           />
         </label>
         <select aria-label="角色筛选" value={roleFilter} onChange={(event) => setRoleFilter(event.target.value as Role | "all")}>
@@ -252,13 +284,19 @@ export function OrganizationHierarchy({
           <option value="active">已启用</option>
           <option value="disabled">已停用</option>
         </select>
-        <span className="filter-count">当前显示 {view.visibleCount} 个账号</span>
+        <select aria-label="团队筛选" value={teamFilter} onChange={(event) => setTeamFilter(event.target.value)}>
+          <option value="all">全部团队</option>
+          {teams.map((team) => (
+            <option key={team.id} value={team.id}>{team.name}</option>
+          ))}
+        </select>
+        <span className="filter-count">当前显示 {view.visibleCount} 人</span>
       </div>
 
-      <div className="organization-groups">
+      <div className="people-groups">
         {view.platformAccounts.length > 0 && (
-          <article className="organization-group organization-group-platform">
-            <header className="organization-group-header">
+          <article className="people-group">
+            <header className="people-group-header">
               <button
                 className="organization-toggle"
                 aria-label={`平台管理，${expanded.has("platform") ? "收起" : "展开"}账号`}
@@ -266,23 +304,23 @@ export function OrganizationHierarchy({
                 onClick={() => toggle("platform")}
               >
                 {expanded.has("platform") ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                <span className="organization-icon"><ShieldCheck size={18} /></span>
-                <span className="organization-title"><strong>平台管理</strong><small>不归属采集团队的管理员账号</small></span>
+                <span className="people-group-icon platform"><ShieldCheck size={18} /></span>
+                <span className="people-group-title"><strong>平台管理</strong><small>不归属采集团队的管理员账号</small></span>
               </button>
-              <div className="organization-group-stats">
-                <span><strong>{view.platformAccounts.length}</strong><small>管理员</small></span>
+              <div className="people-group-stats">
+                <span>{view.platformAccounts.length} 人</span>
               </div>
             </header>
-            {expanded.has("platform") && <AccountRows accounts={view.platformAccounts} {...accountRowProps} />}
+            {expanded.has("platform") && <MemberTable accounts={view.platformAccounts} {...memberTableProps} />}
           </article>
         )}
 
         {view.teamGroups.map(({ team, members, leaders, visibleMembers }) => {
-          const activeMembers = members.filter((account) => account.status === "active");
           const isExpanded = expanded.has(team.id);
+          const teamStats = stats?.byTeam[team.id];
           return (
-            <article className="organization-group" key={team.id}>
-              <header className="organization-group-header">
+            <article className="people-group" key={team.id}>
+              <header className="people-group-header">
                 <button
                   className="organization-toggle"
                   aria-label={`${team.name}，${isExpanded ? "收起" : "展开"}账号`}
@@ -290,34 +328,45 @@ export function OrganizationHierarchy({
                   onClick={() => toggle(team.id)}
                 >
                   {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                  <span className="organization-icon"><Building2 size={18} /></span>
-                  <span className="organization-title">
+                  <span className="people-group-icon"><Building2 size={18} /></span>
+                  <span className="people-group-title">
                     <strong>{team.name}</strong>
-                    <small>{team.id} · {team.status === "active" ? "团队已启用" : "团队已停用"}</small>
+                    <small>{team.id} · {team.status === "active" ? "团队已启用" : "团队已停用"} · 单价 {team.unitPricePerMinute} 分/分钟</small>
                   </span>
                 </button>
-                <div className="organization-leader">
-                  <Crown size={16} />
-                  <span><small>团长</small><strong>{leaders.length ? leaders.map((leader) => leader.displayName).join(" / ") : "待指定"}</strong></span>
+                <div className="people-group-leader">
+                  <Crown size={15} />
+                  <span>{leaders.length ? leaders.map((leader) => `${leader.displayName}${leader.phone ? `（${leader.phone}）` : ""}`).join(" / ") : "待指定"}</span>
                 </div>
-                <div className="organization-group-stats">
-                  <span><strong>{members.length}</strong><small>成员</small></span>
-                  <span><strong>{activeMembers.length}</strong><small>启用</small></span>
-                  <span><strong>{team.unitPricePerMinute}</strong><small>分/分钟</small></span>
+                <div className="people-group-stats">
+                  {teamStats ? (
+                    <>
+                      <span className="stat-badge">小计 {formatPoints(teamStats.points)}</span>
+                      <span>{teamStats.videoCount} 视频</span>
+                      <span>{formatDuration(teamStats.effectiveSeconds)}</span>
+                      <span>均分 {teamStats.avgScore ?? "—"}</span>
+                      <span>{members.length} 人</span>
+                    </>
+                  ) : (
+                    <span>{members.length} 人</span>
+                  )}
                 </div>
-                <div className="organization-group-actions">
+                <div className="people-group-actions">
                   <button className="table-action" onClick={(event) => onEditTeam(team, event.currentTarget)}>编辑团队</button>
                   <button
                     className="table-action"
-                    disabled={team.status === "disabled" || activeMembers.length === 0}
-                    title={team.status === "disabled" ? "请先启用团队" : activeMembers.length === 0 ? "请先启用团队成员账号" : undefined}
+                    disabled={team.status === "disabled" || members.filter((a) => a.status === "active").length === 0}
+                    title={team.status === "disabled" ? "请先启用团队" : members.filter((a) => a.status === "active").length === 0 ? "请先启用团队成员账号" : undefined}
                     onClick={(event) => onAssignLeader(team, event.currentTarget)}
                   >
                     <UserCog size={13} />指定团长
                   </button>
+                  <button className="table-action" title="导出本团队结算明细">
+                    <Download size={13} />导出团队
+                  </button>
                 </div>
               </header>
-              {isExpanded && <AccountRows accounts={visibleMembers} {...accountRowProps} />}
+              {isExpanded && <MemberTable accounts={visibleMembers} {...memberTableProps} />}
             </article>
           );
         })}

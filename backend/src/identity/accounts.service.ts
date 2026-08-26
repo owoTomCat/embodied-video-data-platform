@@ -22,6 +22,7 @@ import type {
   CreateAccountDto,
   SetAccountStatusDto,
   UpdateAccountDto,
+  UpdateOwnAccountDto,
 } from "./dto/account.dto.js";
 import {
   IdentityFailure,
@@ -52,6 +53,7 @@ function auditAccount(user: UserEntity): Record<string, unknown> {
     role: user.role,
     teamId: user.teamId,
     status: user.status,
+    phone: user.phone,
   };
 }
 
@@ -92,6 +94,7 @@ export class AccountsService {
       username: input.username.trim(),
       role: input.role,
       teamId: input.teamId,
+      phone: input.phone?.trim() || null,
     };
     this.policy.assertCanCreate(actor, mutation);
     const passwordHash = await this.passwords.hash(input.password);
@@ -159,17 +162,24 @@ export class AccountsService {
           username: input.username.trim(),
           role: input.role,
           teamId: input.teamId,
+          phone: input.phone?.trim() || null,
         };
         this.policy.assertCanUpdate(actor, target, mutation);
         await this.protectLastAdmin(users, target, {
           role: mutation.role,
           status: target.status,
         });
+        // 只有角色或团队归属发生变化时，才需要校验「团队唯一团长」；
+        // 仅修改团长显示名/手机号等字段时跳过，避免误报「已有团长」。
+        const identityChanged =
+          target.role !== mutation.role ||
+          target.teamId !== (mutation.teamId ?? null);
         await this.assertRoleTeam(
           manager.getRepository(TeamEntity),
           users,
           mutation,
           target.id,
+          identityChanged,
         );
         const normalized = normalizeUsername(mutation.username);
         if (
@@ -183,9 +193,6 @@ export class AccountsService {
           throw new IdentityFailure("CONFLICT", "用户名已存在", 409);
         }
         const before = auditAccount(target);
-        const identityChanged =
-          target.role !== mutation.role ||
-          target.teamId !== (mutation.teamId ?? null);
         Object.assign(target, mutation, {
           teamId: mutation.teamId ?? null,
           usernameNormalized: normalized,
@@ -213,6 +220,18 @@ export class AccountsService {
       }
       throw error;
     }
+  }
+
+  async updateOwn(
+    actor: PublicUser,
+    input: UpdateOwnAccountDto,
+  ): Promise<PublicUser> {
+    const target = await this.users.findOneByOrFail({ id: actor.id });
+    if (input.phone !== undefined) {
+      target.phone = input.phone.trim() || null;
+    }
+    const saved = await this.users.save(target);
+    return toPublicUser(saved);
   }
 
   async resetPassword(
@@ -394,6 +413,7 @@ export class AccountsService {
       teamId?: string;
     },
     excludedAccountId?: string,
+    checkLeaderDuplicate = true,
   ): Promise<void> {
     if (input.role === "admin") {
       if (input.teamId) {
@@ -420,7 +440,7 @@ export class AccountsService {
         400,
       );
     }
-    if (input.role === "leader") {
+    if (input.role === "leader" && checkLeaderDuplicate) {
       await users.manager.query(
         "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
         [`team-leader:${input.teamId}`],

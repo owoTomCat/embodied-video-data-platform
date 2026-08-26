@@ -43,6 +43,7 @@ export function toPublicUser(user: UserEntity): PublicUser {
     username: user.username,
     role: user.role,
     teamId: user.teamId ?? undefined,
+    phone: user.phone ?? undefined,
     status: user.status,
     updatedAt: user.updatedAt.getTime(),
   };

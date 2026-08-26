@@ -27,6 +27,7 @@ import { VideoQualityPromptVersionEntity } from "./entities/video-quality-prompt
 import { VideoQualityResultEntity } from "./entities/video-quality-result.entity.js";
 import { WorkerHeartbeatEntity } from "./entities/worker-heartbeat.entity.js";
 import { AiQuality2026081200003 } from "./migrations/202608120003-ai-quality.js";
+import { AddAccountPhone2026082600001 } from "./migrations/202608260001-add-account-phone.js";
 import { AddTaskTypeToCollectionTasks2026083000001 } from "./migrations/202608300001-add-task-type.js";
 import { AiQualityProgressStuck2026081700001 } from "./migrations/202608170001-ai-quality-progress-stuck.js";
 import { CollectionTasks2026082400001 } from "./migrations/202608240001-collection-tasks.js";
@@ -124,6 +125,7 @@ export function createDataSource(
       AiQualityProgressStuck2026081700001,
       ScarcityConfigAndMediaScene2026081900001,
       CollectionTasks2026082400001,
+      AddAccountPhone2026082600001,
       AddTaskTypeToCollectionTasks2026083000001,
     ],
     synchronize: false,
