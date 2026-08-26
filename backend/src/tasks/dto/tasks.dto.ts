@@ -21,6 +21,8 @@ const MAX_SCENE_NAME_LENGTH = 120;
 const MAX_RAW_REQUIREMENTS_LENGTH = 20_000;
 const MAX_REQUIREMENT_ITEMS = 100;
 
+const TASK_TYPES = ["generic", "preset", "custom"] as const;
+
 export class CreateTaskDto {
   @IsString()
   @MaxLength(MAX_TITLE_LENGTH, { message: "任务标题不能超过 120 个字符" })
@@ -36,6 +38,11 @@ export class CreateTaskDto {
   @IsString()
   @MaxLength(MAX_SCENE_NAME_LENGTH, { message: "场景名称不能超过 120 个字符" })
   sceneName!: string;
+
+  /** 任务类型：generic=通用任务 / preset=预设场景 / custom=自定义；缺省按 custom */
+  @IsOptional()
+  @IsIn(TASK_TYPES, { message: "任务类型不合法" })
+  taskType?: (typeof TASK_TYPES)[number];
 
   @IsString()
   @MaxLength(MAX_RAW_REQUIREMENTS_LENGTH, {
@@ -67,6 +74,10 @@ export class UpdateTaskDto {
   @IsString()
   @MaxLength(MAX_SCENE_NAME_LENGTH, { message: "场景名称不能超过 120 个字符" })
   sceneName?: string;
+
+  @IsOptional()
+  @IsIn(TASK_TYPES, { message: "任务类型不合法" })
+  taskType?: (typeof TASK_TYPES)[number];
 
   @IsOptional()
   @IsString()

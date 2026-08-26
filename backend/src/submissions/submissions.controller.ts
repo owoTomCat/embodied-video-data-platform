@@ -117,6 +117,12 @@ export class SubmissionsController {
       .send(csv);
   }
 
+  /** 任务维度统计（注意：必须声明在 :id 之前） */
+  @Get("task-stats")
+  async taskStats(@CurrentUser() actor: PublicUser) {
+    return await this.submissions.taskStats(actor);
+  }
+
   @Get(":id")
   async get(@CurrentUser() actor: PublicUser, @Param("id") id: string) {
     return { submission: await this.submissions.get(actor, id) };

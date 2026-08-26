@@ -10,9 +10,15 @@ import type { PublicUser } from "../auth/auth.types.js";
 import {
   CollectionTaskEntity,
   type CollectionTaskStatus,
+  type CollectionTaskType,
   type NormalizedTaskRequirements,
 } from "../database/entities/collection-task.entity.js";
 import { SubmissionEntity } from "../database/entities/submission.entity.js";
+import {
+  GENERIC_TASK_TEMPLATE,
+  presetSceneSummaries,
+  type PresetScene,
+} from "./preset-scenes.js";
 import { TaskFailure } from "./tasks.failure.js";
 import { TasksPolicy } from "./tasks.policy.js";
 import { RequirementNormalizerService } from "./requirement-normalizer.service.js";
@@ -28,6 +34,7 @@ export type PublicTask = {
   description: string;
   sceneName: string;
   sceneLabelId: string | null;
+  taskType: CollectionTaskType;
   rawRequirements: string;
   normalizedRequirements: NormalizedTaskRequirements | null;
   normalizationStatus: string;
@@ -48,6 +55,7 @@ export type PublicTaskForCollector = {
   description: string;
   sceneName: string;
   sceneLabelId: string | null;
+  taskType: CollectionTaskType;
   normalizedRequirements: NormalizedTaskRequirements | null;
   pricePointsPerMinute: number | null;
   status: CollectionTaskStatus;
@@ -62,6 +70,7 @@ export function publicTask(task: CollectionTaskEntity): PublicTask {
     description: task.description,
     sceneName: task.sceneName,
     sceneLabelId: task.sceneLabelId,
+    taskType: task.taskType,
     rawRequirements: task.rawRequirements,
     normalizedRequirements: task.normalizedRequirements,
     normalizationStatus: task.normalizationStatus,
@@ -86,6 +95,7 @@ function publicTaskForCollector(
     description: task.description,
     sceneName: task.sceneName,
     sceneLabelId: task.sceneLabelId,
+    taskType: task.taskType,
     normalizedRequirements: task.normalizedRequirements,
     pricePointsPerMinute: numericOrNull(task.pricePointsPerMinute),
     status: task.status,
@@ -154,6 +164,17 @@ export class TasksService {
     });
     return {
       tasks: [...rows, ...paused].map(publicTaskForCollector),
+    };
+  }
+
+  /** 管理员：任务类型选择器使用的预设场景目录（含默认模板内容） */
+  async listPresetScenes(
+    actor: PublicUser,
+  ): Promise<{ presetScenes: PresetScene[]; generic: typeof GENERIC_TASK_TEMPLATE }> {
+    this.policy.requireManage(actor);
+    return {
+      presetScenes: presetSceneSummaries(),
+      generic: GENERIC_TASK_TEMPLATE,
     };
   }
 
@@ -226,6 +247,7 @@ export class TasksService {
         title: input.title.trim(),
         description: input.description?.trim() ?? "",
         sceneName: input.sceneName.trim(),
+        taskType: input.taskType ?? "custom",
         sceneLabelId: null,
         rawRequirements: input.rawRequirements.trim(),
         normalizedRequirements: null,
@@ -277,6 +299,9 @@ export class TasksService {
       task.sceneName = input.sceneName.trim();
       // 场景变化后，已确认的规范化要求可能不再适用，需要重新规范化
       task.normalizationStatus = "pending";
+    }
+    if (input.taskType !== undefined) {
+      task.taskType = input.taskType;
     }
     if (input.rawRequirements !== undefined) {
       task.rawRequirements = input.rawRequirements.trim();
@@ -432,7 +457,11 @@ export class TasksService {
         409,
       );
     }
-    const sceneLabelId = await this.resolveSceneLabelId(actor, task);
+    // 通用任务不绑定具体场景，跳过场景标签解析，避免向标签字典写入「通用」占位标签
+    const sceneLabelId =
+      task.taskType === "generic"
+        ? null
+        : await this.resolveSceneLabelId(actor, task);
     const previouslyPublished = task.publishedAt !== null;
     task.sceneLabelId = sceneLabelId;
     task.status = "published";

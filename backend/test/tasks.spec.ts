@@ -122,6 +122,7 @@ describe("publicTask serializer", () => {
     expect(serialized.normalizationStatus).toBe("pending");
     expect(serialized.status).toBe("draft");
     expect(serialized.publishedAt).toBeNull();
+    expect(serialized.taskType).toBe("custom");
     expect(serialized.createdAt).toBe(
       new Date("2026-08-24T00:00:00Z").getTime(),
     );
@@ -157,6 +158,7 @@ describe("publicTask serializer", () => {
     expect(serialized.pricePointsPerMinute).toBe(15);
     expect(serialized.status).toBe("published");
     expect(serialized.sceneLabelId).toBe("SCENE-002");
+    expect(serialized.taskType).toBe("custom");
     expect(serialized.normalizedRequirements?.requirements).toHaveLength(1);
   });
 });

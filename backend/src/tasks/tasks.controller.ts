@@ -51,6 +51,12 @@ export class TasksController {
     });
   }
 
+  /** 管理员：任务类型选择器使用的预设场景目录（注意：必须声明在 :id 之前） */
+  @Get("preset-scenes")
+  async presetScenes(@CurrentUser() actor: PublicUser) {
+    return await this.tasks.listPresetScenes(actor);
+  }
+
   @Get(":id")
   async get(@CurrentUser() actor: PublicUser, @Param("id") id: string) {
     return { task: await this.tasks.get(actor, id) };

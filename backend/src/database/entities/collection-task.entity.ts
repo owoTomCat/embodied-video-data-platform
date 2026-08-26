@@ -13,6 +13,7 @@ import { UserEntity } from "./user.entity.js";
 
 export type CollectionTaskStatus = "draft" | "published" | "paused" | "closed";
 export type TaskNormalizationStatus = "pending" | "ready" | "failed";
+export type CollectionTaskType = "generic" | "preset" | "custom";
 
 export type NormalizedRequirementItem = {
   type: "hard" | "soft";
@@ -49,6 +50,13 @@ export class CollectionTaskEntity {
   /** 关联标签字典中的场景标签 id；全新场景在发布时自动创建并回填 */
   @Column({ name: "scene_label_id", type: "varchar", length: 64, nullable: true })
   sceneLabelId: string | null = null;
+
+  /**
+   * 任务类型：generic = 通用任务（不绑定场景）；preset = 预设场景任务；
+   * custom = 自定义场景任务。通用任务在任务大厅与创建页中作为最显眼的入口。
+   */
+  @Column({ name: "task_type", type: "varchar", length: 24, default: "custom" })
+  taskType: CollectionTaskType = "custom";
 
   /** 管理员自由填写的要求原文 */
   @Column({ name: "raw_requirements", type: "text" })

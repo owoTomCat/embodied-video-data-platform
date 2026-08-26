@@ -61,6 +61,23 @@ import { SubmissionsPolicy } from "./submissions.policy.js";
 
 const MAX_SYNCHRONOUS_CSV_ROWS = 50_000;
 
+/** 任务维度统计（按任务汇总提交/质检/积分，taskId 为 null 表示未关联任务） */
+export type SubmissionTaskStat = {
+  taskId: string | null;
+  title: string;
+  sceneName: string;
+  taskType: "generic" | "preset" | "custom" | "none";
+  total: number;
+  reviewed: number;
+  passed: number;
+  failed: number;
+  pending: number;
+  passRate: number | null;
+  avgScore: number | null;
+  effectiveMinutes: number;
+  lockedPoints: number;
+};
+
 export const UPLOAD_PART_SIZE_BYTES = 16 * 1024 * 1024;
 export const UPLOAD_POLICY_VERSION = "DATA-AUTH-2026-08";
 const UPLOAD_URL_TTL_SECONDS = 15 * 60;
@@ -2379,6 +2396,123 @@ export class SubmissionsService {
     return [...sources.values()].sort((left, right) =>
       left.title.localeCompare(right.title, "zh-CN"),
     );
+  }
+
+  /**
+   * 任务维度统计（角色范围与提交列表一致）：
+   * 每个任务（含未关联任务）的提交数 / 已质检 / 通过 / 未通过 / 均分 / 有效时长 / 锁定积分。
+   * 用于三个角色数据页的「按任务汇总」展示，与 taskId 筛选联动。
+   */
+  async taskStats(
+    actor: PublicUser,
+  ): Promise<{ stats: SubmissionTaskStat[] }> {
+    const query = this.submissions
+      .createQueryBuilder("submission")
+      .leftJoin(
+        CollectionTaskEntity,
+        "task",
+        "task.id = submission.taskId",
+      )
+      .leftJoin(
+        VideoQualityResultEntity,
+        "quality",
+        "quality.submissionId = submission.id",
+      )
+      .leftJoin(
+        PointCycleItemEntity,
+        "cycle",
+        "cycle.submissionId = submission.id",
+      )
+      .select("submission.taskId", "task_id")
+      .addSelect("task.title", "task_title")
+      .addSelect("task.scene_name", "scene_name")
+      .addSelect("task.task_type", "task_type")
+      .addSelect("COUNT(DISTINCT submission.id)", "total")
+      .addSelect(
+        `COUNT(quality.submissionId) FILTER (
+           WHERE quality.status IN ('scored', 'review_pending', 'hard_reject')
+         )`,
+        "reviewed",
+      )
+      .addSelect(
+        `COUNT(quality.submissionId) FILTER (WHERE quality.passed = true)`,
+        "passed",
+      )
+      .addSelect(
+        `COUNT(quality.submissionId) FILTER (
+           WHERE quality.passed = false OR quality.status = 'hard_reject'
+         )`,
+        "failed",
+      )
+      .addSelect(
+        `AVG(COALESCE(quality.manual_final_score, quality.final_score)::float8)`,
+        "avg_score",
+      )
+      .addSelect(
+        `COALESCE(SUM(
+           COALESCE(
+             quality.manual_billable_duration_ms,
+             quality.billable_duration_ms,
+             0
+           )
+         ), 0)`,
+        "effective_ms",
+      )
+      .addSelect(
+        `COALESCE(SUM(cycle.points::float8), 0)`,
+        "locked_points",
+      )
+      .groupBy("submission.taskId")
+      .addGroupBy("task.title")
+      .addGroupBy("task.scene_name")
+      .addGroupBy("task.task_type");
+    this.applyListScope(query, actor);
+    const rows = await query
+      .orderBy("total", "DESC")
+      .addOrderBy("task_title", "ASC")
+      .getRawMany<{
+        task_id: string | null;
+        task_title: string | null;
+        scene_name: string | null;
+        task_type: string | null;
+        total: string;
+        reviewed: string;
+        passed: string;
+        failed: string;
+        avg_score: string | null;
+        effective_ms: string;
+        locked_points: string;
+      }>();
+    const stats: SubmissionTaskStat[] = rows.map((row) => {
+      const total = Number(row.total) || 0;
+      const reviewed = Number(row.reviewed) || 0;
+      const passed = Number(row.passed) || 0;
+      const failed = Number(row.failed) || 0;
+      const avgScoreRaw = Number(row.avg_score);
+      return {
+        taskId: row.task_id ?? null,
+        title: row.task_id
+          ? row.task_title?.trim() || "未命名任务"
+          : "未关联任务",
+        sceneName: row.task_id ? (row.scene_name?.trim() ?? "") : "",
+        taskType: row.task_type as SubmissionTaskStat["taskType"],
+        total,
+        reviewed,
+        passed,
+        failed,
+        pending: Math.max(0, total - reviewed),
+        passRate:
+          reviewed > 0 ? Math.round((passed / reviewed) * 1_000) / 10 : null,
+        avgScore: Number.isFinite(avgScoreRaw)
+          ? Math.round(avgScoreRaw * 10) / 10
+          : null,
+        effectiveMinutes:
+          Math.round((Number(row.effective_ms) || 0) / 60_000 * 10) / 10,
+        lockedPoints:
+          Math.round((Number(row.locked_points) || 0) * 100) / 100,
+      };
+    });
+    return { stats };
   }
 
   private async findDetailedByIds(
