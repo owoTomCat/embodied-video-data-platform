@@ -169,11 +169,17 @@ export class AccountsService {
           role: mutation.role,
           status: target.status,
         });
+        // 只有角色或团队归属发生变化时，才需要校验「团队唯一团长」；
+        // 仅修改团长显示名/手机号等字段时跳过，避免误报「已有团长」。
+        const identityChanged =
+          target.role !== mutation.role ||
+          target.teamId !== (mutation.teamId ?? null);
         await this.assertRoleTeam(
           manager.getRepository(TeamEntity),
           users,
           mutation,
           target.id,
+          identityChanged,
         );
         const normalized = normalizeUsername(mutation.username);
         if (
@@ -187,9 +193,6 @@ export class AccountsService {
           throw new IdentityFailure("CONFLICT", "用户名已存在", 409);
         }
         const before = auditAccount(target);
-        const identityChanged =
-          target.role !== mutation.role ||
-          target.teamId !== (mutation.teamId ?? null);
         Object.assign(target, mutation, {
           teamId: mutation.teamId ?? null,
           usernameNormalized: normalized,
@@ -410,6 +413,7 @@ export class AccountsService {
       teamId?: string;
     },
     excludedAccountId?: string,
+    checkLeaderDuplicate = true,
   ): Promise<void> {
     if (input.role === "admin") {
       if (input.teamId) {
@@ -436,7 +440,7 @@ export class AccountsService {
         400,
       );
     }
-    if (input.role === "leader") {
+    if (input.role === "leader" && checkLeaderDuplicate) {
       await users.manager.query(
         "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
         [`team-leader:${input.teamId}`],

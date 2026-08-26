@@ -66,6 +66,11 @@ export function UserFormModal({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (submittingRef.current) return;
+    const trimmedPhone = phone.trim();
+    if (trimmedPhone && !/^1[3-9]\d{9}$/.test(trimmedPhone)) {
+      setError("手机号格式不正确");
+      return;
+    }
     submittingRef.current = true;
     setSubmitting(true);
     setError("");
@@ -75,7 +80,7 @@ export function UserFormModal({
       username,
       role,
       teamId: role === "admin" ? undefined : teamId,
-      phone: phone.trim() || undefined,
+      phone: trimmedPhone || undefined,
     };
 
     try {

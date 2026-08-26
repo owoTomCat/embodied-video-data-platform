@@ -46,11 +46,16 @@ export function AccountProfilePage() {
   async function savePhone(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (phoneSavingRef.current) return;
+    const trimmedPhone = phone.trim();
+    if (trimmedPhone && !/^1[3-9]\d{9}$/.test(trimmedPhone)) {
+      setPhoneError("手机号格式不正确");
+      return;
+    }
     phoneSavingRef.current = true;
     setPhoneSaving(true);
     setPhoneError("");
     try {
-      const updated = await updateOwnAccount({ phone: phone.trim() || undefined });
+      const updated = await updateOwnAccount({ phone: trimmedPhone || undefined });
       upsertAccount(updated);
       setPhone(updated.phone ?? "");
       notify("success", "手机号已保存");
