@@ -18,6 +18,8 @@ backend/coverage/
 .superpowers/
 Data/
 outputs/
+docs/*
+!docs/quality/
 scripts/__pycache__/
 *.pyc
 .~*
