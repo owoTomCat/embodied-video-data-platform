@@ -132,6 +132,7 @@ describe("account and team API", () => {
         password: TEST_PASSWORD,
         role: "leader",
         teamId: "TEAM-02",
+        phone: "13900001111",
       })
       .expect(201);
 
@@ -140,6 +141,7 @@ describe("account and team API", () => {
       username: "leader-two",
       role: "leader",
       teamId: "TEAM-02",
+      phone: "13900001111",
       status: "active",
     });
     const log = await dataSource.getRepository(AuditLogEntity).findOneByOrFail({

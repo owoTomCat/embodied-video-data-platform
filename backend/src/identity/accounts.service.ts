@@ -52,6 +52,7 @@ function auditAccount(user: UserEntity): Record<string, unknown> {
     role: user.role,
     teamId: user.teamId,
     status: user.status,
+    phone: user.phone,
   };
 }
 
@@ -92,6 +93,7 @@ export class AccountsService {
       username: input.username.trim(),
       role: input.role,
       teamId: input.teamId,
+      phone: input.phone?.trim() || null,
     };
     this.policy.assertCanCreate(actor, mutation);
     const passwordHash = await this.passwords.hash(input.password);
@@ -159,6 +161,7 @@ export class AccountsService {
           username: input.username.trim(),
           role: input.role,
           teamId: input.teamId,
+          phone: input.phone?.trim() || null,
         };
         this.policy.assertCanUpdate(actor, target, mutation);
         await this.protectLastAdmin(users, target, {

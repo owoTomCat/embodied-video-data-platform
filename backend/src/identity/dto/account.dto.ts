@@ -34,6 +34,11 @@ export class CreateAccountDto {
   @IsString()
   @MaxLength(64)
   teamId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  phone?: string;
 }
 
 export class UpdateAccountDto {
@@ -54,6 +59,11 @@ export class UpdateAccountDto {
   @IsString()
   @MaxLength(64)
   teamId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  phone?: string;
 }
 
 export class ResetPasswordDto {
