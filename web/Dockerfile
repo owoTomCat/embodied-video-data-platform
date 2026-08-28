@@ -30,6 +30,11 @@ RUN corepack enable && corepack prepare pnpm@11.16.0 --activate
 COPY --from=dependencies /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY package.json pnpm-workspace.yaml ./
+# pnpm 在运行 script 前会校验依赖状态：当 package.json 的 mtime 晚于
+# node_modules/.modules.yaml 时判定依赖过期并自动 install。node_modules 层
+# 可能命中构建缓存（mtime 停留在旧构建时间），导致生产容器以只读 /app
+# 启动时误触发 install 而 EACCES 崩溃。将对齐到 .modules.yaml 的 mtime。
+RUN touch -r node_modules/.modules.yaml package.json pnpm-workspace.yaml
 USER node
 EXPOSE 3000
 CMD ["pnpm", "start", "--hostname", "0.0.0.0", "--port", "3000"]

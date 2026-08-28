@@ -1155,6 +1155,19 @@ export class SubmissionsService {
           where: { submissionId: id },
           lock: { mode: "pessimistic_write" },
         });
+      // 已进入锁定/结算周期的视频不允许再修改质检结果（锁定即最终结算依据）
+      if (lockedItem) {
+        const cycle = await manager
+          .getRepository(PointCycleEntity)
+          .findOneBy({ id: lockedItem.cycleId });
+        if (cycle && (cycle.status === "locked" || cycle.status === "settled")) {
+          throw new SubmissionFailure(
+            "SUBMISSION_IN_LOCKED_CYCLE",
+            "该视频已进入锁定/结算周期，质检结果不允许再修改；如需纠错请在下次锁定前处理",
+            409,
+          );
+        }
+      }
 
       const quality = await manager
         .getRepository(VideoQualityResultEntity)

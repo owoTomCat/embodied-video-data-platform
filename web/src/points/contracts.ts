@@ -32,7 +32,7 @@ export type BackendPointCycleItem = {
 export type BackendPointCycle = {
   id: string;
   businessDate: string;
-  status: "locked";
+  status: "locked" | "settled";
   submissionCount: number;
   effectiveDurationMs: number;
   effectiveMinutes: number;
@@ -41,6 +41,9 @@ export type BackendPointCycle = {
   pointRuleRevision?: number | null;
   createdByAccountId: string;
   createdByName: string;
+  /** 自动结算时间（锁定 + 3 天），到达后由定时任务结算入钱包 */
+  settleDueAt: number | null;
+  settledAt: number | null;
   createdAt: number;
   items: BackendPointCycleItem[];
 };

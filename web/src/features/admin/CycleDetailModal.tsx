@@ -1,120 +1,91 @@
 "use client";
 
-import { useRef, useState, type RefObject } from "react";
+import { type RefObject } from "react";
 
 import { Modal } from "../../components/Modal";
 import { StatusBadge } from "../../components/StatusBadge";
-import type {
-  BackendPointCycle,
-  BackendPointCycleItem,
-} from "../../points/contracts";
-import { CycleItemAdjustModal } from "./CycleItemAdjustModal";
+import type { BackendPointCycle } from "../../points/contracts";
 
 export function CycleDetailModal({
   open,
   cycle,
-  onAdjusted,
   onClose,
   returnFocusRef,
 }: {
   open: boolean;
   cycle: BackendPointCycle;
-  onAdjusted(cycle: BackendPointCycle): void;
   onClose(): void;
   returnFocusRef: RefObject<HTMLButtonElement | null>;
 }) {
-  const [adjustItem, setAdjustItem] = useState<BackendPointCycleItem>();
-  const adjustTriggerRef = useRef<HTMLButtonElement>(null);
-
   return (
-    <>
-      <Modal
-        open={open}
-        title={`周期明细 · ${cycle.businessDate}`}
-        className="cycle-detail-modal"
-        onClose={onClose}
-        returnFocusRef={returnFocusRef}
-      >
-        <div className="modal-intro">
-          <p>
-            共 {cycle.submissionCount} 条视频 · 有效 {cycle.effectiveMinutes} 分钟 · 合计{" "}
-            <strong>{cycle.totalPoints.toFixed(2)} 分</strong>
-          </p>
-          <p className="form-help">可对单个视频条目人工调整最终评分，积分按当前规则自动重算并全程留痕。</p>
-        </div>
-        <div className="table-scroll">
-          <table className="data-table">
-            <thead>
-              <tr><th>视频</th><th>任务</th><th>数采</th><th>团队</th><th>评分</th><th>比例</th><th>有效时长</th><th>无效时长</th><th>积分</th><th>状态</th><th /></tr>
-            </thead>
-            <tbody>
-              {(cycle.items ?? []).map((item) => (
-                <tr key={item.id}>
-                  <td>
-                    <div className="cycle-video-cell">
-                      {item.thumbnail ? (
-                        <img src={item.thumbnail.url} alt={`${item.fileName} 缩略图`} loading="lazy" />
-                      ) : (
-                        <span className="cycle-video-placeholder" aria-hidden="true">视频</span>
-                      )}
-                      <span className="stack-cell">
-                        <strong>{item.fileName}</strong>
-                        <small>{item.submissionId}</small>
-                      </span>
-                    </div>
-                  </td>
-                  <td>
-                    {item.taskName ? (
-                      <span className="stack-cell">
-                        <strong>{item.taskName}</strong>
-                        <small>{item.taskSceneName ?? ""}</small>
-                      </span>
+    <Modal
+      open={open}
+      title={`周期明细 · ${cycle.businessDate}`}
+      className="cycle-detail-modal"
+      onClose={onClose}
+      returnFocusRef={returnFocusRef}
+    >
+      <div className="modal-intro">
+        <p>
+          共 {cycle.submissionCount} 条视频 · 有效 {cycle.effectiveMinutes} 分钟 · 合计{" "}
+          <strong>{cycle.totalPoints.toFixed(2)} 元</strong>
+        </p>
+        <p className="form-help">
+          {cycle.status === "locked"
+            ? `锁定中：预计 ${new Intl.DateTimeFormat("zh-CN", {
+                timeZone: "Asia/Shanghai",
+                month: "2-digit",
+                day: "2-digit",
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: false,
+              }).format(cycle.settleDueAt ?? 0)} 自动结算入钱包。锁定后条目不可编辑。`
+            : "已结算：金额已转入各数采人员钱包的「可提现」。"}
+        </p>
+      </div>
+      <div className="table-scroll">
+        <table className="data-table">
+          <thead>
+            <tr><th>视频</th><th>任务</th><th>数采</th><th>团队</th><th>评分</th><th>比例</th><th>有效时长</th><th>无效时长</th><th>金额</th></tr>
+          </thead>
+          <tbody>
+            {(cycle.items ?? []).map((item) => (
+              <tr key={item.id}>
+                <td>
+                  <div className="cycle-video-cell">
+                    {item.thumbnail ? (
+                      <img src={item.thumbnail.url} alt={`${item.fileName} 缩略图`} loading="lazy" />
                     ) : (
-                      <span className="muted">—</span>
+                      <span className="cycle-video-placeholder" aria-hidden="true">视频</span>
                     )}
-                  </td>
-                  <td>{item.ownerName}</td>
-                  <td>{item.teamName}</td>
-                  <td>{item.finalScore.toFixed(1)}</td>
-                  <td>{item.settlementRatio.toFixed(2)}</td>
-                  <td>{item.effectiveMinutes} 分钟</td>
-                  <td>{Math.round(item.invalidDurationMs / 1_000)} 秒</td>
-                  <td><strong>{item.points.toFixed(2)}</strong></td>
-                  <td>
-                    {item.adjusted ? (
-                      <StatusBadge label="已调整" tone="warning" />
-                    ) : (
-                      <StatusBadge label="原值" tone="neutral" />
-                    )}
-                  </td>
-                  <td>
-                    <button
-                      ref={adjustItem?.id === item.id ? adjustTriggerRef : undefined}
-                      className="table-action"
-                      onClick={() => setAdjustItem(item)}
-                    >
-                      调整
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Modal>
-      {adjustItem && (
-        <CycleItemAdjustModal
-          open
-          cycleId={cycle.id}
-          item={adjustItem}
-          onAdjusted={(nextCycle) => {
-            onAdjusted(nextCycle);
-            setAdjustItem(undefined);
-          }}
-          onClose={() => setAdjustItem(undefined)}
-          returnFocusRef={adjustTriggerRef}
-        />
-      )}
-    </>
+                    <span className="stack-cell">
+                      <strong>{item.fileName}</strong>
+                      <small>{item.submissionId}</small>
+                    </span>
+                  </div>
+                </td>
+                <td>
+                  {item.taskName ? (
+                    <span className="stack-cell">
+                      <strong>{item.taskName}</strong>
+                      <small>{item.taskSceneName ?? ""}</small>
+                    </span>
+                  ) : (
+                    <span className="muted">—</span>
+                  )}
+                </td>
+                <td>{item.ownerName}</td>
+                <td>{item.teamName}</td>
+                <td>{item.finalScore.toFixed(1)}</td>
+                <td>{item.settlementRatio.toFixed(2)}</td>
+                <td>{item.effectiveMinutes} 分钟</td>
+                <td>{Math.round(item.invalidDurationMs / 1_000)} 秒</td>
+                <td><strong>{item.points.toFixed(2)} 元</strong></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Modal>
   );
 }

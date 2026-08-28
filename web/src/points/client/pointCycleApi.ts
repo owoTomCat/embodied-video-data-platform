@@ -87,6 +87,15 @@ export function pointCycleExportUrl(id: string): string {
   return apiUrl(`/point-cycles/${encodeURIComponent(id)}/export.csv`);
 }
 
+/** 手动结算锁定中的周期：金额转入各数采人员钱包「可提现」 */
+export async function settlePointCycle(id: string): Promise<BackendPointCycle> {
+  const result = await requestJson<{ cycle: BackendPointCycle }>(
+    `/point-cycles/${encodeURIComponent(id)}/settle`,
+    { method: "POST" },
+  );
+  return result.cycle;
+}
+
 export async function getPointRule(): Promise<BackendPointRule> {
   const result = await requestJson<{ rule: BackendPointRule }>(
     "/point-cycles/rule",

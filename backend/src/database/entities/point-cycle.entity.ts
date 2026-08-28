@@ -15,7 +15,8 @@ import { PointCycleItemEntity } from "./point-cycle-item.entity.js";
 import { PointRuleVersionEntity } from "./point-rule-version.entity.js";
 import type { PointRuleSnapshot } from "../../rules/rule-calculator.js";
 
-export type PointCycleStatus = "locked";
+/** 周期状态：locked = 锁定中/结算中（锁定后 3 天自动结算）；settled = 已结算入钱包 */
+export type PointCycleStatus = "locked" | "settled";
 
 @Entity({ name: "point_cycles" })
 @Index("idx_point_cycles_business_date", ["businessDate"])
@@ -66,6 +67,13 @@ export class PointCycleEntity {
 
   @Column({ name: "created_by_name", type: "varchar", length: 120 })
   createdByName!: string;
+
+  /** 自动结算时间（锁定时刻 + 3 天）；到达后由定时任务结算入钱包 */
+  @Column({ name: "settle_due_at", type: "timestamptz", nullable: true })
+  settleDueAt: Date | null = null;
+
+  @Column({ name: "settled_at", type: "timestamptz", nullable: true })
+  settledAt: Date | null = null;
 
   @CreateDateColumn({ name: "created_at", type: "timestamptz" })
   createdAt!: Date;

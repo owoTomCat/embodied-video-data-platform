@@ -92,7 +92,7 @@ export function PointRuleModal({
     }
     const parsedPoints = Number(defaultPoints);
     if (!Number.isFinite(parsedPoints) || parsedPoints < 0) {
-      setError("请输入有效的每分钟积分");
+      setError("请输入有效的每分钟单价");
       return;
     }
     for (const band of bands) {
@@ -134,7 +134,7 @@ export function PointRuleModal({
         description,
       });
       onCreated(rule);
-      notify("success", "积分规则已发布");
+      notify("success", "单价规则已发布");
       close();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "保存失败，请重试");
@@ -146,7 +146,7 @@ export function PointRuleModal({
   return (
     <Modal
       open={open}
-      title="发布积分规则"
+      title="发布单价规则"
       onClose={close}
       returnFocusRef={returnFocusRef}
       initialFocusRef={firstInputRef}
@@ -163,7 +163,7 @@ export function PointRuleModal({
           />
         </label>
         <label>
-          默认每分钟积分
+          默认每分钟单价
           <input
             type="number"
             min="0"

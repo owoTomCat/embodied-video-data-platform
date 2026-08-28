@@ -101,7 +101,7 @@ function AuthenticatedPlatformContent({
     else if (safePath === "/collector/submissions") page = <SubmissionsPage navigate={navigate} />;
     else if (safePath.startsWith("/collector/submissions/")) page = <SubmissionDetail id={safePath.split("/").at(-1) ?? ""} navigate={navigate} />;
     else if (safePath === "/collector/quality") page = <SubmissionsPage qualityOnly navigate={navigate} />;
-    else if (safePath === "/collector/earnings") page = <EarningsPage />;
+    else if (safePath === "/collector/wallet" || safePath === "/collector/earnings") page = <EarningsPage />;
     else if (safePath === "/collector/guide") page = <GuidePage />;
   } else if (currentAccount.role === "leader") {
     if (safePath === "/team/members") page = <MembersPage />;

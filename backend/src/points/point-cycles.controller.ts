@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Header,
+  HttpCode,
   Param,
   Post,
   Put,
@@ -87,6 +88,18 @@ export class PointCyclesController {
   ) {
     return {
       cycle: await this.cycles.adjustItem(actor, id, itemId, input),
+    };
+  }
+
+  @Post(":id/settle")
+  @HttpCode(200)
+  @UseGuards(AllowedOriginGuard, SensitiveActionRateLimitGuard)
+  async settle(
+    @CurrentUser() actor: PublicUser,
+    @Param("id") id: string,
+  ) {
+    return {
+      cycle: await this.cycles.settleCycle(id, new Date(), actor),
     };
   }
 

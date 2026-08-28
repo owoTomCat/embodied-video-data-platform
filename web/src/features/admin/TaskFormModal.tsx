@@ -404,7 +404,7 @@ export function TaskFormModal({
             <div><strong>计分方式</strong><small>不填写时沿用平台全局规则</small></div>
           </div>
           <label className="form-label task-price-field">
-            <span>每分钟积分单价</span>
+            <span>每分钟单价</span>
             <div className="input-with-suffix">
               <input
                 type="number"
@@ -416,7 +416,7 @@ export function TaskFormModal({
                 onChange={(event) => setPrice(event.target.value)}
                 placeholder="例如：15.5"
               />
-              <span>分 / 分钟</span>
+              <span>元 / 分钟</span>
             </div>
           </label>
         </section>

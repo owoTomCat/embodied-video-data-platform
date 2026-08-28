@@ -226,7 +226,7 @@ export function TasksPage() {
       <span className="task-stat-cell">
         <span><em>提交</em><b>{stat.total}</b></span>
         <span><em>通过率</em><b>{stat.passRate === null ? "—" : `${stat.passRate}%`}</b></span>
-        <span><em>锁定积分</em><b>{stat.lockedPoints.toFixed(2)}</b></span>
+        <span><em>锁定金额</em><b>{stat.lockedPoints.toFixed(2)}</b></span>
       </span>
     );
   }
@@ -328,7 +328,7 @@ export function TasksPage() {
                     <td className="nowrap-cell">
                       {task.pricePointsPerMinute !== null ? (
                         <span className="mono">
-                          {task.pricePointsPerMinute} 分/分钟
+                          {task.pricePointsPerMinute} 元/分钟
                         </span>
                       ) : (
                         <span className="muted">全局默认</span>

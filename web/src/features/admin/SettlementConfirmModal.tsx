@@ -55,13 +55,13 @@ export function SettlementConfirmModal({
     setError("");
     try {
       onCreated?.(await createPointCycle());
-      notify("success", "积分周期已生成并锁定");
+      notify("success", "结算周期已生成并锁定");
       close();
     } catch (reason) {
       const message =
         reason instanceof PointCycleApiError || reason instanceof Error
           ? reason.message
-          : "积分周期生成失败";
+          : "结算周期生成失败";
       setError(message);
       setSubmitting(false);
       submittingRef.current = false;
@@ -71,7 +71,7 @@ export function SettlementConfirmModal({
   return (
     <Modal
       open={open}
-      title="确认生成积分周期"
+      title="确认锁定并生成结算周期"
       onClose={close}
       returnFocusRef={returnFocusRef}
       initialFocusRef={cancelRef}
@@ -81,9 +81,9 @@ export function SettlementConfirmModal({
         <div>
           <span><small>符合条件的视频</small><strong>{preview.submissionCount} 条</strong></span>
           <span><small>有效时长</small><strong>{preview.effectiveMinutes} 分钟</strong></span>
-          <span><small>预计总积分</small><strong>{preview.totalPoints.toFixed(2)} 分</strong></span>
+          <span><small>预计总金额</small><strong>{preview.totalPoints.toFixed(2)} 元</strong></span>
         </div>
-        {preview.submissionCount === 0 && <p className="modal-error">当前没有可锁定积分数据</p>}
+        {preview.submissionCount === 0 && <p className="modal-error">当前没有可锁定数据</p>}
         {error && <p className="modal-error" role="alert">{error}</p>}
         <div className="modal-actions">
           <button ref={cancelRef} type="button" className="button button-secondary" onClick={close}>取消</button>

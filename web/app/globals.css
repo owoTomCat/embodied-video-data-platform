@@ -2720,3 +2720,12 @@ button:disabled { cursor: not-allowed; opacity: .56; }
   .people-group-header { grid-template-columns: 1fr auto; }
   .people-group-leader, .people-group-stats { grid-column: 1 / -1; order: 3; }
 }
+
+/* 数采钱包页 */
+.wallet-withdraw-card { padding: 16px; }
+.wallet-withdraw-form { display: flex; align-items: center; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+.wallet-amount-field { flex: 0 0 220px; }
+.wallet-amount-field input { font-size: 16px; font-weight: 700; }
+.wallet-remark-field { flex: 1 1 240px; min-width: 0; }
+.money-in { color: #1f7a4d; }
+.money-out { color: #b94b47; }

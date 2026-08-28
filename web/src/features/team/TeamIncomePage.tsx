@@ -256,25 +256,25 @@ export function TeamIncomePage() {
     <div className="page-stack">
       <div className="page-heading">
         <div>
-          <p className="page-kicker">只读积分视图</p>
-          <h1>团队积分汇总</h1>
+          <p className="page-kicker">只读金额视图</p>
+          <h1>团队金额汇总</h1>
           <span>
             按当前规则 {summary.pointsPerMinute.toFixed(2)}
-            分/分钟、有效时长和最终评分测算，用于线下核对
+            元/分钟、有效时长和最终评分测算，用于线下核对
           </span>
         </div>
         <span className="live-pill">
           <i />
           {mode === "live"
-            ? "已连接后端积分"
+            ? "已连接后端金额"
             : mode === "loading"
-              ? "正在读取积分"
+              ? "正在读取金额"
               : "数据暂不可用"}
         </span>
       </div>
       <div className="metric-grid">
         <MetricCard
-          label="当前积分"
+          label="当前金额"
           value={formatPoints(summary.lockedPoints + summary.pendingPoints)}
           detail={`${summary.reviewedCount} 条已有终态质检`}
           icon={CircleDollarSign}
@@ -304,7 +304,7 @@ export function TeamIncomePage() {
       <section className="content-card table-card">
         <div className="card-heading">
           <div>
-            <h2>成员积分汇总</h2>
+            <h2>成员金额汇总</h2>
             <p>根据真实提交、终态质检和锁定周期计算</p>
           </div>
         </div>
@@ -314,8 +314,8 @@ export function TeamIncomePage() {
               <tr>
                 <th>成员</th>
                 <th>质检完成</th>
-                <th>积分有效时长</th>
-                <th>累计积分</th>
+                <th>有效时长</th>
+                <th>累计金额</th>
                 <th>平均分</th>
                 <th>通过率</th>
               </tr>

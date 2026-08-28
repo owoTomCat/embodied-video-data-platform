@@ -132,8 +132,8 @@ describe("platform routing", () => {
 
   it("shows full operations navigation to an administrator", () => {
     renderPlatform("/admin", "admin");
-    expect(screen.getByRole("link", { name: /^AI 任务/ })).toBeVisible();
-    expect(screen.getByRole("link", { name: /^积分规则/ })).toBeVisible();
+    expect(screen.getByRole("link", { name: /^系统队列/ })).toBeVisible();
+    expect(screen.getByRole("link", { name: /^结算与钱包/ })).toBeVisible();
     expect(screen.queryByText("提现审核")).not.toBeInTheDocument();
   });
 
@@ -146,7 +146,7 @@ describe("platform routing", () => {
       window.dispatchEvent(new PopStateEvent("popstate"));
     });
 
-    expect(screen.getByRole("heading", { name: "积分规则" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "结算与钱包" })).toBeVisible();
   });
 
   it.each(["admin", "leader", "collector"] as const)(

@@ -118,7 +118,7 @@ describe("team member interactions", () => {
   it("shows real-data team points instead of simulated balances", async () => {
     renderLeader("/team/income");
 
-    expect(screen.getByRole("heading", { name: "团队积分汇总" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "团队金额汇总" })).toBeVisible();
     expect(await screen.findByText("数据暂不可用")).toBeVisible();
     expect(screen.getByText(/用于线下核对/)).toBeVisible();
     expect(screen.queryByText("成员可用余额")).not.toBeInTheDocument();

@@ -60,7 +60,7 @@ export const navigationByRole: Record<Role, NavigationGroup[]> = {
     {
       label: "结算",
       items: [
-        { label: "积分明细", path: "/collector/earnings", icon: CircleDollarSign },
+        { label: "钱包", path: "/collector/wallet", icon: CircleDollarSign },
       ],
     },
     {
@@ -121,7 +121,6 @@ export const navigationByRole: Record<Role, NavigationGroup[]> = {
     {
       label: "质检",
       items: [
-        { label: "AI 任务", path: "/admin/ai", icon: Cpu },
         { label: "质量复核", path: "/admin/review", icon: ShieldCheck },
       ],
     },
@@ -131,13 +130,14 @@ export const navigationByRole: Record<Role, NavigationGroup[]> = {
         { label: "用户与团队", path: "/admin/people", icon: Users },
         { label: "标签体系", path: "/admin/labels", icon: Tags },
         { label: "规则与提示词", path: "/admin/rules", icon: ScrollText },
-        { label: "积分规则", path: "/admin/settlements", icon: Receipt },
+        { label: "结算与钱包", path: "/admin/settlements", icon: Receipt },
         { label: "公开数据配置", path: "/admin/public", icon: Globe },
       ],
     },
     {
       label: "审计",
       items: [
+        { label: "系统队列", path: "/admin/ai", icon: Cpu },
         { label: "操作日志", path: "/admin/audit", icon: ScrollText },
       ],
     },

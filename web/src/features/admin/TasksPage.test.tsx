@@ -148,7 +148,7 @@ describe("TasksPage", () => {
     expect(screen.getByText("客厅数据采集")).toBeInTheDocument();
     expect(screen.getAllByText("草稿").length).toBeGreaterThan(0);
     expect(screen.getAllByText("已发布").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("15.5 分/分钟").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("15.5 元/分钟").length).toBeGreaterThan(0);
     expect(screen.getByText("共 2 个任务")).toBeInTheDocument();
   });
 

@@ -199,7 +199,7 @@ export function TaskHallPage({ navigate }: { navigate(path: string): void }) {
               <div className="task-card-foot">
                 <div className="task-price">
                   <CircleDollarSign size={16} />
-                  <span><strong>{task.pricePointsPerMinute !== null ? `${task.pricePointsPerMinute} 分/分钟` : "按全局规则计分"}</strong><small>通过质检后计入积分</small></span>
+                  <span><strong>{task.pricePointsPerMinute !== null ? `${task.pricePointsPerMinute} 元/分钟` : "按全局规则计分"}</strong><small>通过质检后计入金额</small></span>
                 </div>
                 <button
                   type="button"

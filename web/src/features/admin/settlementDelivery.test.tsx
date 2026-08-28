@@ -23,7 +23,12 @@ import {
   listPointCycles,
   previewPointCycle,
 } from "../../points/client/pointCycleApi";
+import { listWallets } from "../../wallet/client/walletApi";
 import { accountForRole, demoAccounts } from "../../test/accountFixtures";
+
+vi.mock("../../wallet/client/walletApi", () => ({
+  listWallets: vi.fn(),
+}));
 
 vi.mock("../../points/client/pointCycleApi", async (importOriginal) => {
   const actual =
@@ -61,6 +66,7 @@ const createPointCycleMock = vi.mocked(createPointCycle);
 const getPointRuleMock = vi.mocked(getPointRule);
 const createPointRuleMock = vi.mocked(createPointRule);
 const adjustPointCycleItemMock = vi.mocked(adjustPointCycleItem);
+const listWalletsMock = vi.mocked(listWallets);
 const listDeliveryPackagesMock = vi.mocked(listDeliveryPackages);
 const previewDeliveryPackageMock = vi.mocked(previewDeliveryPackage);
 const createDeliveryPackageMock = vi.mocked(createDeliveryPackage);
@@ -85,6 +91,7 @@ function renderAdmin(path: string) {
 describe("settlement actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    listWalletsMock.mockResolvedValue([]);
     listPointCyclesMock.mockResolvedValue([
       {
         id: "PC-20260812",
@@ -97,6 +104,8 @@ describe("settlement actions", () => {
         createdByAccountId: "U-ADMIN-01",
         createdByName: "管理员",
         createdAt: 1_786_118_400_000,
+        settleDueAt: null,
+        settledAt: null,
         items: [],
       },
     ]);
@@ -119,6 +128,8 @@ describe("settlement actions", () => {
       createdByName: "管理员",
       createdAt: 1_786_204_800_000,
       items: [],
+      settleDueAt: null,
+      settledAt: null,
     });
     getPointRuleMock.mockResolvedValue({
       id: "PRV-1",
@@ -131,7 +142,7 @@ describe("settlement actions", () => {
         { minScore: 60, maxScore: 69, ratio: 0.7, label: "基础" },
         { minScore: 0, maxScore: 59, ratio: 0, label: "不计分" },
       ],
-      description: "默认积分规则",
+      description: "默认单价规则",
       active: true,
       createdByAccountId: "U-ADMIN-01",
       createdByName: "系统初始化",
@@ -157,6 +168,7 @@ describe("settlement actions", () => {
         createdByName: "管理员",
         createdAt: 1_786_118_400_000,
         items: [],
+        
       },
     ]);
     previewDeliveryPackageMock.mockResolvedValue({
@@ -269,23 +281,23 @@ describe("settlement actions", () => {
     renderAdmin("/admin/settlements");
 
     expect(
-      await screen.findByText("积分周期数据已同步"),
+      await screen.findByText("结算周期数据已同步"),
     ).toBeVisible();
     await user.click(
-      await screen.findByRole("button", { name: "生成积分周期" }),
+      await screen.findByRole("button", { name: "手动锁定" }),
     );
-    const dialog = screen.getByRole("dialog", { name: "确认生成积分周期" });
+    const dialog = screen.getByRole("dialog", { name: "确认锁定并生成结算周期" });
     expect(within(dialog).getByText("4 条")).toBeVisible();
     expect(within(dialog).getByText("11.27 分钟")).toBeVisible();
-    expect(within(dialog).getByText("116.12 分")).toBeVisible();
+    expect(within(dialog).getByText("116.12 元")).toBeVisible();
     await user.click(within(dialog).getByRole("button", { name: "确认生成" }));
 
-    expect(screen.getByText("积分周期已生成并锁定")).toBeVisible();
+    expect(screen.getByText("结算周期已生成并锁定")).toBeVisible();
     expect(createPointCycleMock).toHaveBeenCalledTimes(1);
     const firstBatch = screen.getAllByRole("row")[1];
     expect(within(firstBatch).getByText("4 条")).toBeVisible();
-    expect(within(firstBatch).getByText("116.12 分")).toBeVisible();
-    expect(within(firstBatch).getByText("已锁定")).toBeVisible();
+    expect(within(firstBatch).getByText("116.12 元")).toBeVisible();
+    expect(within(firstBatch).getByText("锁定中")).toBeVisible();
     expect(
       within(firstBatch).getByRole("link", { name: /导出/ }),
     ).toHaveAttribute("href", expect.stringContaining("export.csv"));
@@ -302,9 +314,9 @@ describe("settlement actions", () => {
     });
     renderAdmin("/admin/settlements");
 
-    await user.click(screen.getByRole("button", { name: "生成积分周期" }));
+    await user.click(screen.getByRole("button", { name: "手动锁定" }));
 
-    expect(screen.getByText("当前没有可锁定积分数据")).toBeVisible();
+    expect(screen.getByText("当前没有可锁定数据")).toBeVisible();
     expect(screen.getByRole("button", { name: "确认生成" })).toBeDisabled();
   });
 
@@ -313,12 +325,12 @@ describe("settlement actions", () => {
     renderAdmin("/admin/settlements");
 
     expect(await screen.findByText("POINTS-2026-08 · V1")).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "发布积分规则" }));
+    await user.click(screen.getByRole("button", { name: "发布单价规则" }));
     await user.type(screen.getByLabelText("版本名称"), "POINTS-2026-09");
-    await user.clear(screen.getByLabelText("默认每分钟积分"));
-    await user.type(screen.getByLabelText("默认每分钟积分"), "15");
+    await user.clear(screen.getByLabelText("默认每分钟单价"));
+    await user.type(screen.getByLabelText("默认每分钟单价"), "15");
     await user.clear(screen.getByLabelText("规则说明"));
-    await user.type(screen.getByLabelText("规则说明"), "九月积分规则");
+    await user.type(screen.getByLabelText("规则说明"), "九月单价规则");
     await user.click(screen.getByRole("button", { name: "发布规则" }));
 
     expect(createPointRuleMock).toHaveBeenCalledWith({
@@ -330,10 +342,10 @@ describe("settlement actions", () => {
         { minScore: 60, maxScore: 69, ratio: 0.7, label: "基础" },
         { minScore: 0, maxScore: 59, ratio: 0, label: "不计分" },
       ],
-      description: "九月积分规则",
+      description: "九月单价规则",
     });
-    expect(await screen.findByText("积分规则已发布")).toBeVisible();
-    expect(screen.getByText("15 分/分钟")).toBeVisible();
+    expect(await screen.findByText("单价规则已发布")).toBeVisible();
+    expect(screen.getByText("15 元/分钟")).toBeVisible();
     expect(screen.getByText("POINTS-2026-09 · V2")).toBeVisible();
   });
 });
@@ -423,7 +435,7 @@ describe("delivery package actions", () => {
     ).toHaveAttribute("href", expect.stringContaining("DAT-20260813-ZIP.zip"));
   });
 
-  it("adjusts a single locked cycle item score and refreshes the cycle", async () => {
+  it("opens a locked cycle detail with amounts in yuan and no adjustment controls", async () => {
     const user = userEvent.setup();
     const cycleWithItems = {
       id: "PC-20260812",
@@ -436,6 +448,8 @@ describe("delivery package actions", () => {
       createdByAccountId: "U-ADMIN-01",
       createdByName: "管理员",
       createdAt: 1_786_118_400_000,
+      settleDueAt: Date.parse("2026-08-15T08:00:00+08:00"),
+      settledAt: null,
       items: [
         {
           id: "PCI-1",
@@ -466,42 +480,20 @@ describe("delivery package actions", () => {
       ],
     };
     listPointCyclesMock.mockResolvedValue([cycleWithItems]);
-    adjustPointCycleItemMock.mockResolvedValue({
-      ...cycleWithItems,
-      totalPoints: 10.2,
-      items: [
-        {
-          ...cycleWithItems.items[0],
-          finalScore: 80,
-          settlementRatio: 0.85,
-          points: 10.2,
-          adjusted: true,
-        },
-      ],
-    });
     renderAdmin("/admin/settlements");
 
     await user.click(await screen.findByRole("button", { name: "查看条目" }));
     expect(screen.getByText("kitchen-task.mp4")).toBeVisible();
     expect(screen.getByText("家庭厨房清洁")).toBeVisible();
+    expect(screen.getAllByText("12.00 元").length).toBeGreaterThan(0);
     expect(
       screen.getByRole("img", { name: "kitchen-task.mp4 缩略图" }),
     ).toHaveAttribute(
       "src",
       "http://minio.local/previews/SUB-1/thumbnail.jpg",
     );
-    await user.click(screen.getByRole("button", { name: "调整" }));
-    await user.clear(screen.getByLabelText("最终评分"));
-    await user.type(screen.getByLabelText("最终评分"), "80");
-    await user.type(screen.getByLabelText("调整原因"), "人工复核修正评分");
-    await user.click(screen.getByRole("button", { name: "确认调整" }));
-
-    expect(adjustPointCycleItemMock).toHaveBeenCalledWith("PC-20260812", "PCI-1", {
-      reason: "人工复核修正评分",
-      nextFinalScore: 80,
-      nextInvalidDurationMs: 0,
-    });
-    expect(await screen.findByText("已调整")).toBeVisible();
-    expect(screen.getByText("10.20")).toBeVisible();
+    // 锁定后的周期不允许再编辑：不再提供「调整」入口
+    expect(screen.queryByRole("button", { name: "调整" })).not.toBeInTheDocument();
+    expect(adjustPointCycleItemMock).not.toHaveBeenCalled();
   });
 });

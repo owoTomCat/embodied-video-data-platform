@@ -56,6 +56,8 @@ function pointCycle(): BackendPointCycle {
     createdByAccountId: "U-ADMIN-01",
     createdByName: "管理员",
     createdAt: Date.parse("2026-08-13T08:00:00+08:00"),
+    settleDueAt: Date.parse("2026-08-16T08:00:00+08:00"),
+    settledAt: null,
     items: [
       {
         id: "PCI-TEAM-01",
@@ -191,7 +193,7 @@ describe("TeamIncomePage", () => {
         { minScore: 60, maxScore: 69, ratio: 0.7, label: "基础" },
         { minScore: 0, maxScore: 59, ratio: 0, label: "不计分" },
       ],
-      description: "测试积分规则",
+      description: "测试单价规则",
       active: true,
       createdByAccountId: "U-ADMIN-01",
       createdByName: "管理员",
@@ -208,7 +210,7 @@ describe("TeamIncomePage", () => {
   it("summarizes backend team points by member", async () => {
     renderPage();
 
-    expect(await screen.findByText("已连接后端积分")).toBeVisible();
+    expect(await screen.findByText("已连接后端金额")).toBeVisible();
     expect(screen.getAllByText("34.00 分").length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText("2 条已有终态质检")).toBeVisible();
     expect(screen.getAllByText("3 分钟").length).toBeGreaterThanOrEqual(2);
@@ -231,7 +233,7 @@ describe("TeamIncomePage", () => {
 
     renderPage();
 
-    expect(await screen.findByText("已连接后端积分")).toBeVisible();
+    expect(await screen.findByText("已连接后端金额")).toBeVisible();
     expect(screen.getByText("50.0%")).toBeVisible();
     expect(screen.getByText("77.5")).toBeVisible();
     expect(screen.getByText("2 条已有终态质检")).toBeVisible();
@@ -246,7 +248,7 @@ describe("TeamIncomePage", () => {
 
     renderPage();
 
-    expect(await screen.findByText("已连接后端积分")).toBeVisible();
+    expect(await screen.findByText("已连接后端金额")).toBeVisible();
     expect(screen.queryByText("34.00 分")).not.toBeInTheDocument();
     expect(screen.getAllByText("10.00 分").length).toBeGreaterThanOrEqual(2);
   });
