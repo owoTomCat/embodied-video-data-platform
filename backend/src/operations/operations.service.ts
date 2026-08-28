@@ -366,8 +366,8 @@ export class OperationsService {
       );
       addNotification(
         `admin-points-${unsettledEligible}`,
-        "有合格数据待锁定积分",
-        `${unsettledEligible} 条通过质检的视频还没有进入积分周期。`,
+        "有合格数据待锁定金额",
+        `${unsettledEligible} 条通过质检的视频还没有进入结算周期。`,
         "info",
         "/admin/settlements",
         unsettledEligible,
@@ -402,8 +402,8 @@ export class OperationsService {
       );
       addNotification(
         `leader-points-${unsettledEligible}`,
-        "团队有待锁定积分数据",
-        `${unsettledEligible} 条通过质检的视频尚未进入积分周期。`,
+        "团队有待锁定金额数据",
+        `${unsettledEligible} 条通过质检的视频尚未进入结算周期。`,
         "info",
         "/team/income",
         unsettledEligible,
@@ -430,8 +430,8 @@ export class OperationsService {
       );
       addNotification(
         `collector-points-${unsettledEligible}`,
-        "有积分等待锁定",
-        `${unsettledEligible} 条通过质检的视频尚未进入积分周期。`,
+        "有金额等待锁定",
+        `${unsettledEligible} 条通过质检的视频尚未进入结算周期。`,
         "info",
         "/collector/earnings",
         unsettledEligible,

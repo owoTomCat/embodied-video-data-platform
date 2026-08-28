@@ -135,15 +135,15 @@ export class PointRulesService {
         order: { createdAt: "ASC" },
       });
       if (!creator) {
-        throw new Error("初始化积分规则前必须存在启用的管理员账号");
+        throw new Error("初始化单价规则前必须存在启用的管理员账号");
       }
       return repository.save({
         id: `PRV-${randomUUID()}`,
         revision: 1,
         version: "POINTS-2026-08",
-        defaultPointsPerMinute: "12.0000",
+        defaultPointsPerMinute: "20.0000",
         coefficientBands: DEFAULT_BANDS,
-        description: "默认积分规则，按有效积分时长和质量系数计算",
+        description: "默认单价规则：按有效时长（元/小时）和质量系数计算",
         active: true,
         createdByAccountId: creator.id,
         createdByName: "系统初始化",
@@ -168,7 +168,7 @@ export class PointRulesService {
       .where("rule.active = true");
     if (lock) query.setLock("pessimistic_read");
     const rule = await query.getOne();
-    if (!rule) throw new Error("当前积分规则不存在");
+    if (!rule) throw new Error("当前单价规则不存在");
     return rule;
   }
 
@@ -190,7 +190,7 @@ export class PointRulesService {
       if (existing) {
         throw new PointCycleFailure(
           "CONFLICT",
-          "积分规则版本名称已存在",
+          "单价规则版本名称已存在",
           409,
         );
       }
@@ -198,7 +198,7 @@ export class PointRulesService {
         where: { active: true },
         lock: { mode: "pessimistic_write" },
       });
-      if (!current) throw new Error("当前积分规则不存在");
+      if (!current) throw new Error("当前单价规则不存在");
       current.active = false;
       await repository.save(current);
       const next = await repository.save({
@@ -215,7 +215,7 @@ export class PointRulesService {
         actor,
         "point_rule_publish",
         { id: next.id, name: next.version },
-        `发布积分规则 ${next.version}，默认 ${Number(next.defaultPointsPerMinute).toFixed(2)} 分/分钟`,
+        `发布单价规则 ${next.version}，默认 ${Number(next.defaultPointsPerMinute).toFixed(2)} 元/小时`,
         {
           version: current.version,
           defaultPointsPerMinute: Number(current.defaultPointsPerMinute),
@@ -233,7 +233,7 @@ export class PointRulesService {
 
   private requireAdmin(actor: PublicUser): void {
     if (actor.status !== "active" || actor.role !== "admin") {
-      throw new PointCycleFailure("FORBIDDEN", "仅管理员可管理积分规则", 403);
+      throw new PointCycleFailure("FORBIDDEN", "仅管理员可管理单价规则", 403);
     }
   }
 }

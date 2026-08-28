@@ -290,7 +290,7 @@ export class PointCyclesService {
     }
     const cycle = await query.getOne();
     if (!cycle || (cycle.items ?? []).length === 0) {
-      throw new PointCycleFailure("NOT_FOUND", "积分周期不存在", 404);
+      throw new PointCycleFailure("NOT_FOUND", "结算周期不存在", 404);
     }
     const latestAdjustments = await loadLatestPointCycleAdjustments(
       this.dataSource.manager,
@@ -374,7 +374,7 @@ export class PointCyclesService {
         lock: { mode: "pessimistic_write" },
       });
       if (!cycle) {
-        throw new PointCycleFailure("NOT_FOUND", "积分周期不存在", 404);
+        throw new PointCycleFailure("NOT_FOUND", "结算周期不存在", 404);
       }
       // 周期一旦锁定即为最终结算依据，锁定/已结算后的条目不允许再编辑
       if (cycle.status === "locked" || cycle.status === "settled") {
@@ -538,7 +538,7 @@ export class PointCyclesService {
       if (candidates.length === 0) {
         throw new PointCycleFailure(
           "NO_ELIGIBLE_SUBMISSIONS",
-          "当前没有可锁定积分数据",
+          "当前没有可锁定数据",
           409,
         );
       }
@@ -585,7 +585,7 @@ export class PointCyclesService {
           qualityReviewedAt: candidate.quality.manualReviewedAt,
         })),
       );
-      // 锁定即入钱包「结算中」：按数采人员汇总金额（1 积分 = 1 元占位，定价规则后续再定）
+      // 锁定即入钱包「结算中」：按数采人员汇总金额（单价 × 有效小时 × 质量系数）
       const amountsByOwner = new Map<string, number>();
       for (const candidate of candidates) {
         amountsByOwner.set(
@@ -607,7 +607,7 @@ export class PointCyclesService {
         actor,
         "point_cycle_lock",
         { id: cycle.id, name: cycle.businessDate },
-        `锁定 ${totals.count} 条合格数据，合计 ${decimal(totals.points, 2)} 分`,
+        `锁定 ${totals.count} 条合格数据，合计 ${decimal(totals.points, 2)} 元`,
         null,
         {
           submissionCount: totals.count,
@@ -674,7 +674,7 @@ export class PointCyclesService {
         lock: { mode: "pessimistic_write" },
       });
       if (!cycle) {
-        throw new PointCycleFailure("NOT_FOUND", "积分周期不存在", 404);
+        throw new PointCycleFailure("NOT_FOUND", "结算周期不存在", 404);
       }
       if (cycle.status === "settled") return { cycle, already: true };
       if (cycle.status !== "locked") {
@@ -976,7 +976,7 @@ export class PointCyclesService {
               0,
           ) + invalidDurationMs;
       const effectiveDurationMs = Math.max(0, durationMs - invalidDurationMs);
-      // 单价优先级：任务快照单价 > 团队单价 > 全局默认积分
+      // 单价优先级：任务快照单价 > 团队单价 > 全局默认（元/小时）
       const taskPrice =
         submission.taskPricePointsPerMinute === null ||
         submission.taskPricePointsPerMinute === undefined

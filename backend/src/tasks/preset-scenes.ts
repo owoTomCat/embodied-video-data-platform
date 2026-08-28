@@ -19,9 +19,70 @@
 
 export type TaskType = "generic" | "preset" | "custom";
 
+/**
+ * 场景大类键。定价按场景大类设置（元/小时），
+ * 同一大类下的细分场景共用同一价格；家庭最低（20 元/小时），上限 40 元/小时。
+ * 后续场景体系将演化为「场景大类 / 场景子类 / 场景描述」三层结构。
+ */
+export type SceneCategoryKey = "family" | "office" | "factory" | "generic";
+
+export type SceneCategory = {
+  key: SceneCategoryKey;
+  name: string;
+  description: string;
+  /** 该大类下的预设场景 key（generic 大类无子场景） */
+  sceneKeys: string[];
+};
+
+/** 场景大类目录（价格不在此处，由 scene_category_pricing 表提供） */
+export const SCENE_CATEGORIES: SceneCategory[] = [
+  {
+    key: "family",
+    name: "家庭",
+    description: "家庭场景（厨房/客厅/卧室等细分场景共用此价）",
+    sceneKeys: ["family-kitchen", "family-living", "family-bedroom"],
+  },
+  {
+    key: "office",
+    name: "办公室",
+    description: "办公室场景（工位整理/文件归档/办公设备操作等）",
+    sceneKeys: ["office"],
+  },
+  {
+    key: "factory",
+    name: "工厂",
+    description: "工厂场景（车间装配/检测/打包/搬运等）",
+    sceneKeys: ["factory"],
+  },
+  {
+    key: "generic",
+    name: "通用",
+    description: "通用任务（不限场景，按最低价）",
+    sceneKeys: [],
+  },
+];
+
+/** 按预设场景 key 解析其所属场景大类 */
+export function sceneCategoryKeyFor(sceneKey: string): SceneCategoryKey | null {
+  for (const category of SCENE_CATEGORIES) {
+    if (category.sceneKeys.includes(sceneKey)) return category.key;
+  }
+  return null;
+}
+
+/** 按场景名称解析所属场景大类（仅预设场景命中） */
+export function sceneCategoryKeyForSceneName(
+  sceneName: string,
+): SceneCategoryKey | null {
+  const scene = findPresetSceneByName(sceneName);
+  return scene ? scene.categoryKey : null;
+}
+
 export type PresetScene = {
   /** 稳定的场景键，仅用于前端选择与匹配，不落库 */
   key: string;
+  /** 所属场景大类（定价按大类设置，细分场景共用） */
+  categoryKey: SceneCategoryKey;
   /** 场景名称（写入 collection_tasks.scene_name，发布时入标签字典） */
   name: string;
   /** 选择卡片上的简短说明 */
@@ -64,6 +125,7 @@ export const GENERIC_TASK_TEMPLATE = {
 export const PRESET_SCENES: PresetScene[] = [
   {
     key: "family-kitchen",
+    categoryKey: "family",
     name: "家庭-厨房",
     tagline: "做饭、备餐、洗碗等厨房具身操作",
     defaultTitle: "家庭厨房备餐做饭数据采集",
@@ -90,6 +152,7 @@ export const PRESET_SCENES: PresetScene[] = [
   },
   {
     key: "family-living",
+    categoryKey: "family",
     name: "家庭-客厅",
     tagline: "整理收纳、清洁擦拭、家电操作等客厅操作",
     defaultTitle: "家庭客厅整理收纳与清洁数据采集",
@@ -115,6 +178,7 @@ export const PRESET_SCENES: PresetScene[] = [
   },
   {
     key: "family-bedroom",
+    categoryKey: "family",
     name: "家庭-卧室",
     tagline: "铺床叠被、衣物整理、卧室清洁等操作",
     defaultTitle: "家庭卧室铺床叠被与衣物整理数据采集",
@@ -140,6 +204,7 @@ export const PRESET_SCENES: PresetScene[] = [
   },
   {
     key: "office",
+    categoryKey: "office",
     name: "办公室",
     tagline: "工位整理、文件归档、办公设备操作等",
     defaultTitle: "办公室工位整理与文件归档数据采集",
@@ -165,6 +230,7 @@ export const PRESET_SCENES: PresetScene[] = [
   },
   {
     key: "factory",
+    categoryKey: "factory",
     name: "工厂",
     tagline: "车间装配、检测、打包、搬运等产线操作",
     defaultTitle: "工厂车间装配检测与打包数据采集",
@@ -210,11 +276,19 @@ export function findPresetSceneByKey(key: string): PresetScene | undefined {
 export function presetSceneSummaries(): Array<
   Pick<
     PresetScene,
-    "key" | "name" | "tagline" | "defaultTitle" | "description" | "requirements" | "qualityNotes"
+    | "key"
+    | "categoryKey"
+    | "name"
+    | "tagline"
+    | "defaultTitle"
+    | "description"
+    | "requirements"
+    | "qualityNotes"
   >
 > {
   return PRESET_SCENES.map((scene) => ({
     key: scene.key,
+    categoryKey: scene.categoryKey,
     name: scene.name,
     tagline: scene.tagline,
     defaultTitle: scene.defaultTitle,

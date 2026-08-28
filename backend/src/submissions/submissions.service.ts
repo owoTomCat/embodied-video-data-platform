@@ -1574,7 +1574,7 @@ export class SubmissionsService {
       if (locked) {
         throw new SubmissionFailure(
           "POINT_CYCLE_LOCKED",
-          "视频已进入积分周期，不能重跑 AI 质检",
+          "视频已进入结算周期，不能重跑 AI 质检",
           409,
         );
       }
@@ -2120,7 +2120,7 @@ export class SubmissionsService {
     if (pointItems + pointAdjustments > 0) {
       throw new SubmissionFailure(
         "SUBMISSION_LOCKED",
-        `视频已进入积分周期，不能${action}`,
+        `视频已进入结算周期，不能${action}`,
         409,
       );
     }

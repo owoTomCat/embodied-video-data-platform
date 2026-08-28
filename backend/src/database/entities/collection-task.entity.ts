@@ -74,7 +74,7 @@ export class CollectionTaskEntity {
   })
   normalizationStatus: TaskNormalizationStatus = "pending";
 
-  /** 任务单价（每分钟积分）；空则回退全局默认积分规则 */
+  /** 任务单价（元/小时）；空则回退全局默认单价规则 */
   @Column({
     name: "price_points_per_minute",
     type: "numeric",

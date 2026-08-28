@@ -113,6 +113,11 @@ export function settlementRatioForScore(input: {
   return coefficientForScore(input.score, input.coefficientBands);
 }
 
+/**
+ * 结算金额 = 单价（元/小时） × 有效时长（小时） × 质量系数。
+ * 全系统单价统一为「元/小时」：pointsPerMinute 字段名保留（历史命名），
+ * 实际语义为每小时单价；时长 ms 除以 3_600_000 换算为小时。
+ */
 export function pointsForRule(input: {
   pointsPerMinute: number;
   effectiveDurationMs: number;
@@ -128,7 +133,7 @@ export function pointsForRule(input: {
   return (
     Math.round(
       input.pointsPerMinute *
-        (Math.max(0, input.effectiveDurationMs) / 60_000) *
+        (Math.max(0, input.effectiveDurationMs) / 3_600_000) *
         input.settlementRatio *
         100,
     ) / 100

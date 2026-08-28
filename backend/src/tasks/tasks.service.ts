@@ -22,6 +22,7 @@ import {
 import { TaskFailure } from "./tasks.failure.js";
 import { TasksPolicy } from "./tasks.policy.js";
 import { RequirementNormalizerService } from "./requirement-normalizer.service.js";
+import { ScenePricingService } from "../scene-pricing/scene-pricing.service.js";
 import type {
   ConfirmNormalizedRequirementsDto,
   CreateTaskDto,
@@ -147,6 +148,7 @@ export class TasksService {
     private readonly audit: AuditService,
     private readonly labelSets: LabelSetService,
     private readonly normalizer: RequirementNormalizerService,
+    private readonly scenePricing: ScenePricingService,
   ) {}
 
   /** 数采人员 / 团长：任务大厅（published + paused） */
@@ -241,6 +243,17 @@ export class TasksService {
     input: CreateTaskDto,
   ): Promise<PublicTask> {
     this.policy.requireManage(actor);
+    // 预设场景任务未显式填写单价时，自动带出该场景大类的默认价（元/小时）
+    const explicitPrice =
+      input.pricePointsPerMinute === null ||
+      input.pricePointsPerMinute === undefined
+        ? null
+        : input.pricePointsPerMinute;
+    const scenePrice =
+      explicitPrice === null && input.taskType === "preset"
+        ? await this.scenePricing.pricePerHourForSceneName(input.sceneName.trim())
+        : null;
+    const price = explicitPrice ?? scenePrice;
     const task = await this.tasks.save(
       this.tasks.create({
         id: `TASK-${randomUUID().slice(0, 8)}`,
@@ -252,11 +265,7 @@ export class TasksService {
         rawRequirements: input.rawRequirements.trim(),
         normalizedRequirements: null,
         normalizationStatus: "pending",
-        pricePointsPerMinute:
-          input.pricePointsPerMinute === null ||
-          input.pricePointsPerMinute === undefined
-            ? null
-            : input.pricePointsPerMinute.toFixed(2),
+        pricePointsPerMinute: price === null ? null : price.toFixed(2),
         status: "draft",
         revision: 1,
         createdByAccountId: actor.id,

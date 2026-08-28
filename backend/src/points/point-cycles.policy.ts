@@ -16,7 +16,7 @@ export class PointCyclesPolicy {
     if (actor.role !== "admin") {
       throw new PointCycleFailure(
         "FORBIDDEN",
-        "仅管理员可锁定积分周期",
+        "仅管理员可锁定结算周期",
         403,
       );
     }

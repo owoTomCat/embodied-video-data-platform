@@ -72,7 +72,7 @@ export class PointCycleItemEntity {
   @Column({ name: "task_scene_name", type: "varchar", length: 120, nullable: true })
   taskSceneName: string | null = null;
 
-  /** 快照：任务单价（每分钟积分）；空表示按全局默认积分规则 */
+  /** 快照：任务单价（元/小时）；空表示按全局默认单价规则 */
   @Column({
     name: "price_points_per_minute",
     type: "numeric",

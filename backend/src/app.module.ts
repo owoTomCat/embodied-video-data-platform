@@ -11,6 +11,7 @@ import { MessagingModule } from "./messaging/messaging.module.js";
 import { OperationsModule } from "./operations/operations.module.js";
 import { PointsModule } from "./points/points.module.js";
 import { PublicSiteModule } from "./public-site/public-site.module.js";
+import { ScenePricingModule } from "./scene-pricing/scene-pricing.module.js";
 import { SubmissionsModule } from "./submissions/submissions.module.js";
 import { TasksModule } from "./tasks/tasks.module.js";
 import { WalletModule } from "./wallet/wallet.module.js";
@@ -29,6 +30,7 @@ import { WalletModule } from "./wallet/wallet.module.js";
     OperationsModule,
     AiQualityModule,
     PublicSiteModule,
+    ScenePricingModule,
     HealthModule,
     TasksModule,
   ],

@@ -111,7 +111,7 @@ export class SubmissionEntity {
   @Column({ name: "task_requirements_snapshot", type: "jsonb", nullable: true })
   taskRequirementsSnapshot: unknown | null = null;
 
-  /** 快照：任务单价（每分钟积分，结算使用）；空则回退全局默认 */
+  /** 快照：任务单价（元/小时，结算使用）；空则回退全局默认 */
   @Column({
     name: "task_price_points_per_minute",
     type: "numeric",
