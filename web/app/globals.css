@@ -2735,3 +2735,121 @@ button:disabled { cursor: not-allowed; opacity: .56; }
 .wallet-remark-field { flex: 1 1 240px; min-width: 0; }
 .money-in { color: #1f7a4d; }
 .money-out { color: #b94b47; }
+
+/* ===== 场景体系页 ===== */
+.scene-classification-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 14px;
+  margin-top: 4px;
+}
+.scene-group {
+  padding: 14px;
+}
+.scene-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 10px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.scene-group-head strong { color: #334159; font-size: 14px; }
+.scene-group-head em { margin-left: auto; color: #97a2b4; font-size: 10px; font-style: normal; }
+.scene-group-code {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: #e8efff;
+  color: #4774df;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10.5px;
+  font-weight: 700;
+}
+.scene-group-list { list-style: none; display: grid; gap: 6px; }
+.scene-group-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+.scene-group-list li.muted { opacity: 0.55; }
+.scene-group-item-main { flex: 1 1 auto; min-width: 0; display: grid; gap: 2px; }
+.scene-group-item-main strong { color: #334159; font-size: 12px; }
+.scene-group-item-main small { color: #97a2b4; font-size: 10px; line-height: 1.4; }
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  margin: 2px 4px 2px 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #eef3fb;
+  color: #44607f;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.scene-sub-picker {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.scene-sub-picker legend {
+  padding: 0 6px;
+  color: #334159;
+  font-size: 11px;
+  font-weight: 600;
+}
+.scene-sub-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.scene-sub-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+  cursor: pointer;
+  font-size: 11px;
+  color: #334159;
+}
+.scene-sub-option input { accent-color: #4774df; }
+.scene-sub-option:has(input:checked) {
+  border-color: #9db6ec;
+  background: #f3f7ff;
+}
+
+/* ===== 任务表单：场景库选择 ===== */
+.task-library-picker { margin-top: 8px; }
+.task-library-list { list-style: none; display: grid; gap: 6px; }
+.task-library-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  text-align: left;
+  background: #fbfcfe;
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.task-library-option:hover:not(:disabled) { border-color: #9db6ec; }
+.task-library-option.active {
+  border-color: #4774df;
+  background: #f3f7ff;
+  box-shadow: 0 0 0 3px rgb(71 116 223 / 10%);
+}
+.task-library-option:disabled { opacity: 0.55; cursor: not-allowed; }
+.task-library-copy { flex: 1 1 auto; min-width: 0; display: grid; gap: 2px; }
+.task-library-copy strong { color: #334159; font-size: 12.5px; }
+.task-library-copy small { color: #97a2b4; font-size: 10px; line-height: 1.45; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

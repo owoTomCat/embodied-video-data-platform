@@ -54,6 +54,14 @@ vi.mock("../../scene-pricing/client/scenePricingApi", () => ({
   updateSceneCategoryPrice: scenePricingApi.updateSceneCategoryPrice,
 }));
 
+const sceneSystemApi = vi.hoisted(() => ({
+  listSceneLibrary: vi.fn(),
+}));
+
+vi.mock("../../scene-system/client/sceneSystemApi", () => ({
+  listSceneLibrary: sceneSystemApi.listSceneLibrary,
+}));
+
 const draftTask = {
   id: "TASK-draft1",
   title: "厨房数据采集",
@@ -127,6 +135,20 @@ describe("TasksPage", () => {
       { categoryKey: "office", name: "办公室", pricePerHour: 25, description: "", updatedAt: 0 },
       { categoryKey: "factory", name: "工厂", pricePerHour: 30, description: "", updatedAt: 0 },
       { categoryKey: "generic", name: "通用", pricePerHour: 20, description: "", updatedAt: 0 },
+    ]);
+    sceneSystemApi.listSceneLibrary.mockResolvedValue([
+      {
+        id: "SL-001",
+        name: "采集员A家",
+        categoryKey: "family",
+        categoryName: "家庭",
+        subScenes: [{ id: "SC-001", level2Name: "厨房", level1Code: "F01" }],
+        subSceneIds: ["SC-001"],
+        description: "",
+        enabled: true,
+        createdByName: "管理员",
+        updatedAt: 0,
+      },
     ]);
     taskApi.listTaskTypeCatalog.mockResolvedValue({
       presetScenes: [
@@ -214,7 +236,7 @@ describe("TasksPage", () => {
     expect(screen.getByRole("heading", { name: "编辑采集任务" })).toBeInTheDocument();
     const titleInput = screen.getByLabelText(/任务标题/);
     expect(titleInput).toHaveValue("厨房数据采集");
-    expect(screen.getByText(/预设场景 · 家庭厨房/)).toBeInTheDocument();
+    expect(screen.getByText(/场景库场景 · 家庭厨房/)).toBeInTheDocument();
 
     await user.clear(titleInput);
     await user.type(titleInput, "厨房采集更新版");

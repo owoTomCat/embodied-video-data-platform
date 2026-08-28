@@ -4,7 +4,6 @@ import {
   AlertTriangle,
   Box,
   Hand,
-  Map,
   Plus,
   RefreshCw,
   Tags,
@@ -27,10 +26,9 @@ type LabelType = LabelConfig["type"];
 
 const typeMeta: Array<{
   type: LabelType;
-  icon: typeof Map;
+  icon: typeof Hand;
   description: string;
 }> = [
-  { type: "scene", icon: Map, description: "拍摄发生的物理环境，AI 质检按场景判定匹配度与库存稀缺" },
   { type: "action", icon: Hand, description: "视频中的标准任务/操作动作，用于任务分类与库存统计" },
   { type: "object", icon: Box, description: "操作涉及的主要对象/工具，用于任务变体分类" },
   { type: "issue", icon: AlertTriangle, description: "常见质量问题标签，用于质检问题的归类与复核提示" },
@@ -113,7 +111,7 @@ export function LabelSetPage() {
         <div>
           <p className="page-kicker">AI 质检内容标签字典</p>
           <h1>标签体系</h1>
-          <span>按类型分区管理场景、动作、对象与质量问题标签，与系统提示词相互独立</span>
+          <span>管理动作、对象与质量问题标签（场景已迁至「场景体系」），与系统提示词相互独立</span>
         </div>
         <span className="live-pill">
           <i />

@@ -44,6 +44,7 @@ export type CollectionTask = {
   description: string;
   sceneName: string;
   sceneLabelId: string | null;
+  sceneLibraryId: string | null;
   taskType: CollectionTaskType;
   rawRequirements: string;
   normalizedRequirements: NormalizedTaskRequirements | null;
@@ -65,6 +66,7 @@ export type CollectionTaskForCollector = {
   description: string;
   sceneName: string;
   sceneLabelId: string | null;
+  sceneLibraryId: string | null;
   taskType: CollectionTaskType;
   normalizedRequirements: NormalizedTaskRequirements | null;
   pricePointsPerMinute: number | null;
@@ -79,6 +81,7 @@ export type CreateTaskInput = {
   sceneName: string;
   taskType?: CollectionTaskType;
   rawRequirements: string;
+  sceneLibraryId?: string | null;
   pricePointsPerMinute?: number | null;
 };
 
