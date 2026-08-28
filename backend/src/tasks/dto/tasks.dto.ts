@@ -39,7 +39,13 @@ export class CreateTaskDto {
   @MaxLength(MAX_SCENE_NAME_LENGTH, { message: "场景名称不能超过 120 个字符" })
   sceneName!: string;
 
-  /** 任务类型：generic=通用任务 / preset=预设场景 / custom=自定义；缺省按 custom */
+  /** 关联场景库场景 id（taskType=preset 从场景库选时携带；带出场景名称与类别定价） */
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  sceneLibraryId?: string | null;
+
+  /** 任务类型：generic=通用任务 / preset=场景库场景 / custom=自定义；缺省按 custom */
   @IsOptional()
   @IsIn(TASK_TYPES, { message: "任务类型不合法" })
   taskType?: (typeof TASK_TYPES)[number];
@@ -74,6 +80,11 @@ export class UpdateTaskDto {
   @IsString()
   @MaxLength(MAX_SCENE_NAME_LENGTH, { message: "场景名称不能超过 120 个字符" })
   sceneName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  sceneLibraryId?: string | null;
 
   @IsOptional()
   @IsIn(TASK_TYPES, { message: "任务类型不合法" })

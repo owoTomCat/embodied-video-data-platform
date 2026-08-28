@@ -23,6 +23,7 @@ import { TaskFailure } from "./tasks.failure.js";
 import { TasksPolicy } from "./tasks.policy.js";
 import { RequirementNormalizerService } from "./requirement-normalizer.service.js";
 import { ScenePricingService } from "../scene-pricing/scene-pricing.service.js";
+import { SceneSystemService } from "../scene-system/scene-system.service.js";
 import type {
   ConfirmNormalizedRequirementsDto,
   CreateTaskDto,
@@ -35,6 +36,7 @@ export type PublicTask = {
   description: string;
   sceneName: string;
   sceneLabelId: string | null;
+  sceneLibraryId: string | null;
   taskType: CollectionTaskType;
   rawRequirements: string;
   normalizedRequirements: NormalizedTaskRequirements | null;
@@ -56,6 +58,7 @@ export type PublicTaskForCollector = {
   description: string;
   sceneName: string;
   sceneLabelId: string | null;
+  sceneLibraryId: string | null;
   taskType: CollectionTaskType;
   normalizedRequirements: NormalizedTaskRequirements | null;
   pricePointsPerMinute: number | null;
@@ -71,6 +74,7 @@ export function publicTask(task: CollectionTaskEntity): PublicTask {
     description: task.description,
     sceneName: task.sceneName,
     sceneLabelId: task.sceneLabelId,
+    sceneLibraryId: task.sceneLibraryId,
     taskType: task.taskType,
     rawRequirements: task.rawRequirements,
     normalizedRequirements: task.normalizedRequirements,
@@ -87,7 +91,7 @@ export function publicTask(task: CollectionTaskEntity): PublicTask {
   };
 }
 
-function publicTaskForCollector(
+export function publicTaskForCollector(
   task: CollectionTaskEntity,
 ): PublicTaskForCollector {
   return {
@@ -96,6 +100,7 @@ function publicTaskForCollector(
     description: task.description,
     sceneName: task.sceneName,
     sceneLabelId: task.sceneLabelId,
+    sceneLibraryId: task.sceneLibraryId,
     taskType: task.taskType,
     normalizedRequirements: task.normalizedRequirements,
     pricePointsPerMinute: numericOrNull(task.pricePointsPerMinute),
@@ -149,6 +154,7 @@ export class TasksService {
     private readonly labelSets: LabelSetService,
     private readonly normalizer: RequirementNormalizerService,
     private readonly scenePricing: ScenePricingService,
+    private readonly sceneSystem: SceneSystemService,
   ) {}
 
   /** 数采人员 / 团长：任务大厅（published + paused） */
@@ -243,25 +249,47 @@ export class TasksService {
     input: CreateTaskDto,
   ): Promise<PublicTask> {
     this.policy.requireManage(actor);
-    // 预设场景任务未显式填写单价时，自动带出该场景大类的默认价（元/小时）
+    // 场景库场景：任务从场景库选时，场景名取场景库名称，单价自动带出该场景类别的定价（元/小时）
+    let sceneName = input.sceneName.trim();
+    let sceneLibraryId: string | null = input.sceneLibraryId ?? null;
+    let categoryPrice: number | null = null;
+    if (input.sceneLibraryId) {
+      const libraryItem = await this.sceneSystem.getLibraryById(
+        input.sceneLibraryId,
+      );
+      if (!libraryItem || !libraryItem.enabled) {
+        throw new TaskFailure(
+          "SCENE_LIBRARY_NOT_FOUND",
+          "场景库场景不存在或已停用",
+          400,
+        );
+      }
+      sceneName = libraryItem.name;
+      sceneLibraryId = libraryItem.id;
+      categoryPrice =
+        (await this.scenePricing.get(libraryItem.categoryKey))?.pricePerHour ??
+        null;
+    }
     const explicitPrice =
       input.pricePointsPerMinute === null ||
       input.pricePointsPerMinute === undefined
         ? null
         : input.pricePointsPerMinute;
-    const scenePrice =
-      explicitPrice === null && input.taskType === "preset"
-        ? await this.scenePricing.pricePerHourForSceneName(input.sceneName.trim())
-        : null;
-    const price = explicitPrice ?? scenePrice;
+    const price =
+      explicitPrice ??
+      categoryPrice ??
+      (input.taskType === "preset"
+        ? await this.scenePricing.pricePerHourForSceneName(sceneName)
+        : null);
     const task = await this.tasks.save(
       this.tasks.create({
         id: `TASK-${randomUUID().slice(0, 8)}`,
         title: input.title.trim(),
         description: input.description?.trim() ?? "",
-        sceneName: input.sceneName.trim(),
+        sceneName,
         taskType: input.taskType ?? "custom",
         sceneLabelId: null,
+        sceneLibraryId,
         rawRequirements: input.rawRequirements.trim(),
         normalizedRequirements: null,
         normalizationStatus: "pending",
@@ -277,9 +305,9 @@ export class TasksService {
       actor,
       "task_create",
       { id: task.id, name: task.title },
-      `创建采集任务 ${task.title}（场景：${task.sceneName}）`,
+      `创建采集任务 ${task.title}（场景：${sceneName}）`,
       null,
-      { id: task.id, title: task.title, sceneName: task.sceneName },
+      { id: task.id, title: task.title, sceneName, sceneLibraryId },
     );
     return publicTask(task);
   }
@@ -308,6 +336,27 @@ export class TasksService {
       task.sceneName = input.sceneName.trim();
       // 场景变化后，已确认的规范化要求可能不再适用，需要重新规范化
       task.normalizationStatus = "pending";
+    }
+    if (input.sceneLibraryId !== undefined) {
+      if (input.sceneLibraryId === null) {
+        task.sceneLibraryId = null;
+      } else {
+        const libraryItem = await this.sceneSystem.getLibraryById(
+          input.sceneLibraryId,
+        );
+        if (!libraryItem || !libraryItem.enabled) {
+          throw new TaskFailure(
+            "SCENE_LIBRARY_NOT_FOUND",
+            "场景库场景不存在或已停用",
+            400,
+          );
+        }
+        task.sceneLibraryId = libraryItem.id;
+        if (input.sceneName === undefined) {
+          task.sceneName = libraryItem.name;
+          task.normalizationStatus = "pending";
+        }
+      }
     }
     if (input.taskType !== undefined) {
       task.taskType = input.taskType;

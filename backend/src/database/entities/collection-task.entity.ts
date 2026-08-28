@@ -51,6 +51,10 @@ export class CollectionTaskEntity {
   @Column({ name: "scene_label_id", type: "varchar", length: 64, nullable: true })
   sceneLabelId: string | null = null;
 
+  /** 关联场景库场景 id（任务创建从场景库选时记录，用于任务维度场景归属） */
+  @Column({ name: "scene_library_id", type: "varchar", length: 64, nullable: true })
+  sceneLibraryId: string | null = null;
+
   /**
    * 任务类型：generic = 通用任务（不绑定场景）；preset = 预设场景任务；
    * custom = 自定义场景任务。通用任务在任务大厅与创建页中作为最显眼的入口。
