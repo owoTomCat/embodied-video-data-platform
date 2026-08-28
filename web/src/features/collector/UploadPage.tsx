@@ -317,7 +317,7 @@ export function UploadPage() {
                       {tasks.map((task) => (
                         <option key={task.id} value={task.id} disabled={task.status !== "published"}>
                           {task.title}（{task.sceneName}）
-                          {task.status !== "published" ? " · 已暂停" : task.pricePointsPerMinute !== null ? ` · ${task.pricePointsPerMinute} 分/分钟` : ""}
+                          {task.status !== "published" ? " · 已暂停" : task.pricePointsPerMinute !== null ? ` · ${task.pricePointsPerMinute} 元/小时` : ""}
                         </option>
                       ))}
                     </select>
@@ -440,7 +440,7 @@ export function UploadPage() {
               <small>本次任务来源</small>
               <strong>{selectedTask.title}</strong>
               <span>{selectedTask.sceneName} · V{selectedTask.revision}</span>
-              <em>{selectedTask.pricePointsPerMinute !== null ? `${selectedTask.pricePointsPerMinute} 分/分钟` : "按全局规则计分"}</em>
+              <em>{selectedTask.pricePointsPerMinute !== null ? `${selectedTask.pricePointsPerMinute} 元/小时` : "按全局规则计费"}</em>
             </div>
           )}
           <div className="card-heading"><div><h2>上传前检查</h2><p>符合要求的数据更容易通过质检</p></div></div>

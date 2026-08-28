@@ -131,11 +131,11 @@ export function PublicHomePage({ navigate }: { navigate(path: string): void }) {
             [ScanSearch, "02", "媒体解析", "抽取时长、分辨率与画面特征，建立处理任务"],
             [Bot, "03", "AI 内容理解", "识别场景、动作、对象、工具与质量问题区间"],
             [ShieldCheck, "04", "双层质检", "AI 初筛结合平台人工复核，保留原始结论"],
-            [Database, "05", "积分锁定与入库", "锁定有效时长和积分，生成可交付数据资产"],
+            [Database, "05", "金额锁定与入库", "锁定有效时长并按质量系数计算金额，生成可交付数据资产"],
           ].map(([Icon, step, title, copy]) => { const ProcessIcon = Icon as typeof Upload; return <article key={String(step)}><span>{String(step)}</span><i><ProcessIcon size={22} /></i><h3>{String(title)}</h3><p>{String(copy)}</p></article>; })}</div>
         </section>
         <section className="public-content-section public-quality" id="quality">
-          <div className="quality-copy"><span>QUALITY & SECURITY</span><h2>质量结论有依据，数据流转有边界</h2><p>评分规则、无效区间和人工调整全部可追踪；不同角色的数据范围严格隔离，公开页面只展示脱敏汇总。</p><div><span><Fingerprint size={18} /><em><strong>全流程审计</strong><small>每次调整均保留人员、时间、原因和前后结果</small></em></span><span><Layers3 size={18} /><em><strong>版本化规则</strong><small>模型、标签、积分和质检阈值均可按版本管理</small></em></span></div></div><div className="quality-panel"><header><span>质量评估样例</span><em>已通过</em></header><strong>88<small>/ 100</small></strong><div className="quality-radar">{["画面稳定", "主体完整", "动作有效", "隐私安全"].map((item, index) => <div key={item}><span>{item}</span><i><b style={{ width: `${[91, 86, 92, 100][index]}%` }} /></i><em>{[91, 86, 92, 100][index]}</em></div>)}</div></div>
+          <div className="quality-copy"><span>QUALITY & SECURITY</span><h2>质量结论有依据，数据流转有边界</h2><p>评分规则、无效区间和人工调整全部可追踪；不同角色的数据范围严格隔离，公开页面只展示脱敏汇总。</p><div><span><Fingerprint size={18} /><em><strong>全流程审计</strong><small>每次调整均保留人员、时间、原因和前后结果</small></em></span><span><Layers3 size={18} /><em><strong>版本化规则</strong><small>模型、标签、金额和质检阈值均可按版本管理</small></em></span></div></div><div className="quality-panel"><header><span>质量评估样例</span><em>已通过</em></header><strong>88<small>/ 100</small></strong><div className="quality-radar">{["画面稳定", "主体完整", "动作有效", "隐私安全"].map((item, index) => <div key={item}><span>{item}</span><i><b style={{ width: `${[91, 86, 92, 100][index]}%` }} /></i><em>{[91, 86, 92, 100][index]}</em></div>)}</div></div>
         </section>
         <section className="public-cta"><div><span>{metricsAvailable ? snapshot.config.ctaCopy : "登录工作台查看实时数据与任务"}</span><h2>从真实任务出发，建立可持续的数据供给</h2></div><button className="button button-primary" onClick={() => navigate("/login")}>体验完整平台 <ArrowRight size={17} /></button></section>
       </main>

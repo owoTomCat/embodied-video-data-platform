@@ -71,7 +71,7 @@ export function ReviewPage({
       <div className="page-heading">
         <div>
           <p className="page-kicker">
-            {admin ? "积分锁定前可调整" : "本团队只读视图"}
+            {admin ? "金额锁定前可调整" : "本团队只读视图"}
           </p>
           <h1>{admin ? "质量复核" : "质检结果"}</h1>
           <span>
@@ -88,9 +88,9 @@ export function ReviewPage({
       <div className="review-policy">
         <LockKeyhole size={16} />
         <span>
-          <strong>{admin ? "积分锁定规则" : "只读权限"}</strong>
+          <strong>{admin ? "金额锁定规则" : "只读权限"}</strong>
           {admin
-            ? "积分周期生成后，视频评分、无效区间和积分结果将进入留痕调整。"
+            ? "结算周期生成后，视频评分、无效区间和金额结果将进入留痕调整。"
             : "团长可查看本团队结果，但不能修改 AI 原始结果或最终质检结果。"}
         </span>
       </div>

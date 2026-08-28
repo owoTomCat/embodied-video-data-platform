@@ -4,6 +4,8 @@ export type CollectionTaskType = "generic" | "preset" | "custom";
 
 export type PresetScene = {
   key: string;
+  /** 所属场景大类（定价按大类设置，细分场景共用同一价格） */
+  categoryKey: string;
   name: string;
   tagline: string;
   defaultTitle: string;

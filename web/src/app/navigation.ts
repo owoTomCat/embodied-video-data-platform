@@ -94,7 +94,7 @@ export const navigationByRole: Record<Role, NavigationGroup[]> = {
       label: "数据",
       items: [
         { label: "团队分析", path: "/team/analytics", icon: BarChart3 },
-        { label: "团队积分", path: "/team/income", icon: CircleDollarSign },
+        { label: "团队金额", path: "/team/income", icon: CircleDollarSign },
       ],
     },
   ],

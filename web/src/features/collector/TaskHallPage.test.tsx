@@ -69,7 +69,7 @@ describe("TaskHallPage", () => {
     expect(await screen.findByText("厨房数据采集")).toBeInTheDocument();
     expect(screen.getByText("户外街道数据采集")).toBeInTheDocument();
     expect(screen.getByText("场景：家庭厨房")).toBeInTheDocument();
-    expect(screen.getAllByText("15.5 元/分钟").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("15.5 元/小时").length).toBeGreaterThan(0);
     expect(screen.getAllByText("必须全程第一人称视角拍摄").length).toBeGreaterThan(0);
     expect(screen.getAllByText("已暂停").length).toBeGreaterThan(0);
   });

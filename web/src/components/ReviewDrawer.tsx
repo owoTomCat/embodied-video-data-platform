@@ -319,7 +319,7 @@ export function ReviewDrawer({
         <section className="ai-conclusion duplicate-review">
           <div className="ai-conclusion-head"><span>近似重复候选</span><StatusBadge label="待确认" tone="warning" /></div>
           <strong>{Math.round(duplicateCandidate.similarity * 100)}<small>%</small></strong>
-          <p>疑似与 {duplicateCandidate.candidateFileName ?? duplicateCandidate.candidateSubmissionId} 重复，解除前不会进入积分锁定。</p>
+          <p>疑似与 {duplicateCandidate.candidateFileName ?? duplicateCandidate.candidateSubmissionId} 重复，解除前不会进入金额锁定。</p>
           {!readOnly && <button className="table-action" disabled={duplicateSaving} type="button" onClick={clearDuplicate}><CopyCheck size={15} />{duplicateSaving ? "处理中" : "解除重复标记"}</button>}
         </section>
       )}
@@ -329,7 +329,7 @@ export function ReviewDrawer({
             <div><span>最终评分</span><strong>{submission.finalScore}/100</strong></div>
             <div><span>最终结论</span><strong className={submission.qualityStatus === "passed" ? "success-text" : "danger-text"}>{submission.qualityStatus === "passed" ? "通过" : submission.qualityStatus === "failed" ? "未通过" : "待质检"}</strong></div>
             <div><span><Clock3 size={13} />有效时长</span><strong>{formatDuration(effectiveDuration(submission.durationSeconds, submission.invalidSeconds))}</strong></div>
-            <div><span><Coins size={13} />预估积分</span><strong>{submission.qualityStatus === "pending" ? "—" : points === null ? unavailableEstimateLabel : `${points.toFixed(2)} 分`}</strong></div>
+            <div><span><Coins size={13} />预估金额</span><strong>{submission.qualityStatus === "pending" ? "—" : points === null ? unavailableEstimateLabel : `${points.toFixed(2)} 元`}</strong></div>
           </div>
           {submission.qualityResult?.manualReview ? (
             <p className="form-message">复核原因已在上方「人工复核记录」中展示。</p>
@@ -341,7 +341,7 @@ export function ReviewDrawer({
         <div className="review-guide">
           <strong>本次复核可以调整什么</strong>
           <ul>
-            <li><b>最终评分</b>：修改 AI 给出的分数，保存后按新分数判定是否通过并计算积分。</li>
+            <li><b>最终评分</b>：修改 AI 给出的分数，保存后按新分数判定是否通过并计算金额。</li>
             <li><b>问题区间</b>：仅标记真正没有任务内容的片段（黑屏、冻结、与任务无关的空镜）。分辨率、模糊、遮挡等质量扣分请通过最终评分体现，不要标记为无效。</li>
             <li><b>敏感隔离</b>：勾选后该视频不进入普通资产、交付包和公开统计。</li>
             <li><b>解除重复标记</b>：近似重复若是误报，可在上方解除，解除后进入正常流程。</li>
@@ -352,7 +352,7 @@ export function ReviewDrawer({
           <div><span>最终结论</span><strong className={qualityStatus(finalScore, passThreshold) === "passed" ? "success-text" : "danger-text"}>{qualityStatus(finalScore, passThreshold) === "passed" ? "通过" : "未通过"}</strong></div>
           <div><span>质量系数</span><strong>{coefficient === null ? unavailableEstimateLabel : coefficient.toFixed(2)}</strong></div>
           <div><span><Clock3 size={13} />有效时长</span><strong>{formatDuration(effectiveDuration(submission.durationSeconds, finalInvalidSeconds))}</strong></div>
-          <div><span><Coins size={13} />预计积分</span><strong>{points === null ? unavailableEstimateLabel : `${points.toFixed(2)} 分`}</strong></div>
+          <div><span><Coins size={13} />预计金额</span><strong>{points === null ? unavailableEstimateLabel : `${points.toFixed(2)} 元`}</strong></div>
         </div>
         <div className="issue-editor" aria-label="问题区间">
           <div className="issue-editor-heading">

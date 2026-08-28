@@ -184,7 +184,7 @@ describe("review workflows", () => {
     await user.click((await screen.findAllByRole("button", { name: "复核" }))[0]);
 
     expect(await screen.findByText("0.50")).toBeVisible();
-    expect(screen.getByText("1.00 分")).toBeVisible();
+    expect(screen.getByText("1.00 元")).toBeVisible();
   });
 
   it("never estimates positive points below the locked quality threshold", async () => {
@@ -205,7 +205,7 @@ describe("review workflows", () => {
     await user.click((await screen.findAllByRole("button", { name: "复核" }))[0]);
 
     expect(await screen.findByText("0.00")).toBeVisible();
-    expect(screen.getByText("0.00 分")).toBeVisible();
+    expect(screen.getByText("0.00 元")).toBeVisible();
   });
 
   it("does not show a fallback estimate when the point rule is unavailable", async () => {

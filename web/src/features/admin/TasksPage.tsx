@@ -328,7 +328,7 @@ export function TasksPage() {
                     <td className="nowrap-cell">
                       {task.pricePointsPerMinute !== null ? (
                         <span className="mono">
-                          {task.pricePointsPerMinute} 元/分钟
+                          {task.pricePointsPerMinute} 元/小时
                         </span>
                       ) : (
                         <span className="muted">全局默认</span>

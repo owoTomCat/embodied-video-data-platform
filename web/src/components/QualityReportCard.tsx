@@ -127,7 +127,7 @@ export function QualityReportCard({
       <div className="report-metrics">
         <div><small>有效时长</small><strong>{formatSeconds(effectiveDuration(submission.durationSeconds, submission.invalidSeconds))}</strong></div>
         <div><small>无效时长</small><strong>{formatSeconds(submission.invalidSeconds)}</strong></div>
-        <div><small>预计积分</small><strong>{pointsLabel}</strong></div>
+        <div><small>预计金额</small><strong>{pointsLabel}</strong></div>
         <div><small>问题区间</small><strong>{issues.length} 处</strong></div>
       </div>
 

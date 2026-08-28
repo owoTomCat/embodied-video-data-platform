@@ -193,9 +193,9 @@ export function CollectorDashboard({
           tone="green"
         />
         <MetricCard
-          label="待锁定积分"
+          label="待锁定金额"
           value={pointsLabel}
-          detail="通过且未进入积分周期"
+          detail="通过且未进入结算周期"
           icon={Wallet}
           tone="amber"
         />

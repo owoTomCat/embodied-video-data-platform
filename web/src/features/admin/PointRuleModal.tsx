@@ -92,7 +92,7 @@ export function PointRuleModal({
     }
     const parsedPoints = Number(defaultPoints);
     if (!Number.isFinite(parsedPoints) || parsedPoints < 0) {
-      setError("请输入有效的每分钟单价");
+      setError("请输入有效的每小时单价");
       return;
     }
     for (const band of bands) {
@@ -163,7 +163,7 @@ export function PointRuleModal({
           />
         </label>
         <label>
-          默认每分钟单价
+          默认每小时单价
           <input
             type="number"
             min="0"

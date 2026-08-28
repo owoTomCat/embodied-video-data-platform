@@ -93,7 +93,7 @@ function TaskStatCard({
         <span><em>通过率</em><b>{formatRate(stat.passRate)}</b></span>
         <span><em>均分</em><b>{formatScore(stat.avgScore)}</b></span>
         <span><em>有效时长</em><b>{formatMinutes(stat.effectiveMinutes)}</b></span>
-        <span><em>锁定积分</em><b>{formatPoints(stat.lockedPoints)}</b></span>
+        <span><em>锁定金额</em><b>{formatPoints(stat.lockedPoints)}</b></span>
       </span>
       {active && <span className="task-dim-active">筛选中</span>}
     </button>

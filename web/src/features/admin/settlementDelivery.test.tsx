@@ -24,10 +24,19 @@ import {
   previewPointCycle,
 } from "../../points/client/pointCycleApi";
 import { listWallets } from "../../wallet/client/walletApi";
+import {
+  listSceneCategoryPricing,
+  updateSceneCategoryPrice,
+} from "../../scene-pricing/client/scenePricingApi";
 import { accountForRole, demoAccounts } from "../../test/accountFixtures";
 
 vi.mock("../../wallet/client/walletApi", () => ({
   listWallets: vi.fn(),
+}));
+
+vi.mock("../../scene-pricing/client/scenePricingApi", () => ({
+  listSceneCategoryPricing: vi.fn(),
+  updateSceneCategoryPrice: vi.fn(),
 }));
 
 vi.mock("../../points/client/pointCycleApi", async (importOriginal) => {
@@ -67,6 +76,8 @@ const getPointRuleMock = vi.mocked(getPointRule);
 const createPointRuleMock = vi.mocked(createPointRule);
 const adjustPointCycleItemMock = vi.mocked(adjustPointCycleItem);
 const listWalletsMock = vi.mocked(listWallets);
+const listSceneCategoryPricingMock = vi.mocked(listSceneCategoryPricing);
+const updateSceneCategoryPriceMock = vi.mocked(updateSceneCategoryPrice);
 const listDeliveryPackagesMock = vi.mocked(listDeliveryPackages);
 const previewDeliveryPackageMock = vi.mocked(previewDeliveryPackage);
 const createDeliveryPackageMock = vi.mocked(createDeliveryPackage);
@@ -92,6 +103,12 @@ describe("settlement actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     listWalletsMock.mockResolvedValue([]);
+    listSceneCategoryPricingMock.mockResolvedValue([
+      { categoryKey: "family", name: "家庭", pricePerHour: 20, description: "", updatedAt: 0 },
+      { categoryKey: "office", name: "办公室", pricePerHour: 25, description: "", updatedAt: 0 },
+      { categoryKey: "factory", name: "工厂", pricePerHour: 30, description: "", updatedAt: 0 },
+      { categoryKey: "generic", name: "通用", pricePerHour: 20, description: "", updatedAt: 0 },
+    ]);
     listPointCyclesMock.mockResolvedValue([
       {
         id: "PC-20260812",
@@ -327,8 +344,8 @@ describe("settlement actions", () => {
     expect(await screen.findByText("POINTS-2026-08 · V1")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "发布单价规则" }));
     await user.type(screen.getByLabelText("版本名称"), "POINTS-2026-09");
-    await user.clear(screen.getByLabelText("默认每分钟单价"));
-    await user.type(screen.getByLabelText("默认每分钟单价"), "15");
+    await user.clear(screen.getByLabelText("默认每小时单价"));
+    await user.type(screen.getByLabelText("默认每小时单价"), "15");
     await user.clear(screen.getByLabelText("规则说明"));
     await user.type(screen.getByLabelText("规则说明"), "九月单价规则");
     await user.click(screen.getByRole("button", { name: "发布规则" }));
@@ -345,8 +362,76 @@ describe("settlement actions", () => {
       description: "九月单价规则",
     });
     expect(await screen.findByText("单价规则已发布")).toBeVisible();
-    expect(screen.getByText("15 元/分钟")).toBeVisible();
+    expect(screen.getByText("15 元/小时")).toBeVisible();
     expect(screen.getByText("POINTS-2026-09 · V2")).toBeVisible();
+  });
+
+  it("edits scene category pricing within the 20-40 range", async () => {
+    const user = userEvent.setup();
+    updateSceneCategoryPriceMock.mockResolvedValue({
+      categoryKey: "office",
+      name: "办公室",
+      pricePerHour: 28,
+      description: "",
+      updatedAt: 0,
+    });
+    renderAdmin("/admin/settlements");
+
+    expect(await screen.findByText("场景定价")).toBeVisible();
+    // 默认值展示（元/小时）：家庭 20 与通用 20 各一行
+    expect(screen.getAllByText("20.00 元/小时").length).toBeGreaterThan(0);
+    expect(screen.getByText("30.00 元/小时")).toBeVisible();
+
+    // 修改办公室单价 25 → 28
+    const officeRow = screen
+      .getByText("办公室")
+      .closest("tr") as HTMLTableRowElement;
+    await user.click(
+      within(officeRow).getByRole("button", { name: "修改" }),
+    );
+    await user.clear(
+      within(officeRow).getByLabelText("办公室每小时单价"),
+    );
+    await user.type(
+      within(officeRow).getByLabelText("办公室每小时单价"),
+      "28",
+    );
+    await user.click(
+      within(officeRow).getByRole("button", { name: "保存" }),
+    );
+
+    expect(updateSceneCategoryPriceMock).toHaveBeenCalledWith("office", {
+      pricePerHour: 28,
+    });
+    expect(await screen.findByText("28.00 元/小时")).toBeVisible();
+  });
+
+  it("rejects out-of-range scene prices locally", async () => {
+    const user = userEvent.setup();
+    renderAdmin("/admin/settlements");
+
+    expect(await screen.findByText("场景定价")).toBeVisible();
+    const familyRow = screen
+      .getByText("家庭")
+      .closest("tr") as HTMLTableRowElement;
+    await user.click(
+      within(familyRow).getByRole("button", { name: "修改" }),
+    );
+    await user.clear(
+      within(familyRow).getByLabelText("家庭每小时单价"),
+    );
+    await user.type(
+      within(familyRow).getByLabelText("家庭每小时单价"),
+      "45",
+    );
+    await user.click(
+      within(familyRow).getByRole("button", { name: "保存" }),
+    );
+
+    expect(
+      await screen.findByText("场景单价范围：20 ~ 40 元/小时（家庭最低，上限 40）"),
+    ).toBeVisible();
+    expect(updateSceneCategoryPriceMock).not.toHaveBeenCalled();
   });
 });
 

@@ -260,7 +260,7 @@ export function TeamIncomePage() {
           <h1>团队金额汇总</h1>
           <span>
             按当前规则 {summary.pointsPerMinute.toFixed(2)}
-            元/分钟、有效时长和最终评分测算，用于线下核对
+            元/小时、有效时长和最终评分测算，用于线下核对
           </span>
         </div>
         <span className="live-pill">

@@ -64,7 +64,7 @@ function MemberTable({
             <th>视频数</th>
             <th>有效时长</th>
             <th>均分</th>
-            <th>结算积分</th>
+            <th>结算金额</th>
             <th>操作</th>
           </tr>
         </thead>
@@ -248,7 +248,7 @@ export function OrganizationHierarchy({
           <span><strong>{overall?.videoCount ?? "—"}</strong><small>视频</small></span>
           <span><strong>{overall ? formatDuration(overall.effectiveSeconds) : "—"}</strong><small>有效时长</small></span>
           <span><strong>{overall?.avgScore ?? "—"}</strong><small>均分</small></span>
-          <span><strong>{overall?.points.toFixed(2) ?? "—"}</strong><small>结算积分</small></span>
+          <span><strong>{overall?.points.toFixed(2) ?? "—"}</strong><small>结算金额</small></span>
         </div>
         <div className="overview-actions">
           <span className="overview-total">合计 {overall ? formatPoints(overall.points) : "—"}</span>
@@ -325,7 +325,7 @@ export function OrganizationHierarchy({
                   <span className="people-group-icon"><Building2 size={18} /></span>
                   <span className="people-group-title">
                     <strong>{team.name}</strong>
-                    <small>{team.id} · {team.status === "active" ? "团队已启用" : "团队已停用"} · 单价 {team.unitPricePerMinute} 分/分钟</small>
+                    <small>{team.id} · {team.status === "active" ? "团队已启用" : "团队已停用"} · 单价 {team.unitPricePerMinute} 元/小时</small>
                   </span>
                 </button>
                 <div className="people-group-leader">

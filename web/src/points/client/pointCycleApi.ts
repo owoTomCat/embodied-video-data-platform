@@ -47,7 +47,7 @@ async function requestJson<T>(
     const error = payload as { code?: unknown; error?: unknown };
     throw new PointCycleApiError(
       response.status,
-      typeof error.error === "string" ? error.error : "积分周期请求失败",
+      typeof error.error === "string" ? error.error : "结算周期请求失败",
       typeof error.code === "string" ? error.code : undefined,
     );
   }

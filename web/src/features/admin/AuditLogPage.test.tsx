@@ -111,8 +111,8 @@ describe("AuditLogPage", () => {
     expect(screen.getAllByText("创建团队").at(-1)).toBeVisible();
     expect(screen.getAllByText("更新团队").at(-1)).toBeVisible();
     expect(screen.getAllByText("重跑 AI 质检").at(-1)).toBeVisible();
-    expect(screen.getAllByText("锁定积分周期")[0]).toBeVisible();
-    expect(screen.getAllByText("周期积分调整").at(-1)).toBeVisible();
+    expect(screen.getAllByText("锁定结算周期")[0]).toBeVisible();
+    expect(screen.getAllByText("周期金额调整").at(-1)).toBeVisible();
     expect(screen.getAllByText("创建交付包").at(-1)).toBeVisible();
     expect(screen.getByText("未知操作")).toBeVisible();
   });

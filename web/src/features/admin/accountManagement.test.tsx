@@ -247,8 +247,8 @@ describe("administrator account management", () => {
 
     await user.click(screen.getByRole("button", { name: "新增团队" }));
     await user.type(screen.getByLabelText("团队名称"), "远山二队");
-    await user.clear(screen.getByLabelText("每分钟积分"));
-    await user.type(screen.getByLabelText("每分钟积分"), "15");
+    await user.clear(screen.getByLabelText("每小时单价（元）"));
+    await user.type(screen.getByLabelText("每小时单价（元）"), "15");
     await user.click(screen.getByRole("button", { name: "创建团队" }));
 
     expect(accountApi.createTeam).toHaveBeenCalledWith({
@@ -261,8 +261,8 @@ describe("administrator account management", () => {
     await user.click(within(teamCard).getByRole("button", { name: "编辑团队" }));
     await user.clear(screen.getByLabelText("团队名称"));
     await user.type(screen.getByLabelText("团队名称"), "星火先锋队");
-    await user.clear(screen.getByLabelText("每分钟积分"));
-    await user.type(screen.getByLabelText("每分钟积分"), "13");
+    await user.clear(screen.getByLabelText("每小时单价（元）"));
+    await user.type(screen.getByLabelText("每小时单价（元）"), "13");
     await user.click(screen.getByRole("button", { name: "保存团队" }));
 
     expect(accountApi.updateTeam).toHaveBeenCalledWith("TEAM-01", {

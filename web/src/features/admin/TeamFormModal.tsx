@@ -52,7 +52,7 @@ export function TeamFormModal({
     if (submittingRef.current) return;
     const parsedUnitPrice = Number(unitPrice);
     if (!Number.isFinite(parsedUnitPrice) || parsedUnitPrice < 0) {
-      setError("请输入有效的每分钟积分");
+      setError("请输入有效的每小时单价");
       return;
     }
 
@@ -100,7 +100,7 @@ export function TeamFormModal({
           />
         </label>
         <label>
-          每分钟积分
+          每小时单价（元）
           <input
             type="number"
             value={unitPrice}

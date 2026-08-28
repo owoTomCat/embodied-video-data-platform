@@ -41,15 +41,16 @@ const accountActionLabels: Record<KnownAccountAuditAction, string> = {
   team_assign_leader: "指定团长",
   quality_review: "人工复核质量结果",
   ai_quality_rerun: "重跑 AI 质检",
-  point_cycle_lock: "锁定积分周期",
-  point_cycle_adjustment: "周期积分调整",
+  point_cycle_lock: "锁定结算周期",
+  point_cycle_adjustment: "周期金额调整",
   delivery_package_create: "创建交付包",
   asset_quarantine: "敏感资产隔离",
   asset_release: "解除资产隔离",
   ai_quality_prompt_update: "更新 AI 提示词",
   quality_rule_publish: "发布质量规则",
   label_set_update: "更新标签体系",
-  point_rule_publish: "发布积分规则",
+  point_rule_publish: "发布单价规则",
+  scene_pricing_update: "更新场景定价",
   public_site_snapshot_publish: "发布公开官网快照",
 };
 
@@ -147,7 +148,7 @@ export function AuditLogPage() {
         <div>
           <p className="page-kicker">平台关键操作留痕</p>
           <h1>操作日志</h1>
-          <span>记录质量调整、积分规则、周期锁定和用户管理动作</span>
+          <span>记录质量调整、单价规则、结算周期锁定和用户管理动作</span>
         </div>
         {mode === "live" ? (
           <a className="button button-primary" href={exportUrl}>
@@ -176,7 +177,7 @@ export function AuditLogPage() {
           </strong>
           <small>
             {mode === "live"
-              ? "账号、质检、积分和交付包关键动作均可按操作人、动作和时间追溯。"
+              ? "账号、质检、金额和交付包关键动作均可按操作人、动作和时间追溯。"
               : mode === "loading"
                 ? "页面会在接口返回后切换为真实数据。"
                 : "数据服务暂不可用，请稍后重试。"}

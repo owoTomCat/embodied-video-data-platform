@@ -20,6 +20,7 @@ import {
 } from "react";
 import { getLabelSet } from "../../ai-quality/client/aiQualityApi";
 import { Modal } from "../../components/Modal";
+import { listSceneCategoryPricing } from "../../scene-pricing/client/scenePricingApi";
 import { listTaskTypeCatalog } from "../../tasks/client/taskApi";
 import type {
   CollectionTask,
@@ -80,6 +81,7 @@ export function TaskFormModal({
       : "",
   );
   const [presetScenes, setPresetScenes] = useState<PresetScene[]>([]);
+  const [priceByCategory, setPriceByCategory] = useState<Record<string, number>>({});
   const [genericTemplate, setGenericTemplate] = useState<
     { sceneName: string; defaultTitle: string; description: string; requirements: string[] } | null
   >(null);
@@ -100,11 +102,15 @@ export function TaskFormModal({
   useEffect(() => {
     if (!open) return;
     let active = true;
-    Promise.all([listTaskTypeCatalog(), getLabelSet()])
-      .then(([catalog, labelSet]) => {
+    Promise.all([listTaskTypeCatalog(), getLabelSet(), listSceneCategoryPricing()])
+      .then(([catalog, labelSet, categories]) => {
         if (!active) return;
         setPresetScenes(catalog.presetScenes);
         setGenericTemplate(catalog.generic);
+        const byKey = Object.fromEntries(
+          categories.map((item) => [item.categoryKey, item.pricePerHour]),
+        );
+        setPriceByCategory(byKey);
         setSceneSuggestions(
           labelSet.labels
             .filter((label) => label.type === "scene" && label.enabled)
@@ -112,7 +118,7 @@ export function TaskFormModal({
         );
         // 创建模式默认选中通用任务：待目录加载后填充模板内容
         if (mode === "create" && !title.trim()) {
-          applyTemplate("generic", catalog.generic);
+          applyTemplate("generic", catalog.generic, byKey);
         }
       })
       .catch(() => undefined);
@@ -125,6 +131,7 @@ export function TaskFormModal({
   function applyTemplate(
     kind: "generic" | PresetScene,
     template?: { defaultTitle: string; description: string; requirements: string[] },
+    priceMap?: Record<string, number>,
   ) {
     const source =
       template ??
@@ -134,6 +141,12 @@ export function TaskFormModal({
     setDescription(source.description);
     setRawRequirements(source.requirements.join("\n"));
     setSceneName(kind === "generic" ? GENERIC_SCENE_NAME : kind.name);
+    // 自动带出场景大类默认价（元/小时）：通用任务按「通用」类，预设场景按其所属大类
+    const categoryKey = kind === "generic" ? "generic" : kind.categoryKey;
+    const defaultPrice = (priceMap ?? priceByCategory)[categoryKey];
+    if (defaultPrice !== undefined && defaultPrice > 0) {
+      setPrice(String(defaultPrice));
+    }
   }
 
   function selectType(next: CollectionTaskType, preset?: PresetScene) {
@@ -148,13 +161,14 @@ export function TaskFormModal({
     } else if (next === "preset" && preset) {
       applyTemplate(preset);
     } else {
-      // 自定义：从通用/预设切过来时清空被占用的场景名，让管理员自行填写
+      // 自定义：从通用/预设切过来时清空被占用的场景名与自动带出的默认价，让管理员自行填写
       if (
         sceneName === GENERIC_SCENE_NAME ||
         presetScenes.some((scene) => scene.name === sceneName)
       ) {
         setSceneName("");
       }
+      setPrice("");
     }
   }
 
@@ -401,10 +415,10 @@ export function TaskFormModal({
         <section className="task-form-section task-form-price-section">
           <div className="task-form-section-title">
             <span>4</span>
-            <div><strong>计分方式</strong><small>不填写时沿用平台全局规则</small></div>
+            <div><strong>计费方式</strong><small>按有效时长 × 单价（元/小时）× 质量系数结算；预设场景已自动带出场景大类默认价，可修改</small></div>
           </div>
           <label className="form-label task-price-field">
-            <span>每分钟单价</span>
+            <span>每小时单价（元）</span>
             <div className="input-with-suffix">
               <input
                 type="number"
@@ -414,11 +428,16 @@ export function TaskFormModal({
                 step="0.01"
                 value={price}
                 onChange={(event) => setPrice(event.target.value)}
-                placeholder="例如：15.5"
+                placeholder="例如：20"
               />
-              <span>元 / 分钟</span>
+              <span>元 / 小时</span>
             </div>
           </label>
+          {taskType === "preset" && selectedPreset && priceByCategory[selectedPreset.categoryKey] !== undefined && (
+            <p className="task-type-note">
+              已按「{selectedPreset.categoryKey === "family" ? "家庭" : selectedPreset.categoryKey === "office" ? "办公室" : selectedPreset.categoryKey === "factory" ? "工厂" : "通用"}」大类默认价 {priceByCategory[selectedPreset.categoryKey].toFixed(2)} 元/小时带出，可修改。
+            </p>
+          )}
         </section>
 
         {error && <p className="form-error">{error}</p>}

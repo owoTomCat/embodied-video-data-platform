@@ -44,6 +44,16 @@ vi.mock("../../ai-quality/client/aiQualityApi", () => ({
   getLabelSet: aiQualityApi.getLabelSet,
 }));
 
+const scenePricingApi = vi.hoisted(() => ({
+  listSceneCategoryPricing: vi.fn(),
+  updateSceneCategoryPrice: vi.fn(),
+}));
+
+vi.mock("../../scene-pricing/client/scenePricingApi", () => ({
+  listSceneCategoryPricing: scenePricingApi.listSceneCategoryPricing,
+  updateSceneCategoryPrice: scenePricingApi.updateSceneCategoryPrice,
+}));
+
 const draftTask = {
   id: "TASK-draft1",
   title: "厨房数据采集",
@@ -112,6 +122,12 @@ describe("TasksPage", () => {
       createdByName: "管理员",
       createdAt: 0,
     });
+    scenePricingApi.listSceneCategoryPricing.mockResolvedValue([
+      { categoryKey: "family", name: "家庭", pricePerHour: 20, description: "", updatedAt: 0 },
+      { categoryKey: "office", name: "办公室", pricePerHour: 25, description: "", updatedAt: 0 },
+      { categoryKey: "factory", name: "工厂", pricePerHour: 30, description: "", updatedAt: 0 },
+      { categoryKey: "generic", name: "通用", pricePerHour: 20, description: "", updatedAt: 0 },
+    ]);
     taskApi.listTaskTypeCatalog.mockResolvedValue({
       presetScenes: [
         {
@@ -148,7 +164,7 @@ describe("TasksPage", () => {
     expect(screen.getByText("客厅数据采集")).toBeInTheDocument();
     expect(screen.getAllByText("草稿").length).toBeGreaterThan(0);
     expect(screen.getAllByText("已发布").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("15.5 元/分钟").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("15.5 元/小时").length).toBeGreaterThan(0);
     expect(screen.getByText("共 2 个任务")).toBeInTheDocument();
   });
 
@@ -159,10 +175,11 @@ describe("TasksPage", () => {
     await screen.findByText("厨房数据采集");
 
     await user.click(screen.getByRole("button", { name: "创建任务" }));
-    // 创建模式默认选中「通用任务」并自动带出模板内容
+    // 创建模式默认选中「通用任务」并自动带出模板内容与场景大类默认价（通用 20 元/小时）
     expect(screen.getByLabelText(/任务标题/)).toHaveValue(
       "通用任务：不限场景的具身操作采集",
     );
+    expect(screen.getByLabelText(/每小时单价/)).toHaveValue(20);
     // 切到自定义后自行填写场景与要求
     await user.click(screen.getByRole("button", { name: /自定义任务/ }));
     const titleInput = screen.getByLabelText(/任务标题/);
