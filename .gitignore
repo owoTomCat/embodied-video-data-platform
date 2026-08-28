@@ -11,6 +11,8 @@ coverage/
 .deploy-version.env
 .env.*
 !.env.example
+# 本地 AI 环境访问说明（含服务器访问信息，禁止同步到 GitHub）
+AI_ENVIRONMENT.md
 backend/node_modules/
 backend/dist/
 backend/coverage/

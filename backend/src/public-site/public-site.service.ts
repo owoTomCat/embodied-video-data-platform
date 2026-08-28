@@ -143,16 +143,13 @@ export class PublicSiteService {
   ): Promise<PublicSiteSnapshot> {
     this.requireAdmin(actor);
     const normalized = {
-      primarySceneName: input.primarySceneName.trim(),
-      primarySceneDescription: input.primarySceneDescription.trim(),
       ctaCopy: input.ctaCopy.trim(),
+      // 主推场景由后台按最高频场景自动生成，忽略客户端传入值
+      primarySceneName: "",
+      primarySceneDescription: "",
     };
-    if (
-      !normalized.primarySceneName ||
-      !normalized.primarySceneDescription ||
-      !normalized.ctaCopy
-    ) {
-      throw new IdentityFailure("VALIDATION", "请完整填写公开配置", 400);
+    if (!normalized.ctaCopy) {
+      throw new IdentityFailure("VALIDATION", "请填写商务联系文案", 400);
     }
     return this.createSnapshot(actor, normalized);
   }
@@ -174,6 +171,12 @@ export class PublicSiteService {
       const aggregate = await this.aggregateMetrics(manager);
       const scenes = await this.aggregateScenes(manager, aggregate.count);
       const trend = await this.aggregateTrend(manager);
+      // 主推场景自动取后台最高频场景（与公开首页保持一致），无数据时用默认文案
+      const primaryScene = scenes[0];
+      const primarySceneName =
+        primaryScene?.name ?? DEFAULT_PRIMARY_SCENE;
+      const primarySceneDescription =
+        primaryScene?.description ?? DEFAULT_PRIMARY_DESCRIPTION;
 
       if (current) {
         current.active = false;
@@ -188,8 +191,8 @@ export class PublicSiteService {
         effectiveDurationSeconds: String(aggregate.effectiveDurationSeconds),
         sceneCount: aggregate.sceneCount,
         qualityPassRate: aggregate.qualityPassRate.toFixed(2),
-        primarySceneName: config.primarySceneName,
-        primarySceneDescription: config.primarySceneDescription,
+        primarySceneName,
+        primarySceneDescription,
         ctaCopy: config.ctaCopy,
         sceneBreakdown: scenes,
         trend,

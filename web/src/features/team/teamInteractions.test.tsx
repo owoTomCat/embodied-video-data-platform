@@ -5,6 +5,25 @@ import { PlatformApp } from "../../app/PlatformApp";
 import { IdentityProvider } from "../../auth/client/IdentityContext";
 import { accountForRole, demoAccounts } from "../../test/accountFixtures";
 
+// 团队金额页测试需要确定性后端不可用状态：mock 相关 API 使其拒绝
+vi.mock("../../points/client/pointCycleApi", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../../points/client/pointCycleApi")>();
+  return {
+    ...actual,
+    listPointCycles: vi.fn().mockRejectedValue(new Error("unavailable")),
+    getPointRule: vi.fn().mockRejectedValue(new Error("unavailable")),
+  };
+});
+vi.mock("../../submissions/client/submissionApi", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../../submissions/client/submissionApi")>();
+  return {
+    ...actual,
+    loadAllSubmissions: vi.fn().mockRejectedValue(new Error("unavailable")),
+  };
+});
+
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();

@@ -459,8 +459,7 @@ describe("public site snapshot API", () => {
       .set("Origin", WEB_ORIGIN)
       .set("Cookie", cookie)
       .send({
-        primarySceneName: "家庭精细操作",
-        primarySceneDescription: "厨房、桌面与工具使用类高频任务",
+        // 主推场景不再接受手工填写，由后台按最高频场景自动生成；旧字段可省略
         ctaCopy: "从真实任务出发，建立可持续的数据供给",
       })
       .expect(200);
@@ -469,8 +468,6 @@ describe("public site snapshot API", () => {
       revision: 2,
       generatedByName: "公开管理员",
       config: {
-        primarySceneName: "家庭精细操作",
-        primarySceneDescription: "厨房、桌面与工具使用类高频任务",
         ctaCopy: "从真实任务出发，建立可持续的数据供给",
       },
       metrics: {
@@ -478,6 +475,13 @@ describe("public site snapshot API", () => {
         effectiveDurationSeconds: 165,
       },
     });
+    // 主推场景自动取后台最高频场景（家庭厨房或桌面整理），不得为空或沿用旧输入
+    const snapshotConfig = response.body.snapshot.config as {
+      primarySceneName: string;
+      primarySceneDescription: string;
+    };
+    expect(snapshotConfig.primarySceneName.length).toBeGreaterThan(0);
+    expect(snapshotConfig.primarySceneName).not.toBe("家庭精细操作");
     expect(
       await dataSource.getRepository(PublicSiteSnapshotEntity).countBy({
         active: true,

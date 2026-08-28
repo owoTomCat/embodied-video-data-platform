@@ -68,7 +68,7 @@ describe("public configuration page", () => {
       .mockImplementation(async (input) => ({
         ...snapshot,
         revision: 4,
-        config: input,
+        config: { ...snapshot.config, ...input },
       }));
   });
 
@@ -79,12 +79,14 @@ describe("public configuration page", () => {
     expect(screen.getByLabelText("有效数据时长")).toHaveValue("3 分钟");
     expect(screen.getByLabelText("高频作业场景")).toHaveValue("2");
     expect(screen.getByDisplayValue("66.7%")).toBeVisible();
-    expect(screen.getByDisplayValue("后端家庭操作")).toBeVisible();
-    expect(screen.getByText("家庭厨房")).toBeVisible();
+    // 主推场景直接同步后台最高频场景，只读展示
+    expect(screen.getByLabelText("主推场景名称")).toHaveValue("后端家庭操作");
+    expect(screen.getByLabelText("主推场景说明")).toHaveValue("厨房与桌面任务");
+    expect(screen.getAllByText("家庭厨房").length).toBeGreaterThan(0);
     expect(screen.getByText("后端脱敏快照 V3")).toBeVisible();
   });
 
-  it("publishes a refreshed public snapshot", async () => {
+  it("publishes only the manually configured CTA copy", async () => {
     const user = userEvent.setup();
     renderAdmin();
 
@@ -93,9 +95,8 @@ describe("public configuration page", () => {
     await user.type(cta, "新的公开联系文案");
     await user.click(screen.getByRole("button", { name: "保存公开配置" }));
 
+    // 主推场景由后台自动生成，保存时只提交商务文案
     expect(publicSiteApi.publish).toHaveBeenCalledWith({
-      primarySceneName: "后端家庭操作",
-      primarySceneDescription: "厨房与桌面任务",
       ctaCopy: "新的公开联系文案",
     });
     expect(await screen.findByText("公开配置已发布为 V4")).toBeVisible();

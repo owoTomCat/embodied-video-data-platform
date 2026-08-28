@@ -31,4 +31,7 @@ export type PublicSiteSnapshot = {
   trend: PublicSiteTrendPoint[];
 };
 
-export type UpdatePublicSiteConfigInput = PublicSiteSnapshot["config"];
+export type UpdatePublicSiteConfigInput = {
+  /** 商务联系文案（唯一可手工配置项；主推场景由后台按最高频场景自动生成） */
+  ctaCopy: string;
+};
