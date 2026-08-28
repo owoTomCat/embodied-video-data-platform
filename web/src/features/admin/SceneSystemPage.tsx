@@ -333,7 +333,7 @@ export function SceneSystemPage() {
         </div>
         <div className="scene-level1-grid">
           {level1.map((level) => (
-            <div className={`content-card scene-level1-card${level.enabled ? "" : " scene-level1-disabled"}`} key={level.id}>
+            <div className="content-card scene-level1-card" key={level.id}>
               <div className="scene-level1-head">
                 <span className="scene-group-code">{level.code}</span>
                 <strong>{level.name}</strong>
@@ -394,7 +394,7 @@ export function SceneSystemPage() {
               </div>
               <ul className="scene-group-list">
                 {[...items, ...disabled].map((item) => (
-                  <li key={item.id} className={item.enabled ? "" : "muted"}>
+                  <li key={item.id}>
                     <div className="scene-group-item-main">
                       <strong>{item.level2Name}</strong>
                       <small>{item.description || "暂无描述"}</small>

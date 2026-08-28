@@ -2777,7 +2777,6 @@ button:disabled { cursor: not-allowed; opacity: .56; }
   border-radius: 8px;
   background: #fbfcfe;
 }
-.scene-group-list li.muted { opacity: 0.55; }
 .scene-group-item-main { flex: 1 1 auto; min-width: 0; display: grid; gap: 2px; }
 .scene-group-item-main strong { color: #334159; font-size: 12px; }
 .scene-group-item-main small { color: #97a2b4; font-size: 10px; line-height: 1.4; }
@@ -2864,7 +2863,6 @@ button:disabled { cursor: not-allowed; opacity: .56; }
 .scene-level1-card {
   padding: 14px;
 }
-.scene-level1-disabled { opacity: 0.6; }
 .scene-level1-head {
   display: flex;
   align-items: center;
