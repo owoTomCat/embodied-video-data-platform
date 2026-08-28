@@ -144,6 +144,19 @@ pnpm start:local
 
 完整视频处理应使用 `docker compose up -d --build`，因为 `media-worker` 和 `ai-quality-worker` 容器均已包含 FFprobe/FFmpeg。正式 AI Worker 默认只启动一个实例，总并发固定为 2。
 
+### 本地健康自愈与故障预防
+
+api 容器（NestJS）长期运行后可能出现 Node 句柄/线程泄漏，最终事件循环挂死；叠加 Docker Desktop for Mac 的已知问题（进程冻结后 daemon 无法 kill，见 docker/for-mac #6850 / #7816），只能通过重启 Docker Desktop 恢复。为此本地环境做了三层预防：
+
+1. **有界失败（compose.yaml）**：api 容器配置 `pids_limit: 200`、`mem_limit: 1536m`、`NODE_OPTIONS=--max-old-space-size=1024` 与 `stop_grace_period: 30s`。线程/内存超限时由内核终止容器并依赖 `restart: unless-stopped` 自动拉起，避免进程无响应数天后才被发现。
+2. **健康自愈脚本**：`scripts/dev-health.sh` 定时探测 `/api/v1/health/ready`，连续失败 3 次自动 `docker compose restart api`；daemon 本身卡死时给出重启 Docker Desktop 的指引。建议通过 cron/launchd 每 2~5 分钟执行一次：
+
+   ```bash
+   */2 * * * * cd <仓库目录> && ./scripts/dev-health.sh --cron >> /tmp/dev-health.log 2>&1
+   ```
+
+3. **泄漏监控**：可用 `docker stats evdp-api-1` 观察线程数（基线约 10~20；挂死前曾涨到 265）。若线程持续增长，说明存在连接/句柄泄漏，需要排查 TypeORM 连接池、amqplib、aws-sdk 与 ioredis 的配置。
+
 ### 独立 AI 视频质检实验页
 
 只验证 AI 视频质检时，不需要启动 PostgreSQL、MinIO、RabbitMQ 或 Qdrant。根目录 `.env` 配置百炼 `QWEN_API_KEY` 和工作空间专属 `QWEN_BASE_URL` 后运行：
