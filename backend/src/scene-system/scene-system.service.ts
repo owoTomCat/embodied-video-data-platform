@@ -6,24 +6,23 @@ import { In, Repository } from "typeorm";
 
 import { AuditService } from "../audit/audit.service.js";
 import type { PublicUser } from "../auth/auth.types.js";
+import { SceneCategoryPricingEntity } from "../database/entities/scene-category-pricing.entity.js";
 import { SceneClassificationEntity } from "../database/entities/scene-classification.entity.js";
+import { SceneLevel1Entity } from "../database/entities/scene-level1.entity.js";
 import { SceneLibraryEntity } from "../database/entities/scene-library.entity.js";
 
-/** 一级场景常量：编码 ↔ 名称 ↔ 计费大类 key */
-export const LEVEL1_SCENES: Array<{
+export type PublicLevel1Scene = {
+  id: string;
   code: string;
   name: string;
   categoryKey: string;
-}> = [
-  { code: "F01", name: "家庭", categoryKey: "family" },
-  { code: "O01", name: "办公室", categoryKey: "office" },
-  { code: "W01", name: "工厂", categoryKey: "factory" },
-  { code: "G01", name: "通用", categoryKey: "generic" },
-];
-
-export const LEVEL1_BY_CODE = new Map(
-  LEVEL1_SCENES.map((scene) => [scene.code, scene]),
-);
+  description: string;
+  sortOrder: number;
+  enabled: boolean;
+  level2Count: number;
+  libraryCount: number;
+  updatedAt: number;
+};
 
 export type PublicSceneClassification = {
   id: string;
@@ -62,12 +61,213 @@ export class SceneSystemFailure extends Error {
 @Injectable()
 export class SceneSystemService {
   constructor(
+    @InjectRepository(SceneLevel1Entity)
+    private readonly level1: Repository<SceneLevel1Entity>,
     @InjectRepository(SceneClassificationEntity)
     private readonly classification: Repository<SceneClassificationEntity>,
     @InjectRepository(SceneLibraryEntity)
     private readonly library: Repository<SceneLibraryEntity>,
+    @InjectRepository(SceneCategoryPricingEntity)
+    private readonly pricing: Repository<SceneCategoryPricingEntity>,
     private readonly audit: AuditService,
   ) {}
+
+  // ---------- 一级场景 ----------
+
+  /** 一级场景列表（含二级数量与场景库引用数） */
+  async listLevel1(): Promise<PublicLevel1Scene[]> {
+    const rows = await this.level1.find({
+      order: { sortOrder: "ASC", code: "ASC" },
+    });
+    const [level2Counts, libraryCounts] = await Promise.all([
+      this.classification
+        .createQueryBuilder("classification")
+        .select("classification.level1Code", "code")
+        .addSelect("COUNT(*)", "cnt")
+        .groupBy("classification.level1Code")
+        .getRawMany<{ code: string; cnt: string }>(),
+      this.library
+        .createQueryBuilder("library")
+        .select("library.categoryKey", "key")
+        .addSelect("COUNT(*)", "cnt")
+        .groupBy("library.categoryKey")
+        .getRawMany<{ key: string; cnt: string }>(),
+    ]);
+    const level2ByCode = new Map(level2Counts.map((row) => [row.code, Number(row.cnt)]));
+    const libraryByKey = new Map(libraryCounts.map((row) => [row.key, Number(row.cnt)]));
+    return rows.map((row) => ({
+      id: row.id,
+      code: row.code,
+      name: row.name,
+      categoryKey: row.categoryKey,
+      description: row.description,
+      sortOrder: row.sortOrder,
+      enabled: row.enabled,
+      level2Count: level2ByCode.get(row.code) ?? 0,
+      libraryCount: libraryByKey.get(row.categoryKey) ?? 0,
+      updatedAt: row.updatedAt.getTime(),
+    }));
+  }
+
+  async getLevel1ByCode(code: string): Promise<SceneLevel1Entity | null> {
+    return this.level1.findOneBy({ code });
+  }
+
+  async getLevel1ByCategoryKey(key: string): Promise<SceneLevel1Entity | null> {
+    return this.level1.findOneBy({ categoryKey: key });
+  }
+
+  /**
+   * 新增一级场景：同时创建对应计费行（category_key = 编码小写，默认 20 元/小时，可在结算页调整）。
+   */
+  async createLevel1(
+    actor: PublicUser,
+    input: { code: string; name: string; description?: string; sortOrder?: number },
+  ): Promise<PublicLevel1Scene> {
+    this.requireAdmin(actor);
+    const code = input.code.trim().toUpperCase();
+    if (!/^[A-Z0-9]{2,8}$/u.test(code)) {
+      throw new SceneSystemFailure(
+        "VALIDATION",
+        "一级编码需为 2-8 位大写字母或数字（如 F02、H01）",
+        400,
+      );
+    }
+    const name = input.name.trim();
+    if (!name) {
+      throw new SceneSystemFailure("VALIDATION", "请填写一级场景名称", 400);
+    }
+    const categoryKey = code.toLowerCase();
+    const codeExists = await this.level1.findOneBy({ code });
+    if (codeExists) {
+      throw new SceneSystemFailure("CONFLICT", `一级编码 ${code} 已存在`, 409);
+    }
+    const nameExists = await this.level1.findOneBy({ name });
+    if (nameExists) {
+      throw new SceneSystemFailure("CONFLICT", `一级场景名称「${name}」已存在`, 409);
+    }
+    const pricingExists = await this.pricing.findOneBy({ categoryKey });
+    if (pricingExists) {
+      throw new SceneSystemFailure(
+        "CONFLICT",
+        `计费大类 ${categoryKey} 已存在，请更换编码`,
+        409,
+      );
+    }
+    const row = await this.level1.save(
+      this.level1.create({
+        id: `L1-${randomUUID().slice(0, 8).toUpperCase()}`,
+        code,
+        name,
+        categoryKey,
+        description: input.description?.trim() ?? "",
+        sortOrder: input.sortOrder ?? 0,
+        enabled: true,
+      }),
+    );
+    // 计费行：默认 20 元/小时（范围 [20, 40]）
+    await this.pricing.save(
+      this.pricing.create({
+        categoryKey,
+        name,
+        pricePerHour: "20.00",
+        description: `${name}场景（新建一级场景默认价）`,
+      }),
+    );
+    await this.audit.record(
+      this.level1.manager,
+      actor,
+      "scene_level1_update",
+      { id: row.id, name: `${code} ${name}` },
+      `新增一级场景「${code} ${name}」并创建计费大类 ${categoryKey}`,
+      null,
+      { id: row.id, code, name, categoryKey },
+    );
+    return (await this.listLevel1()).find((item) => item.id === row.id)!;
+  }
+
+  async updateLevel1(
+    actor: PublicUser,
+    id: string,
+    input: { name?: string; description?: string; sortOrder?: number; enabled?: boolean },
+  ): Promise<PublicLevel1Scene> {
+    this.requireAdmin(actor);
+    const row = await this.level1.findOneBy({ id });
+    if (!row) {
+      throw new SceneSystemFailure("NOT_FOUND", "一级场景不存在", 404);
+    }
+    const before = { ...row };
+    if (input.name !== undefined) {
+      const name = input.name.trim();
+      if (!name) throw new SceneSystemFailure("VALIDATION", "请填写一级场景名称", 400);
+      const nameExists = await this.level1.findOneBy({ name });
+      if (nameExists && nameExists.id !== id) {
+        throw new SceneSystemFailure("CONFLICT", `一级场景名称「${name}」已存在`, 409);
+      }
+      row.name = name;
+    }
+    if (input.description !== undefined) row.description = input.description.trim();
+    if (input.sortOrder !== undefined) row.sortOrder = input.sortOrder;
+    if (input.enabled !== undefined) row.enabled = input.enabled;
+    const saved = await this.level1.save(row);
+    // 同步计费行名称
+    if (input.name !== undefined) {
+      await this.pricing.update(
+        { categoryKey: row.categoryKey },
+        { name: row.name },
+      );
+    }
+    await this.audit.record(
+      this.level1.manager,
+      actor,
+      "scene_level1_update",
+      { id: saved.id, name: `${saved.code} ${saved.name}` },
+      `更新一级场景「${saved.code} ${saved.name}」`,
+      { id: before.id, name: before.name, enabled: before.enabled },
+      { id: saved.id, name: saved.name, enabled: saved.enabled },
+    );
+    return (await this.listLevel1()).find((item) => item.id === saved.id)!;
+  }
+
+  async deleteLevel1(actor: PublicUser, id: string): Promise<{ deleted: boolean }> {
+    this.requireAdmin(actor);
+    const row = await this.level1.findOneBy({ id });
+    if (!row) {
+      throw new SceneSystemFailure("NOT_FOUND", "一级场景不存在", 404);
+    }
+    const level2Count = await this.classification.countBy({
+      level1Code: row.code,
+    });
+    if (level2Count > 0) {
+      throw new SceneSystemFailure(
+        "IN_USE",
+        `该一级场景下还有 ${level2Count} 个二级场景，请先删除二级场景`,
+        409,
+      );
+    }
+    const libraryCount = await this.library.countBy({
+      categoryKey: row.categoryKey,
+    });
+    if (libraryCount > 0) {
+      throw new SceneSystemFailure(
+        "IN_USE",
+        `有 ${libraryCount} 个场景库场景关联该一级场景，请先移除`,
+        409,
+      );
+    }
+    await this.level1.delete({ id });
+    await this.pricing.delete({ categoryKey: row.categoryKey });
+    await this.audit.record(
+      this.level1.manager,
+      actor,
+      "scene_level1_delete",
+      { id: row.id, name: `${row.code} ${row.name}` },
+      `删除一级场景「${row.code} ${row.name}」及计费大类 ${row.categoryKey}`,
+      { id: row.id, code: row.code, name: row.name },
+      null,
+    );
+    return { deleted: true };
+  }
 
   // ---------- 场景分类表 ----------
 
@@ -98,7 +298,7 @@ export class SceneSystemService {
     input: { level1Code: string; level2Name: string; description?: string },
   ): Promise<PublicSceneClassification> {
     this.requireAdmin(actor);
-    const level1 = LEVEL1_BY_CODE.get(input.level1Code.trim().toUpperCase());
+    const level1 = await this.getLevel1ByCode(input.level1Code.trim().toUpperCase());
     if (!level1) {
       throw new SceneSystemFailure("VALIDATION", "一级编码不存在", 400);
     }
@@ -206,36 +406,39 @@ export class SceneSystemService {
     const rows = await this.library.find({
       order: { createdAt: "DESC" },
     });
-    const classifications = await this.classification.find();
-    const byId = new Map(
-      classifications.map((item) => [item.id, item]),
-    );
-    return rows.map((row) => this.toLibraryView(row, byId));
+    const [classifications, level1Rows] = await Promise.all([
+      this.classification.find(),
+      this.level1.find(),
+    ]);
+    const byId = new Map(classifications.map((item) => [item.id, item]));
+    const level1ByKey = new Map(level1Rows.map((item) => [item.categoryKey, item]));
+    return rows.map((row) => this.toLibraryView(row, byId, level1ByKey));
   }
 
   /** 按 id 查单个场景库条目（供任务创建关联） */
   async getLibraryById(id: string): Promise<PublicSceneLibrary | null> {
     const row = await this.library.findOneBy({ id });
     if (!row) return null;
-    const classifications = await this.classification.find();
-    const byId = new Map(
-      classifications.map((item) => [item.id, item]),
-    );
-    return this.toLibraryView(row, byId);
+    const [classifications, level1Rows] = await Promise.all([
+      this.classification.find(),
+      this.level1.find(),
+    ]);
+    const byId = new Map(classifications.map((item) => [item.id, item]));
+    const level1ByKey = new Map(level1Rows.map((item) => [item.categoryKey, item]));
+    return this.toLibraryView(row, byId, level1ByKey);
   }
 
   private toLibraryView(
     row: SceneLibraryEntity,
     classificationById: Map<string, SceneClassificationEntity>,
+    level1ByCategoryKey: Map<string, SceneLevel1Entity>,
   ): PublicSceneLibrary {
-    const category = LEVEL1_SCENES.find(
-      (scene) => scene.categoryKey === row.categoryKey,
-    );
+    const level1 = level1ByCategoryKey.get(row.categoryKey);
     return {
       id: row.id,
       name: row.name,
       categoryKey: row.categoryKey,
-      categoryName: category?.name ?? row.categoryKey,
+      categoryName: level1?.name ?? row.categoryKey,
       subScenes: row.subSceneIds
         .map((id) => classificationById.get(id))
         .filter((item): item is SceneClassificationEntity => Boolean(item))
@@ -262,21 +465,16 @@ export class SceneSystemService {
     },
   ): Promise<PublicSceneLibrary> {
     this.requireAdmin(actor);
-    const category = LEVEL1_SCENES.find(
-      (scene) => scene.categoryKey === input.categoryKey,
-    );
-    if (!category) {
+    const level1 = await this.getLevel1ByCategoryKey(input.categoryKey);
+    if (!level1) {
       throw new SceneSystemFailure("VALIDATION", "场景类别不存在", 400);
     }
-    const subScenes = await this.validateSubScenes(
-      input.subSceneIds,
-      category.code,
-    );
+    const subScenes = await this.validateSubScenes(input.subSceneIds, level1.code);
     const row = await this.library.save(
       this.library.create({
         id: `SL-${randomUUID().slice(0, 8).toUpperCase()}`,
         name: input.name.trim(),
-        categoryKey: category.categoryKey,
+        categoryKey: level1.categoryKey,
         subSceneIds: subScenes.map((item) => item.id),
         description: input.description?.trim() ?? "",
         enabled: true,
@@ -289,7 +487,7 @@ export class SceneSystemService {
       actor,
       "scene_library_update",
       { id: row.id, name: row.name },
-      `新增场景库场景「${row.name}」（类别：${category.name}）`,
+      `新增场景库场景「${row.name}」（类别：${level1.name}）`,
       null,
       {
         id: row.id,
@@ -298,7 +496,7 @@ export class SceneSystemService {
         subSceneIds: row.subSceneIds,
       },
     );
-    return this.toLibraryView(row, await this.classificationMap());
+    return (await this.getLibraryById(row.id))!;
   }
 
   async updateLibrary(
@@ -317,16 +515,14 @@ export class SceneSystemService {
     if (!row) {
       throw new SceneSystemFailure("NOT_FOUND", "场景库场景不存在", 404);
     }
-    let categoryCode = LEVEL1_BY_CODE.get(row.categoryKey)?.code ?? "F01";
+    let categoryCode = (await this.getLevel1ByCategoryKey(row.categoryKey))?.code ?? "F01";
     if (input.categoryKey !== undefined) {
-      const category = LEVEL1_SCENES.find(
-        (scene) => scene.categoryKey === input.categoryKey,
-      );
-      if (!category) {
+      const level1 = await this.getLevel1ByCategoryKey(input.categoryKey);
+      if (!level1) {
         throw new SceneSystemFailure("VALIDATION", "场景类别不存在", 400);
       }
-      row.categoryKey = category.categoryKey;
-      categoryCode = category.code;
+      row.categoryKey = level1.categoryKey;
+      categoryCode = level1.code;
     }
     if (input.name !== undefined) row.name = input.name.trim();
     if (input.subSceneIds !== undefined) {
@@ -347,7 +543,7 @@ export class SceneSystemService {
       { id: row.id, name: row.name },
       { id: saved.id, name: saved.name, categoryKey: saved.categoryKey },
     );
-    return this.toLibraryView(saved, await this.classificationMap());
+    return (await this.getLibraryById(saved.id))!;
   }
 
   async deleteLibrary(
@@ -395,13 +591,6 @@ export class SceneSystemService {
       );
     }
     return rows;
-  }
-
-  private async classificationMap(): Promise<
-    Map<string, SceneClassificationEntity>
-  > {
-    const rows = await this.classification.find();
-    return new Map(rows.map((item) => [item.id, item]));
   }
 
   private requireAdmin(actor: PublicUser): void {

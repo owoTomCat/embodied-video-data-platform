@@ -22,6 +22,7 @@ import { QualityRuleVersionEntity } from "./entities/quality-rule-version.entity
 import { SceneCategoryPricingEntity } from "./entities/scene-category-pricing.entity.js";
 import { SceneClassificationEntity } from "./entities/scene-classification.entity.js";
 import { SceneLibraryEntity } from "./entities/scene-library.entity.js";
+import { SceneLevel1Entity } from "./entities/scene-level1.entity.js";
 import { SessionEntity } from "./entities/session.entity.js";
 import { SubmissionDuplicateCandidateEntity } from "./entities/submission-duplicate-candidate.entity.js";
 import { SubmissionEntity } from "./entities/submission.entity.js";
@@ -63,6 +64,7 @@ import { WorkerHeartbeats2026081300009 } from "./migrations/202608130009-worker-
 import { WorkerTaskMetrics2026081300019 } from "./migrations/202608130019-worker-task-metrics.js";
 import { SceneCategoryPricing2026090100001 } from "./migrations/202609010001-scene-category-pricing.js";
 import { SceneSystem2026090200001 } from "./migrations/202609020001-scene-system.js";
+import { SceneLevel1Table2026090300001 } from "./migrations/202609030001-scene-level1.js";
 import { WalletAndSettlement2026083100001 } from "./migrations/202608310001-wallet-and-settlement.js";
 
 export const identityEntities = [
@@ -95,6 +97,7 @@ export const identityEntities = [
   SceneCategoryPricingEntity,
   SceneClassificationEntity,
   SceneLibraryEntity,
+  SceneLevel1Entity,
 ];
 
 export function createDataSource(
@@ -142,6 +145,7 @@ export function createDataSource(
       WalletAndSettlement2026083100001,
       SceneCategoryPricing2026090100001,
       SceneSystem2026090200001,
+      SceneLevel1Table2026090300001,
     ],
     synchronize: false,
     logging: false,

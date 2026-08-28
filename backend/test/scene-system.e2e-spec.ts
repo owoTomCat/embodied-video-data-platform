@@ -262,6 +262,77 @@ describe("scene system API", () => {
       .expect(200);
   });
 
+  it("manages level-1 scenes and auto-creates pricing rows", async () => {
+    const adminCookie = await login("scene-admin");
+
+    // 新增一级场景 → 自动创建计费行（默认 20 元/小时）
+    const created = await request(app.getHttpServer())
+      .post("/api/v1/scene-system/level1")
+      .set("Origin", WEB_ORIGIN)
+      .set("Cookie", adminCookie)
+      .send({ code: "H01", name: "医院", description: "医院场景", sortOrder: 50 })
+      .expect(201);
+    expect(created.body.item).toMatchObject({
+      code: "H01",
+      name: "医院",
+      categoryKey: "h01",
+    });
+    const pricing = await dataSource.query(
+      `SELECT category_key, price_per_hour, name FROM scene_category_pricing WHERE category_key = 'h01'`,
+    );
+    expect(pricing).toHaveLength(1);
+    expect(Number(pricing[0].price_per_hour)).toBe(20);
+    expect(pricing[0].name).toBe("医院");
+
+    // meta 包含新一级场景
+    const meta = await request(app.getHttpServer())
+      .get("/api/v1/scene-system/meta")
+      .set("Cookie", adminCookie)
+      .expect(200);
+    expect(meta.body.level1.map((item: { code: string }) => item.code)).toContain("H01");
+
+    // 编码冲突
+    await request(app.getHttpServer())
+      .post("/api/v1/scene-system/level1")
+      .set("Origin", WEB_ORIGIN)
+      .set("Cookie", adminCookie)
+      .send({ code: "H01", name: "医院二院" })
+      .expect(409);
+
+    // 改名并停用（同步计费行名称）
+    const updated = await request(app.getHttpServer())
+      .put(`/api/v1/scene-system/level1/${created.body.item.id}`)
+      .set("Origin", WEB_ORIGIN)
+      .set("Cookie", adminCookie)
+      .send({ name: "医院诊所", enabled: false })
+      .expect(200);
+    expect(updated.body.item).toMatchObject({ name: "医院诊所", enabled: false });
+    const pricingAfter = await dataSource.query(
+      `SELECT name FROM scene_category_pricing WHERE category_key = 'h01'`,
+    );
+    expect(pricingAfter[0].name).toBe("医院诊所");
+
+    // 删除：无二级/场景库引用时可删，计费行一并删除
+    await request(app.getHttpServer())
+      .delete(`/api/v1/scene-system/level1/${created.body.item.id}`)
+      .set("Origin", WEB_ORIGIN)
+      .set("Cookie", adminCookie)
+      .expect(200);
+    const pricingAfterDelete = await dataSource.query(
+      `SELECT count(*)::int AS cnt FROM scene_category_pricing WHERE category_key = 'h01'`,
+    );
+    expect(pricingAfterDelete[0].cnt).toBe(0);
+  });
+
+  it("blocks deleting a level-1 scene that still has second-level scenes", async () => {
+    const adminCookie = await login("scene-admin");
+    await request(app.getHttpServer())
+      .delete("/api/v1/scene-system/level1/L1-F01")
+      .set("Origin", WEB_ORIGIN)
+      .set("Cookie", adminCookie)
+      .expect(409);
+  });
+
   it("rejects non-admin scene system mutations", async () => {
     const collectorCookie = await login("scene-collector");
     await request(app.getHttpServer())
