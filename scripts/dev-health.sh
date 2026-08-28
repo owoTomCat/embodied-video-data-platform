@@ -37,6 +37,24 @@ esac
 log() { [ "$QUIET" -eq 1 ] || echo "[dev-health] $*"; }
 warn() { echo "[dev-health] ⚠ $*"; }
 
+# 0. 宿主机内存压力预检（macOS）
+# 根因背景：Docker VM 默认占约一半内存（16GB 机器约 7.75GB），叠加 web dev/编辑器后
+# 宿主进入重度换页（swap 打满），macOS 会冻结 Docker VM 内全部进程 → api 无响应且无法 kill。
+# 此处提前预警，并在异常时给出降低 Docker VM 内存的指引。
+if [ "$(uname -s)" = "Darwin" ]; then
+  SWAP_USED=$(sysctl -n vm.swapusage 2>/dev/null | awk -F'used = ' '{split($2,a,"M"); print a[1]}')
+  SWAP_TOTAL=$(sysctl -n vm.swapusage 2>/dev/null | awk -F'total = ' '{split($2,a,"M"); print a[1]}')
+  if [ -n "$SWAP_TOTAL" ] && [ -n "$SWAP_USED" ] && [ "$SWAP_TOTAL" != "0" ]; then
+    RATIO=$(awk "BEGIN{printf \"%.0f\", $SWAP_USED / $SWAP_TOTAL * 100}")
+    if [ "$RATIO" -ge 80 ]; then
+      warn "宿主机 swap 已使用 ${RATIO}%（${SWAP_USED}M / ${SWAP_TOTAL}M），内存压力极高，Docker VM 有被冻结风险"
+      warn "建议：Docker Desktop → Settings → Resources → 降低 Memory（如 5GB）；关闭多余浏览器标签/应用后重试"
+    elif [ "$RATIO" -ge 50 ]; then
+      log "提示：宿主机 swap 使用 ${RATIO}%，内存压力偏高，可考虑降低 Docker VM 内存"
+    fi
+  fi
+fi
+
 # 1. Docker daemon 是否响应
 if ! docker ps >/dev/null 2>&1; then
   warn "Docker daemon 无响应。请重启 Docker Desktop（菜单栏鲸鱼图标 → Restart），然后执行 docker compose up -d"
