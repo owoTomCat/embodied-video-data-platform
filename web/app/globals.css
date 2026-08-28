@@ -136,9 +136,12 @@ a { color: inherit; text-decoration: none; }
 
 /* App shell */
 .dashboard-frame { display: flex; min-height: 100vh; background: var(--canvas); }
-.sidebar { position: fixed; z-index: 40; display: flex; width: 242px; height: 100vh; padding: 24px 17px 19px; color: #8190a9; background: #0d1628; border-right: 1px solid #1a263d; flex-direction: column; }
+.sidebar { position: fixed; z-index: 40; display: flex; width: 242px; height: 100vh; padding: 24px 17px 19px; color: #8190a9; background: #0d1628; border-right: 1px solid #1a263d; flex-direction: column; overflow: hidden; }
 .sidebar-brand { display: flex; min-height: 52px; padding: 0 5px; align-items: flex-start; justify-content: space-between; }
-.sidebar-nav { display: grid; margin-top: 31px; gap: 4px; }
+.sidebar-nav { display: grid; margin-top: 31px; gap: 4px; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #2a3854 transparent; }
+.sidebar-nav::-webkit-scrollbar { width: 6px; }
+.sidebar-nav::-webkit-scrollbar-thumb { background: #2a3854; border-radius: 3px; }
+.sidebar-nav::-webkit-scrollbar-track { background: transparent; }
 .nav-section-label { margin: 0 13px 9px; color: #46546c; font-size: 9px; font-weight: 750; letter-spacing: .14em; }
 .nav-link { display: flex; height: 43px; padding: 0 13px; align-items: center; gap: 11px; color: #8190a8; border-radius: 9px; font-size: 12px; font-weight: 540; transition: color .16s ease, background .16s ease; }
 .nav-link:hover { color: #d9e2f3; background: rgb(255 255 255 / 4%); }
