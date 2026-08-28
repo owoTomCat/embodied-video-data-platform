@@ -1,8 +1,29 @@
-/** 一级场景常量（编码/名称/计费大类 key） */
+/** 一级场景（可管理；编码创建后不可修改，关联计费大类 categoryKey） */
 export type Level1Scene = {
+  id: string;
   code: string;
   name: string;
   categoryKey: string;
+  description: string;
+  sortOrder: number;
+  enabled: boolean;
+  level2Count: number;
+  libraryCount: number;
+  updatedAt: number;
+};
+
+export type CreateSceneLevel1Input = {
+  code: string;
+  name: string;
+  description?: string;
+  sortOrder?: number;
+};
+
+export type UpdateSceneLevel1Input = {
+  name?: string;
+  description?: string;
+  sortOrder?: number;
+  enabled?: boolean;
 };
 
 /** 场景分类表条目：一级编码 + 一级场景 + 二级场景 + 场景描述 */

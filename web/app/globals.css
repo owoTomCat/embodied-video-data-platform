@@ -2853,3 +2853,118 @@ button:disabled { cursor: not-allowed; opacity: .56; }
 .task-library-copy { flex: 1 1 auto; min-width: 0; display: grid; gap: 2px; }
 .task-library-copy strong { color: #334159; font-size: 12.5px; }
 .task-library-copy small { color: #97a2b4; font-size: 10px; line-height: 1.45; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ===== 场景体系：一级场景管理 ===== */
+.scene-level1-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+  margin-top: 4px;
+}
+.scene-level1-card {
+  padding: 14px;
+}
+.scene-level1-disabled { opacity: 0.6; }
+.scene-level1-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.scene-level1-head strong { color: #334159; font-size: 14px; }
+.scene-level1-billing {
+  margin-left: auto;
+  color: #758195;
+  font-size: 9px;
+  font-style: normal;
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+.scene-level1-desc {
+  margin-top: 8px;
+  color: #758195;
+  font-size: 11px;
+  line-height: 1.5;
+  min-height: 33px;
+}
+.scene-level1-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  color: #97a2b4;
+  font-size: 10px;
+}
+.scene-level1-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+/* ===== 场景体系：搜索框 ===== */
+.scene-search-box {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fbfcfe;
+  color: #97a2b4;
+}
+.scene-search-box:focus-within { border-color: #9db6ec; }
+.scene-search-box input {
+  border: none;
+  background: transparent;
+  outline: none;
+  padding: 8px 0;
+  font-size: 12px;
+  width: 220px;
+  color: #334159;
+}
+
+/* ===== 场景体系：场景库 Tab + 筛选 ===== */
+.scene-library-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px 0 4px;
+}
+.scene-library-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.scene-library-tab {
+  padding: 6px 13px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fbfcfe;
+  color: #5b6b82;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.scene-library-tab:hover { border-color: #9db6ec; }
+.scene-library-tab.active {
+  border-color: #4774df;
+  background: #e8efff;
+  color: #2f5bc0;
+  font-weight: 600;
+}
+.scene-library-filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.scene-library-filters select {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fbfcfe;
+  font-size: 11.5px;
+  color: #334159;
+}

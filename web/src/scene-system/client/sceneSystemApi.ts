@@ -1,10 +1,12 @@
 import type {
   CreateSceneClassificationInput,
+  CreateSceneLevel1Input,
   CreateSceneLibraryInput,
   Level1Scene,
   SceneClassification,
   SceneLibraryItem,
   UpdateSceneClassificationInput,
+  UpdateSceneLevel1Input,
   UpdateSceneLibraryInput,
 } from "../contracts";
 
@@ -60,6 +62,34 @@ export async function listLevel1Scenes(): Promise<Level1Scene[]> {
     "/scene-system/meta",
   );
   return result.level1;
+}
+
+export async function createSceneLevel1(
+  input: CreateSceneLevel1Input,
+): Promise<Level1Scene> {
+  const result = await requestJson<{ item: Level1Scene }>(
+    "/scene-system/level1",
+    { method: "POST", body: JSON.stringify(input) },
+  );
+  return result.item;
+}
+
+export async function updateSceneLevel1(
+  id: string,
+  input: UpdateSceneLevel1Input,
+): Promise<Level1Scene> {
+  const result = await requestJson<{ item: Level1Scene }>(
+    `/scene-system/level1/${encodeURIComponent(id)}`,
+    { method: "PUT", body: JSON.stringify(input) },
+  );
+  return result.item;
+}
+
+export async function deleteSceneLevel1(id: string): Promise<void> {
+  await requestJson<{ deleted: boolean }>(
+    `/scene-system/level1/${encodeURIComponent(id)}`,
+    { method: "DELETE" },
+  );
 }
 
 export async function listSceneClassification(): Promise<
