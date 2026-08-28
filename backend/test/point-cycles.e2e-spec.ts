@@ -492,19 +492,19 @@ describe("point cycle API", () => {
       submissionCount: 2,
       effectiveDurationMs: 230000,
       effectiveMinutes: 3.83,
-      totalPoints: 42,
+      totalPoints: 0.7,
     });
     expect(preview.body.preview.teamSummaries).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           teamId: "TEAM-PC-01",
           submissionCount: 1,
-          points: 22,
+          points: 0.37,
         }),
         expect.objectContaining({
           teamId: "TEAM-PC-02",
           submissionCount: 1,
-          points: 20,
+          points: 0.33,
         }),
       ]),
     );
@@ -548,7 +548,7 @@ describe("point cycle API", () => {
     expect(preview.body.preview).toMatchObject({
       submissionCount: 3,
       effectiveDurationMs: 285000,
-      totalPoints: 51.35,
+      totalPoints: 0.86,
     });
 
     await dataSource.getRepository(SubmissionDuplicateCandidateEntity).save({
@@ -570,7 +570,7 @@ describe("point cycle API", () => {
     expect(initial.body.rule).toMatchObject({
       revision: 1,
       version: "POINTS-2026-08",
-      defaultPointsPerMinute: 12,
+      defaultPointsPerMinute: 20,
       createdByName: "系统初始化",
     });
     expect(initial.body.rule.coefficientBands).toEqual(
@@ -647,7 +647,7 @@ describe("point cycle API", () => {
       businessDate: "2026-08-13",
       status: "locked",
       submissionCount: 2,
-      totalPoints: 26,
+      totalPoints: 0.43,
       pointRuleRevision: 2,
       pointRuleSnapshot: {
         defaultPointsPerMinute: 15,
@@ -671,7 +671,7 @@ describe("point cycle API", () => {
           settlementRatio: 0.5,
           effectiveDurationMs: 110000,
           pointsPerMinute: 12,
-          points: 11,
+          points: 0.18,
           qualityRevision: 0,
         }),
       ]),
@@ -710,7 +710,7 @@ describe("point cycle API", () => {
       .findOneByOrFail({ submissionId: firstSubmissionId });
     expect(lockedItem.finalScore).toBe("80.0");
     expect(lockedItem.effectiveDurationMs).toBe("110000");
-    expect(lockedItem.points).toBe("11.00");
+    expect(lockedItem.points).toBe("0.18");
     expect(
       await dataSource.getRepository(PointCycleAdjustmentEntity).countBy({
         submissionId: firstSubmissionId,
@@ -730,7 +730,7 @@ describe("point cycle API", () => {
       id: created.body.cycle.id,
       submissionCount: 2,
       effectiveDurationMs: 230000,
-      totalPoints: 26,
+      totalPoints: 0.43,
     });
     expect(listed.body.cycles[0].items).toEqual(
       expect.arrayContaining([
@@ -739,7 +739,7 @@ describe("point cycle API", () => {
           finalScore: 80,
           settlementRatio: 0.5,
           effectiveDurationMs: 110000,
-          points: 11,
+          points: 0.18,
         }),
       ]),
     );
@@ -750,7 +750,7 @@ describe("point cycle API", () => {
       .expect(200);
     expect(fetched.body.cycle).toMatchObject({
       effectiveDurationMs: 230000,
-      totalPoints: 26,
+      totalPoints: 0.43,
     });
     expect(fetched.body.cycle.items).toEqual(listed.body.cycles[0].items);
 
@@ -773,7 +773,7 @@ describe("point cycle API", () => {
       "0.5000",
       "1.83",
       "12.0000",
-      "11.00",
+      "0.18",
     ]);
   });
 
@@ -787,7 +787,7 @@ describe("point cycle API", () => {
     expect(leader.body.cycles[0]).toMatchObject({
       submissionCount: 1,
       effectiveDurationMs: 110000,
-      totalPoints: 11,
+      totalPoints: 0.18,
     });
     expect(
       leader.body.cycles[0].items.map((item: { teamId: string }) => item.teamId),
@@ -804,7 +804,7 @@ describe("point cycle API", () => {
         .find((row) => row.includes("SUB-PC-01,kitchen-a.mp4"))
         ?.split(",")
         .slice(11, 16),
-    ).toEqual(["80.0", "0.5000", "1.83", "12.0000", "11.00"]);
+    ).toEqual(["80.0", "0.5000", "1.83", "12.0000", "0.18"]);
 
     const leaderGet = await request(app.getHttpServer())
       .get(`/api/v1/point-cycles/${leader.body.cycles[0].id}`)
@@ -813,13 +813,13 @@ describe("point cycle API", () => {
     expect(leaderGet.body.cycle).toMatchObject({
       submissionCount: 1,
       effectiveDurationMs: 110000,
-      totalPoints: 11,
+      totalPoints: 0.18,
     });
     expect(leaderGet.body.cycle.items).toEqual([
       expect.objectContaining({
         submissionId: firstSubmissionId,
         finalScore: 80,
-        points: 11,
+        points: 0.18,
       }),
     ]);
 
@@ -831,14 +831,14 @@ describe("point cycle API", () => {
     expect(collector.body.cycles[0]).toMatchObject({
       submissionCount: 1,
       effectiveDurationMs: 110000,
-      totalPoints: 11,
+      totalPoints: 0.18,
     });
     expect(collector.body.cycles[0].items).toEqual([
       expect.objectContaining({
         submissionId: firstSubmissionId,
         finalScore: 80,
         settlementRatio: 0.5,
-        points: 11,
+        points: 0.18,
       }),
     ]);
     const collectorGet = await request(app.getHttpServer())
@@ -848,7 +848,7 @@ describe("point cycle API", () => {
     expect(collectorGet.body.cycle).toMatchObject({
       submissionCount: 1,
       effectiveDurationMs: 110000,
-      totalPoints: 11,
+      totalPoints: 0.18,
     });
     const collectorExport = await request(app.getHttpServer())
       .get(
@@ -864,7 +864,7 @@ describe("point cycle API", () => {
         .find((row) => row.includes("SUB-PC-01,kitchen-a.mp4"))
         ?.split(",")
         .slice(11, 16),
-    ).toEqual(["80.0", "0.5000", "1.83", "12.0000", "11.00"]);
+    ).toEqual(["80.0", "0.5000", "1.83", "12.0000", "0.18"]);
 
     const otherCookie = await login("point-other");
     const other = await request(app.getHttpServer())
@@ -874,7 +874,7 @@ describe("point cycle API", () => {
     expect(other.body.cycle).toMatchObject({
       submissionCount: 1,
       effectiveDurationMs: 120000,
-      totalPoints: 15,
+      totalPoints: 0.25,
     });
     expect(other.body.cycle.items).toEqual([
       expect.objectContaining({ submissionId: "SUB-PC-03" }),
@@ -886,7 +886,7 @@ describe("point cycle API", () => {
     const collectorCookie = await login("point-collector");
     const leaderCookie = await login("point-leader");
 
-    // 前序用例已锁定周期：SUB-PC-01（积分数采 11 元）、SUB-PC-03（二队数采 15 元）
+    // 前序用例已锁定周期：SUB-PC-01（积分数采 0.18 元）、SUB-PC-03（二队数采 0.25 元）
     const listed = await request(app.getHttpServer())
       .get("/api/v1/point-cycles")
       .set("Cookie", adminCookie)
@@ -902,8 +902,8 @@ describe("point cycle API", () => {
       .expect(200);
     expect(before.body.balance).toMatchObject({
       ownerName: "积分数采",
-      totalBalance: 11,
-      settlingBalance: 11,
+      totalBalance: 0.18,
+      settlingBalance: 0.18,
       availableBalance: 0,
       withdrawnBalance: 0,
       cumulativeWithdrawn: 0,
@@ -925,9 +925,9 @@ describe("point cycle API", () => {
       .set("Cookie", collectorCookie)
       .expect(200);
     expect(after.body.balance).toMatchObject({
-      totalBalance: 11,
+      totalBalance: 0.18,
       settlingBalance: 0,
-      availableBalance: 11,
+      availableBalance: 0.18,
     });
     const txTypes = (after.body.transactions as Array<{ type: string }>).map(
       (item) => item.type,
@@ -939,14 +939,14 @@ describe("point cycle API", () => {
       .post("/api/v1/wallet/withdraw")
       .set("Origin", WEB_ORIGIN)
       .set("Cookie", collectorCookie)
-      .send({ amount: 5, remark: "测试提现" })
+      .send({ amount: 0.1, remark: "测试提现" })
       .expect(200);
     expect(withdrawn.body.balance).toMatchObject({
-      totalBalance: 11,
+      totalBalance: 0.18,
       settlingBalance: 0,
-      availableBalance: 6,
-      withdrawnBalance: 5,
-      cumulativeWithdrawn: 5,
+      availableBalance: 0.08,
+      withdrawnBalance: 0.1,
+      cumulativeWithdrawn: 0.1,
     });
 
     // 超额提现被拒绝
@@ -967,8 +967,8 @@ describe("point cycle API", () => {
         (item) => [item.ownerName, item.totalBalance],
       ),
     ).toEqual(expect.arrayContaining([
-      ["积分数采", 11],
-      ["二队数采", 15],
+      ["积分数采", 0.18],
+      ["二队数采", 0.25],
     ]));
 
     const leaderWallets = await request(app.getHttpServer())

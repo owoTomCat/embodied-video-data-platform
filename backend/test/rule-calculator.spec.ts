@@ -45,12 +45,13 @@ describe("published rule calculator", () => {
       coefficientBands,
     });
     expect(settlementRatio).toBe(0.5);
+    // 单价统一为元/小时：15 元/小时 × 2 分钟(1/30 小时) × 0.5 = 0.25 元
     expect(
       pointsForRule({
         pointsPerMinute: 15,
         effectiveDurationMs: 120_000,
         settlementRatio,
       }),
-    ).toBe(15);
+    ).toBe(0.25);
   });
 });
