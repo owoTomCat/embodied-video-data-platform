@@ -32,9 +32,7 @@ function greeting(): string {
   if (hour < 12) return "早上好";
   if (hour < 18) return "下午好";
   return "晚上好";
-}
-
-function statusOf(item: Submission): {
+}function statusOf(item: Submission): {
   label: string;
   tone: "success" | "danger" | "warning" | "info";
 } {
@@ -65,6 +63,11 @@ export function CollectorDashboard({
     "loading" | "ready" | "unavailable"
   >("loading");
   const [mode, setMode] = useState<PageMode>("loading");
+  // 问候语基于客户端本地时间，SSR/首帧输出固定占位避免 hydration mismatch
+  const [greetingText, setGreetingText] = useState("你好");
+  useEffect(() => {
+    setGreetingText(greeting());
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -149,7 +152,7 @@ export function CollectorDashboard({
       <div className="page-heading">
         <div>
           <p className="page-kicker">今天也是好数据的一天</p>
-          <h1 suppressHydrationWarning>{greeting()}，{currentAccount.displayName}</h1>
+          <h1 suppressHydrationWarning>{greetingText}，{currentAccount.displayName}</h1>
           <span>
             本月已上传 {month.length} 条 · 今日 {today.length} 条
           </span>
