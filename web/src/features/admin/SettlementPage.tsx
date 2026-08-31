@@ -32,6 +32,8 @@ import {
 import type { SceneCategoryPricing } from "../../scene-pricing/contracts";
 import { useInteractions } from "../../interactions/InteractionContext";
 import { PointRuleModal } from "./PointRuleModal";
+import { WalletDetailModal } from "./WalletDetailModal";
+import { WalletStatsSection } from "./WalletStatsSection";
 import { SettlementConfirmModal } from "./SettlementConfirmModal";
 import { CycleDetailModal } from "./CycleDetailModal";
 
@@ -56,6 +58,7 @@ export function SettlementPage() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [ruleOpen, setRuleOpen] = useState(false);
   const [detailCycle, setDetailCycle] = useState<BackendPointCycle | null>(null);
+  const [detailMember, setDetailMember] = useState<WalletBalance | null>(null);
   const [cycles, setCycles] = useState<BackendPointCycle[]>([]);
   const [wallets, setWallets] = useState<WalletBalance[]>([]);
   const [preview, setPreview] = useState<BackendPointCyclePreview | null>(null);
@@ -232,17 +235,19 @@ export function SettlementPage() {
         </tbody></table></div>
       </section>
       <section className="content-card table-card">
-        <div className="card-heading"><div><h2>数采人员钱包</h2><p>总余额（元）= 结算中 + 可提现 + 已提现</p></div></div>
-        <div className="table-scroll"><table className="data-table"><thead><tr><th>数采人员</th><th>总余额</th><th>结算中</th><th>可提现</th><th>已提现</th><th>累计提现</th></tr></thead><tbody>
+        <div className="card-heading"><div><h2>数采人员钱包</h2><p>总余额（元）= 结算中 + 可提现 + 已提现；点击「提现记录」查看成员明细</p></div></div>
+        <div className="table-scroll"><table className="data-table"><thead><tr><th>数采人员</th><th>总余额</th><th>结算中</th><th>可提现</th><th>已提现</th><th>累计提现</th><th /></tr></thead><tbody>
           {wallets.map((wallet) => (
-            <tr key={wallet.ownerId}><td><strong>{wallet.ownerName}</strong></td><td><strong>{wallet.totalBalance.toFixed(2)} 元</strong></td><td>{wallet.settlingBalance.toFixed(2)} 元</td><td>{wallet.availableBalance.toFixed(2)} 元</td><td>{wallet.withdrawnBalance.toFixed(2)} 元</td><td>{wallet.cumulativeWithdrawn.toFixed(2)} 元</td></tr>
+            <tr key={wallet.ownerId}><td><strong>{wallet.ownerName}</strong></td><td><strong>{wallet.totalBalance.toFixed(2)} 元</strong></td><td>{wallet.settlingBalance.toFixed(2)} 元</td><td>{wallet.availableBalance.toFixed(2)} 元</td><td>{wallet.withdrawnBalance.toFixed(2)} 元</td><td>{wallet.cumulativeWithdrawn.toFixed(2)} 元</td><td><button className="table-action" onClick={() => setDetailMember(wallet)}>提现记录</button></td></tr>
           ))}
-          {wallets.length === 0 && <tr><td colSpan={6}>暂无钱包数据</td></tr>}
+          {wallets.length === 0 && <tr><td colSpan={7}>暂无钱包数据</td></tr>}
         </tbody></table></div>
       </section>
+      <WalletStatsSection />
       <SettlementConfirmModal open={confirmOpen} onClose={() => setConfirmOpen(false)} returnFocusRef={triggerRef} preview={preview} onCreated={handleCreated} />
       <PointRuleModal open={ruleOpen} currentRule={pointRule ?? undefined} onCreated={setPointRule} onClose={() => setRuleOpen(false)} returnFocusRef={ruleTriggerRef} />
       {detailCycle && <CycleDetailModal open cycle={detailCycle} onClose={() => setDetailCycle(null)} returnFocusRef={triggerRef} />}
+      {detailMember && <WalletDetailModal member={detailMember} onClose={() => setDetailMember(null)} returnFocusRef={triggerRef} />}
     </div>
   );
 }

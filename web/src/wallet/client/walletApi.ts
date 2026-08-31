@@ -1,4 +1,10 @@
-import type { WalletBalance, WalletTransaction, WithdrawInput } from "../contracts";
+import type {
+  WalletBalance,
+  WalletFlowPoint,
+  WalletTeamStat,
+  WalletTransaction,
+  WithdrawInput,
+} from "../contracts";
 
 export class WalletApiError extends Error {
   constructor(
@@ -69,4 +75,44 @@ export async function withdrawWallet(input: WithdrawInput): Promise<WalletBalanc
     body: JSON.stringify(input),
   });
   return result.balance;
+}
+
+/** 指定成员的钱包流水（管理员查看任意成员 / 团长查看本队成员） */
+export async function listMemberTransactions(
+  ownerId: string,
+): Promise<WalletTransaction[]> {
+  const result = await requestJson<{ transactions: WalletTransaction[] }>(
+    `/wallet/transactions?ownerId=${encodeURIComponent(ownerId)}`,
+  );
+  return result.transactions;
+}
+
+/** 流水统计（日/周/月聚合，管理员） */
+export async function getWalletFlowStats(
+  bucket: "day" | "week" | "month",
+  from?: string,
+  to?: string,
+): Promise<WalletFlowPoint[]> {
+  const params = new URLSearchParams({ bucket });
+  if (from) params.set("from", from);
+  if (to) params.set("to", to);
+  const result = await requestJson<{ flow: WalletFlowPoint[] }>(
+    `/wallet/stats/flow?${params.toString()}`,
+  );
+  return result.flow;
+}
+
+/** 团队流水分布（管理员） */
+export async function getWalletTeamStats(
+  from?: string,
+  to?: string,
+): Promise<WalletTeamStat[]> {
+  const params = new URLSearchParams();
+  if (from) params.set("from", from);
+  if (to) params.set("to", to);
+  const suffix = params.toString();
+  const result = await requestJson<{ teams: WalletTeamStat[] }>(
+    `/wallet/stats/teams${suffix ? `?${suffix}` : ""}`,
+  );
+  return result.teams;
 }

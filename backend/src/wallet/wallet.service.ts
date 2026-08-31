@@ -286,6 +286,83 @@ export class WalletService {
       createdAt: row.createdAt.getTime(),
     }));
   }
+
+  // ---------- 流水统计（管理员监控） ----------
+
+  /**
+   * 按日/周/月聚合全平台钱包流水（lock=结算中流入 / settle=结算转可提现 / withdraw=提现流出，带符号）。
+   * 供管理端折线图使用（悬浮显示各类型明细）。
+   */
+  async statsFlow(input: {
+    bucket: "day" | "week" | "month";
+    from?: string;
+    to?: string;
+  }): Promise<
+    Array<{ bucket: string; lock: number; settle: number; withdraw: number }>
+  > {
+    const from = input.from ? new Date(input.from) : new Date("1970-01-01");
+    const to = input.to ? new Date(input.to) : new Date();
+    const rows = await this.transactions.query(
+      `SELECT
+         to_char(date_trunc($1, "created_at"), 'YYYY-MM-DD') AS bucket,
+         COALESCE(SUM(amount) FILTER (WHERE type = 'lock'), 0)::float AS lock,
+         COALESCE(SUM(amount) FILTER (WHERE type = 'settle'), 0)::float AS settle,
+         COALESCE(SUM(amount) FILTER (WHERE type = 'withdraw'), 0)::float AS withdraw
+       FROM wallet_transactions
+       WHERE "created_at" >= $2 AND "created_at" <= $3
+       GROUP BY 1
+       ORDER BY 1`,
+      [input.bucket, from, to],
+    );
+    return rows.map((row: Record<string, unknown>) => ({
+      bucket: String(row.bucket),
+      lock: Number(row.lock) || 0,
+      settle: Number(row.settle) || 0,
+      withdraw: Number(row.withdraw) || 0,
+    }));
+  }
+
+  /**
+   * 按团队聚合全平台钱包流水（团队成员归属）。
+   * 供管理端团队分布饼图使用（饼图用 settle 占比，标注显示各类型明细）。
+   */
+  async statsByTeam(input: {
+    from?: string;
+    to?: string;
+  }): Promise<
+    Array<{
+      teamId: string | null;
+      teamName: string;
+      lock: number;
+      settle: number;
+      withdraw: number;
+    }>
+  > {
+    const from = input.from ? new Date(input.from) : new Date("1970-01-01");
+    const to = input.to ? new Date(input.to) : new Date();
+    const rows = await this.transactions.query(
+      `SELECT
+         team.id AS team_id,
+         COALESCE(team.name, '未归属团队') AS team_name,
+         COALESCE(SUM(t.amount) FILTER (WHERE t.type = 'lock'), 0)::float AS lock,
+         COALESCE(SUM(t.amount) FILTER (WHERE t.type = 'settle'), 0)::float AS settle,
+         COALESCE(SUM(t.amount) FILTER (WHERE t.type = 'withdraw'), 0)::float AS withdraw
+       FROM wallet_transactions t
+       JOIN users u ON u.id = t.owner_id
+       LEFT JOIN teams team ON team.id = u.team_id
+       WHERE t."created_at" >= $1 AND t."created_at" <= $2
+       GROUP BY team.id, team.name
+       ORDER BY settle DESC`,
+      [from, to],
+    );
+    return rows.map((row: Record<string, unknown>) => ({
+      teamId: row.team_id === null ? null : String(row.team_id),
+      teamName: String(row.team_name),
+      lock: Number(row.lock) || 0,
+      settle: Number(row.settle) || 0,
+      withdraw: Number(row.withdraw) || 0,
+    }));
+  }
 }
 
 export { decimal as walletDecimal, numberOr as walletNumber };

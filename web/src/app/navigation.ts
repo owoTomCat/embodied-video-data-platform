@@ -18,6 +18,7 @@ import {
   Tags,
   Upload,
   Users,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 import type { Role } from "../domain/types";
@@ -96,6 +97,7 @@ export const navigationByRole: Record<Role, NavigationGroup[]> = {
       items: [
         { label: "团队分析", path: "/team/analytics", icon: BarChart3 },
         { label: "团队金额", path: "/team/income", icon: CircleDollarSign },
+        { label: "团队钱包", path: "/team/wallet", icon: Wallet },
       ],
     },
   ],

@@ -18,6 +18,7 @@ const exactPathsByRole: Record<Role, ReadonlySet<string>> = {
     "/team/review",
     "/team/analytics",
     "/team/income",
+    "/team/wallet",
   ]),
   admin: new Set([
     "/admin",

@@ -2982,3 +2982,109 @@ button:disabled { cursor: not-allowed; opacity: .56; }
   color: #5b6b82;
   font-size: 11px;
 }
+
+/* ===== 钱包：三卡汇总 ===== */
+.wallet-summary-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+}
+.wallet-summary-card {
+  display: grid;
+  gap: 4px;
+  padding: 18px;
+  text-align: left;
+  background: #fbfcfe;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+.wallet-summary-card:hover { border-color: #9db6ec; }
+.wallet-summary-card.active {
+  border-color: #4774df;
+  background: #f3f7ff;
+  box-shadow: 0 0 0 3px rgb(71 116 223 / 10%);
+}
+.wallet-summary-icon {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  color: #4774df;
+  background: #e8efff;
+}
+.wallet-summary-label { color: #5b6b82; font-size: 12px; font-weight: 600; }
+.wallet-summary-card strong { color: #1f2a3d; font-size: 20px; letter-spacing: -0.3px; }
+.wallet-summary-card small { color: #97a2b4; font-size: 10px; }
+
+/* ===== 钱包统计（折线/饼图） ===== */
+.wallet-stats-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(260px, 1fr);
+  gap: 16px;
+  margin-top: 6px;
+}
+.wallet-stats-panel { min-width: 0; }
+.wallet-stats-panel h3 { color: #334159; font-size: 12.5px; margin-bottom: 8px; }
+.wallet-team-legend {
+  display: grid;
+  gap: 5px;
+  margin-top: 8px;
+}
+.wallet-team-legend span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  color: #5b6b82;
+}
+.wallet-team-legend i {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  flex: none;
+}
+.wallet-team-legend em {
+  margin-left: auto;
+  font-style: normal;
+  color: #97a2b4;
+  font-size: 10px;
+}
+
+/* ===== 钱包详情 Modal ===== */
+.wallet-detail-modal { display: grid; gap: 14px; }
+.wallet-detail-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+}
+.wallet-detail-summary span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fbfcfe;
+  color: #5b6b82;
+  font-size: 11px;
+}
+.wallet-detail-summary strong { margin-left: auto; color: #1f2a3d; font-size: 13px; }
+.wallet-detail-modal h3 { color: #334159; font-size: 12.5px; }
+
+/* ===== 团队钱包页 ===== */
+.team-wallet-metric {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+}
+.team-wallet-metric div { display: grid; gap: 2px; }
+.team-wallet-metric strong { color: #1f2a3d; font-size: 15px; }
+.team-wallet-metric small { color: #97a2b4; font-size: 10px; }
+.wallet-detail-row td { background: #f7f9fc; }
+.wallet-detail-inner { padding: 14px 16px; display: grid; gap: 10px; }
+.wallet-detail-inner h3 { color: #334159; font-size: 12px; }

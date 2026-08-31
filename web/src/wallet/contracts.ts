@@ -23,3 +23,20 @@ export type WithdrawInput = {
   amount: number;
   remark?: string;
 };
+
+/** 流水统计点（日/周/月聚合；withdraw 为负值=流出） */
+export type WalletFlowPoint = {
+  bucket: string;
+  lock: number;
+  settle: number;
+  withdraw: number;
+};
+
+/** 团队流水分布（饼图数据） */
+export type WalletTeamStat = {
+  teamId: string | null;
+  teamName: string;
+  lock: number;
+  settle: number;
+  withdraw: number;
+};

@@ -8,7 +8,16 @@ import {
   UseFilters,
   UseGuards,
 } from "@nestjs/common";
-import { IsNumber, IsOptional, IsString, Max, MaxLength, Min } from "class-validator";
+import {
+  IsDateString,
+  IsIn,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from "class-validator";
 
 import type { PublicUser } from "../auth/auth.types.js";
 import { CurrentUser } from "../auth/current-user.decorator.js";
@@ -27,6 +36,29 @@ export class WithdrawWalletDto {
   @IsString()
   @MaxLength(2_000)
   remark?: string;
+}
+
+export class WalletFlowStatsQueryDto {
+  @IsIn(["day", "week", "month"])
+  bucket!: "day" | "week" | "month";
+
+  @IsOptional()
+  @IsDateString({}, { message: "from 必须是 ISO 日期" })
+  from?: string;
+
+  @IsOptional()
+  @IsDateString({}, { message: "to 必须是 ISO 日期" })
+  to?: string;
+}
+
+export class WalletTeamStatsQueryDto {
+  @IsOptional()
+  @IsDateString({}, { message: "from 必须是 ISO 日期" })
+  from?: string;
+
+  @IsOptional()
+  @IsDateString({}, { message: "to 必须是 ISO 日期" })
+  to?: string;
 }
 
 @Controller("wallet")
@@ -60,6 +92,30 @@ export class WalletController {
         ? ownerId
         : actor.id;
     return { transactions: await this.wallet.listTransactions(target) };
+  }
+
+  /** 流水统计（日/周/月聚合，仅管理员）——折线图数据 */
+  @Get("stats/flow")
+  async statsFlow(
+    @CurrentUser() actor: PublicUser,
+    @Query() query: WalletFlowStatsQueryDto,
+  ) {
+    if (actor.role !== "admin") {
+      return { flow: [] };
+    }
+    return { flow: await this.wallet.statsFlow(query) };
+  }
+
+  /** 团队流水分布（仅管理员）——饼图数据 */
+  @Get("stats/teams")
+  async statsTeams(
+    @CurrentUser() actor: PublicUser,
+    @Query() query: WalletTeamStatsQueryDto,
+  ) {
+    if (actor.role !== "admin") {
+      return { teams: [] };
+    }
+    return { teams: await this.wallet.statsByTeam(query) };
   }
 
   /** 提现：从可提现余额转出，记录已提现与累计提现 */

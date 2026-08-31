@@ -23,7 +23,12 @@ import {
   listPointCycles,
   previewPointCycle,
 } from "../../points/client/pointCycleApi";
-import { listWallets } from "../../wallet/client/walletApi";
+import {
+  getWalletFlowStats,
+  getWalletTeamStats,
+  listMemberTransactions,
+  listWallets,
+} from "../../wallet/client/walletApi";
 import {
   listSceneCategoryPricing,
   updateSceneCategoryPrice,
@@ -32,6 +37,9 @@ import { accountForRole, demoAccounts } from "../../test/accountFixtures";
 
 vi.mock("../../wallet/client/walletApi", () => ({
   listWallets: vi.fn(),
+  listMemberTransactions: vi.fn(),
+  getWalletFlowStats: vi.fn(),
+  getWalletTeamStats: vi.fn(),
 }));
 
 vi.mock("../../scene-pricing/client/scenePricingApi", () => ({
@@ -76,6 +84,9 @@ const getPointRuleMock = vi.mocked(getPointRule);
 const createPointRuleMock = vi.mocked(createPointRule);
 const adjustPointCycleItemMock = vi.mocked(adjustPointCycleItem);
 const listWalletsMock = vi.mocked(listWallets);
+const listMemberTransactionsMock = vi.mocked(listMemberTransactions);
+const getWalletFlowStatsMock = vi.mocked(getWalletFlowStats);
+const getWalletTeamStatsMock = vi.mocked(getWalletTeamStats);
 const listSceneCategoryPricingMock = vi.mocked(listSceneCategoryPricing);
 const updateSceneCategoryPriceMock = vi.mocked(updateSceneCategoryPrice);
 const listDeliveryPackagesMock = vi.mocked(listDeliveryPackages);
@@ -103,6 +114,9 @@ describe("settlement actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     listWalletsMock.mockResolvedValue([]);
+    listMemberTransactionsMock.mockResolvedValue([]);
+    getWalletFlowStatsMock.mockResolvedValue([]);
+    getWalletTeamStatsMock.mockResolvedValue([]);
     listSceneCategoryPricingMock.mockResolvedValue([
       { categoryKey: "family", name: "家庭", pricePerHour: 20, description: "", updatedAt: 0 },
       { categoryKey: "office", name: "办公室", pricePerHour: 25, description: "", updatedAt: 0 },

@@ -33,6 +33,7 @@ import { MembersPage } from "../features/team/MembersPage";
 import { ReviewPage } from "../features/team/ReviewPage";
 import { TeamAnalyticsPage } from "../features/team/TeamAnalyticsPage";
 import { TeamIncomePage } from "../features/team/TeamIncomePage";
+import { TeamWalletPage } from "../features/team/TeamWalletPage";
 import { TeamSubmissionsPage } from "../features/team/TeamSubmissionsPage";
 import { DashboardShell } from "../layout/DashboardShell";
 import { InteractionProvider } from "../interactions/InteractionContext";
@@ -111,6 +112,7 @@ function AuthenticatedPlatformContent({
     else if (safePath === "/team/review") page = <ReviewPage />;
     else if (safePath === "/team/analytics") page = <TeamAnalyticsPage />;
     else if (safePath === "/team/income") page = <TeamIncomePage />;
+    else if (safePath === "/team/wallet") page = <TeamWalletPage />;
     else page = <TeamDashboard navigate={navigate} />;
   } else if (currentAccount.role === "admin") {
     if (safePath === "/admin/submissions") page = <SubmissionsAdminPage navigate={navigate} />;

@@ -9,17 +9,20 @@ import {
   Wallet,
 } from "lucide-react";
 
-import { MetricCard } from "../../components/MetricCard";
-import { StatusBadge } from "../../components/StatusBadge";
 import { useInteractions } from "../../interactions/InteractionContext";
 import { useIdentity } from "../../auth/client/IdentityContext";
+import { StatusBadge } from "../../components/StatusBadge";
 import {
   getMyWallet,
   withdrawWallet,
   type WalletDetail,
 } from "../../wallet/client/walletApi";
+import type { WalletTransaction } from "../../wallet/contracts";
 
 type PageMode = "loading" | "live" | "unavailable";
+
+/** 明细视图：结算中 / 可提现 / 累计赚取 */
+type DetailView = "settling" | "available" | "earned";
 
 const emptyWallet: WalletDetail = {
   balance: {
@@ -50,11 +53,38 @@ function transactionTone(type: string): "success" | "info" | "warning" {
   return "warning";
 }
 
+/** 累计赚取 = 可提现 + 已提现（不含结算中） */
+function earnedTotal(balance: WalletDetail["balance"]): number {
+  return Math.round((balance.availableBalance + balance.withdrawnBalance) * 100) / 100;
+}
+
+const viewMeta: Record<
+  DetailView,
+  { label: string; description: string; types: WalletTransaction["type"][] }
+> = {
+  settling: {
+    label: "结算中",
+    description: "已提交数据、锁定但尚未结算的金额（对应「锁定入结算中」流水）",
+    types: ["lock"],
+  },
+  available: {
+    label: "可提现",
+    description: "已结算确认、尚未提现的金额（对应「结算转可提现」流水）",
+    types: ["settle"],
+  },
+  earned: {
+    label: "累计赚取",
+    description: "总共赚到的金额（含已提现，不含结算中）——对应结算与提现流水",
+    types: ["settle", "withdraw"],
+  },
+};
+
 export function EarningsPage() {
   const { notify } = useInteractions();
   const { currentAccount } = useIdentity();
   const [wallet, setWallet] = useState<WalletDetail>(emptyWallet);
   const [mode, setMode] = useState<PageMode>("loading");
+  const [view, setView] = useState<DetailView>("settling");
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [withdrawRemark, setWithdrawRemark] = useState("");
   const [withdrawing, setWithdrawing] = useState(false);
@@ -78,6 +108,7 @@ export function EarningsPage() {
   }, [currentAccount.id]);
 
   const balance = wallet.balance;
+  const earned = earnedTotal(balance);
 
   async function submitWithdraw(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -131,7 +162,10 @@ export function EarningsPage() {
     }
   }
 
-  const transactions = useMemo(() => wallet.transactions, [wallet.transactions]);
+  const viewTransactions = useMemo(() => {
+    const allowed = viewMeta[view].types;
+    return wallet.transactions.filter((item) => allowed.includes(item.type));
+  }, [wallet.transactions, view]);
 
   return (
     <div className="page-stack">
@@ -139,7 +173,7 @@ export function EarningsPage() {
         <div>
           <p className="page-kicker">个人钱包账户</p>
           <h1>钱包</h1>
-          <span>锁定任务进入「结算中」，3 天后自动结算为「可提现」金额</span>
+          <span>点击下方金额卡片可查看对应明细；锁定任务进入「结算中」，3 天后自动结算为「可提现」</span>
         </div>
         <span className="live-pill">
           <i />
@@ -151,82 +185,91 @@ export function EarningsPage() {
         </span>
       </div>
 
-      <div className="metric-grid">
-        <MetricCard
-          label="总余额"
-          value={formatMoney(balance.totalBalance)}
-          detail="结算中 + 可提现 + 已提现"
-          icon={Wallet}
-          tone="violet"
-        />
-        <MetricCard
-          label="可提现"
-          value={formatMoney(balance.availableBalance)}
-          detail="已结算且可提取"
-          icon={CircleDollarSign}
-          tone="green"
-        />
-        <MetricCard
-          label="结算中"
-          value={formatMoney(balance.settlingBalance)}
-          detail="锁定中的任务金额，3 天后自动结算"
-          icon={Clock3}
-          tone="amber"
-        />
-        <MetricCard
-          label="已提现"
-          value={formatMoney(balance.withdrawnBalance)}
-          detail={`累计提现 ${formatMoney(balance.cumulativeWithdrawn)}`}
-          icon={Landmark}
-        />
+      <div className="wallet-summary-cards">
+        <button
+          type="button"
+          className={`wallet-summary-card${view === "settling" ? " active" : ""}`}
+          onClick={() => setView("settling")}
+          aria-pressed={view === "settling"}
+        >
+          <span className="wallet-summary-icon"><Clock3 size={20} /></span>
+          <span className="wallet-summary-label">结算中</span>
+          <strong>{formatMoney(balance.settlingBalance)}</strong>
+          <small>提交数据还未结算</small>
+        </button>
+        <button
+          type="button"
+          className={`wallet-summary-card${view === "available" ? " active" : ""}`}
+          onClick={() => setView("available")}
+          aria-pressed={view === "available"}
+        >
+          <span className="wallet-summary-icon"><CircleDollarSign size={20} /></span>
+          <span className="wallet-summary-label">可提现</span>
+          <strong>{formatMoney(balance.availableBalance)}</strong>
+          <small>已结算确认、未提现</small>
+        </button>
+        <button
+          type="button"
+          className={`wallet-summary-card${view === "earned" ? " active" : ""}`}
+          onClick={() => setView("earned")}
+          aria-pressed={view === "earned"}
+        >
+          <span className="wallet-summary-icon"><Landmark size={20} /></span>
+          <span className="wallet-summary-label">累计赚取</span>
+          <strong>{formatMoney(earned)}</strong>
+          <small>含已提现，不含结算中</small>
+        </button>
       </div>
 
-      <section className="content-card wallet-withdraw-card">
-        <div className="card-heading">
-          <div>
-            <h2>提现</h2>
-            <p>从可提现余额转出，金额进入已提现并累加累计提现</p>
+      {view === "available" && (
+        <section className="content-card wallet-withdraw-card">
+          <div className="card-heading">
+            <div>
+              <h2>提现</h2>
+              <p>从可提现余额转出，金额进入已提现并累加累计提现</p>
+            </div>
           </div>
-        </div>
-        <form className="wallet-withdraw-form" onSubmit={submitWithdraw}>
-          <div className="input-with-suffix wallet-amount-field">
+          <form className="wallet-withdraw-form" onSubmit={submitWithdraw}>
+            <div className="input-with-suffix wallet-amount-field">
+              <input
+                aria-label="提现金额"
+                type="number"
+                inputMode="decimal"
+                min="0"
+                step="0.01"
+                value={withdrawAmount}
+                onChange={(event) => setWithdrawAmount(event.target.value)}
+                placeholder="请输入提现金额"
+                required
+              />
+              <span>元</span>
+            </div>
             <input
-              aria-label="提现金额"
-              type="number"
-              inputMode="decimal"
-              min="0"
-              step="0.01"
-              value={withdrawAmount}
-              onChange={(event) => setWithdrawAmount(event.target.value)}
-              placeholder="请输入提现金额"
-              required
+              aria-label="提现备注"
+              className="wallet-remark-field"
+              value={withdrawRemark}
+              onChange={(event) => setWithdrawRemark(event.target.value)}
+              placeholder="备注（可选）"
+              maxLength={200}
             />
-            <span>元</span>
-          </div>
-          <input
-            aria-label="提现备注"
-            className="wallet-remark-field"
-            value={withdrawRemark}
-            onChange={(event) => setWithdrawRemark(event.target.value)}
-            placeholder="备注（可选）"
-            maxLength={200}
-          />
-          <button
-            type="submit"
-            className="button button-primary"
-            disabled={withdrawing || mode !== "live"}
-          >
-            {withdrawing ? "提现中…" : "确认提现"}
-          </button>
-        </form>
-      </section>
+            <button
+              type="submit"
+              className="button button-primary"
+              disabled={withdrawing || mode !== "live"}
+            >
+              {withdrawing ? "提现中…" : "确认提现"}
+            </button>
+          </form>
+        </section>
+      )}
 
       <section className="content-card table-card">
         <div className="card-heading">
           <div>
-            <h2>钱包流水</h2>
-            <p>锁定、结算与提现的记录，含操作后总余额快照</p>
+            <h2>{viewMeta[view].label}明细</h2>
+            <p>{viewMeta[view].description}</p>
           </div>
+          <span className="live-pill"><i />共 {viewTransactions.length} 条</span>
         </div>
         <div className="table-scroll">
           <table className="data-table">
@@ -240,7 +283,7 @@ export function EarningsPage() {
               </tr>
             </thead>
             <tbody>
-              {transactions.map((item) => (
+              {viewTransactions.map((item) => (
                 <tr key={item.id}>
                   <td className="nowrap-cell">
                     {new Intl.DateTimeFormat("zh-CN", {
@@ -271,12 +314,12 @@ export function EarningsPage() {
                   </td>
                 </tr>
               ))}
-              {transactions.length === 0 && (
+              {viewTransactions.length === 0 && (
                 <tr>
                   <td colSpan={5}>
                     <div className="empty-state compact-empty">
                       <BadgeCheck size={20} />
-                      <span>暂无钱包流水，任务锁定后会在这里展示</span>
+                      <span>{viewMeta[view].label}暂无流水</span>
                     </div>
                   </td>
                 </tr>
