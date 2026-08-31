@@ -312,12 +312,21 @@ export class TasksService {
     return publicTask(task);
   }
 
-  /** 管理员：编辑任务；已发布任务编辑后需重新规范化并确认 */
+  /**
+   * 管理员：编辑任务。
+   * 若提示词相关内容（场景名 / 说明 / 原始要求）发生变化，保存后自动触发
+   * AI 要求规范化并直接落库：成功 → ready（任务立即可用），失败 → failed（不阻断编辑，可重试）。
+   * 返回 { task, autoNormalized, normalizationFailed } 供前端同步规范化信息。
+   */
   async update(
     actor: PublicUser,
     id: string,
     input: UpdateTaskDto,
-  ): Promise<PublicTask> {
+  ): Promise<{
+    task: PublicTask;
+    autoNormalized: boolean;
+    normalizationFailed: boolean;
+  }> {
     this.policy.requireManage(actor);
     const task = await this.findEntity(id);
     if (task.status === "closed") {
@@ -385,7 +394,64 @@ export class TasksService {
         normalizationStatus: saved.normalizationStatus,
       },
     );
-    return publicTask(saved);
+
+    // 提示词相关内容是否变化（场景名 / 说明 / 原始要求）
+    const promptChanged =
+      saved.sceneName !== before.sceneName ||
+      saved.description !== before.description ||
+      saved.rawRequirements !== before.rawRequirements;
+
+    if (!promptChanged) {
+      return {
+        task: publicTask(saved),
+        autoNormalized: false,
+        normalizationFailed: false,
+      };
+    }
+
+    let autoNormalized = false;
+    let normalizationFailed = false;
+    try {
+      const normalized = await this.normalizer.normalize({
+        sceneName: saved.sceneName,
+        description: saved.description,
+        rawRequirements: saved.rawRequirements,
+      });
+      if (normalized.requirements.length > 0) {
+        saved.normalizedRequirements = normalized;
+        saved.normalizationStatus = "ready";
+        autoNormalized = true;
+      } else {
+        saved.normalizationStatus = "failed";
+        normalizationFailed = true;
+      }
+    } catch {
+      // 规范化失败不阻断编辑：任务已保存，标记 failed 供前端提示重试
+      saved.normalizationStatus = "failed";
+      normalizationFailed = true;
+    }
+    const final = await this.tasks.save(saved);
+    await this.audit.record(
+      this.dataSource.manager,
+      actor,
+      "task_auto_normalize",
+      { id: final.id, name: final.title },
+      autoNormalized
+        ? `编辑后自动规范化提示词：${final.normalizedRequirements?.requirements.length ?? 0} 条要求（硬性 ${final.normalizedRequirements?.requirements.filter((item) => item.type === "hard").length ?? 0} 条）`
+        : `编辑后自动规范化提示词失败（任务已保存，可手动重试）`,
+      { id: final.id, title: before.title },
+      {
+        id: final.id,
+        normalizationStatus: final.normalizationStatus,
+        autoNormalized,
+        normalizationFailed,
+      },
+    );
+    return {
+      task: publicTask(final),
+      autoNormalized,
+      normalizationFailed,
+    };
   }
 
   /** 管理员：仅删除尚未发布的草稿，避免破坏任务与已提交数据的追溯关系。 */

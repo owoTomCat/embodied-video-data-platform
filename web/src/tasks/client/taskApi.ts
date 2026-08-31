@@ -119,14 +119,21 @@ export async function createTask(
   }).then(taskFrom);
 }
 
+/** 编辑任务结果：任务 + 自动规范化信息（供前端同步提示词规范化状态） */
+export type UpdateTaskResult = {
+  task: CollectionTask;
+  autoNormalized: boolean;
+  normalizationFailed: boolean;
+};
+
 export async function updateTask(
   id: string,
   input: UpdateTaskInput,
-): Promise<CollectionTask> {
-  return requestJson<{ task: CollectionTask }>(`tasks/${id}`, {
+): Promise<UpdateTaskResult> {
+  return requestJson<UpdateTaskResult>(`tasks/${id}`, {
     method: "PATCH",
     body: JSON.stringify(input),
-  }).then(taskFrom);
+  });
 }
 
 export async function deleteTask(id: string): Promise<void> {

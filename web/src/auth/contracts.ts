@@ -52,6 +52,7 @@ export type KnownAccountAuditAction =
   | "label_set_update"
   | "point_rule_publish"
   | "scene_pricing_update"
+  | "task_auto_normalize"
   | "public_site_snapshot_publish";
 
 export type AccountAuditAction =

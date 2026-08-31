@@ -228,7 +228,11 @@ describe("TasksPage", () => {
 
   it("opens the edit form with the selected task values", async () => {
     const user = userEvent.setup();
-    taskApi.update.mockResolvedValue({ ...draftTask, title: "厨房采集更新版" });
+    taskApi.update.mockResolvedValue({
+      task: { ...draftTask, title: "厨房采集更新版" },
+      autoNormalized: false,
+      normalizationFailed: false,
+    });
     renderAdmin();
     await screen.findByText("厨房数据采集");
 
@@ -248,6 +252,40 @@ describe("TasksPage", () => {
         expect.objectContaining({ title: "厨房采集更新版" }),
       );
     });
+    expect(await screen.findByText("任务已更新")).toBeVisible();
+  });
+
+  it("shows auto-normalization feedback after editing prompt-related fields", async () => {
+    const user = userEvent.setup();
+    taskApi.update.mockResolvedValue({
+      task: {
+        ...draftTask,
+        rawRequirements: "第一人称，出现双手，不得剪辑",
+        normalizationStatus: "ready",
+        normalizedRequirements: {
+          scene_description: "厨房场景",
+          requirements: [
+            { type: "hard", content: "必须第一人称拍摄" },
+            { type: "soft", content: "画面清晰" },
+          ],
+          quality_notes: [],
+        },
+      },
+      autoNormalized: true,
+      normalizationFailed: false,
+    });
+    renderAdmin();
+    await screen.findByText("厨房数据采集");
+
+    await user.click(screen.getAllByRole("button", { name: "编辑" })[0]!);
+    const requirementsInput = screen.getByLabelText(/任务要求/);
+    await user.clear(requirementsInput);
+    await user.type(requirementsInput, "第一人称，出现双手，不得剪辑");
+    await user.click(screen.getByRole("button", { name: "保存" }));
+
+    expect(
+      await screen.findByText(/任务已更新，提示词已自动规范化（2 条要求），可直接发布/),
+    ).toBeVisible();
   });
 
   it("deletes a draft task after explicit confirmation", async () => {

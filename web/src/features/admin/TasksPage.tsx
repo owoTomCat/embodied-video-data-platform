@@ -134,12 +134,26 @@ export function TasksPage() {
   }
 
   async function handleUpdate(id: string, input: UpdateTaskInput) {
-    const task = await updateTask(id, input);
+    const result = await updateTask(id, input);
     setTasks((current) =>
-      current.map((item) => (item.id === id ? task : item)),
+      current.map((item) => (item.id === id ? result.task : item)),
     );
-    notify("success", "任务已更新");
-    return task;
+    if (result.autoNormalized) {
+      const count =
+        result.task.normalizedRequirements?.requirements.length ?? 0;
+      notify(
+        "success",
+        `任务已更新，提示词已自动规范化（${count} 条要求），可直接发布`,
+      );
+    } else if (result.normalizationFailed) {
+      notify(
+        "error",
+        "任务已更新，但提示词自动规范化失败，请点击「规范化」手动重试",
+      );
+    } else {
+      notify("success", "任务已更新");
+    }
+    return result.task;
   }
 
   async function handleConfirm(id: string, input: ConfirmRequirementsInput) {
