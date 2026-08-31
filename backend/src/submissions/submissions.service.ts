@@ -161,6 +161,14 @@ type SubmissionListQuery = {
   page?: number;
   pageSize?: number;
   includeThumbnails?: boolean;
+  /** 提交时间范围（createdAt >= dateFrom，ISO 日期或时间） */
+  dateFrom?: string;
+  dateTo?: string;
+  /** 场景筛选（taskSceneName 匹配） */
+  scene?: string;
+  /** 排序字段：createdAt=提交时间 / finalScore=质量评分 */
+  sortBy?: "createdAt" | "finalScore";
+  sortOrder?: "asc" | "desc";
 };
 
 function decimal(value: number, digits: number): string {
@@ -940,7 +948,13 @@ export class SubmissionsService {
     const status = listStatus(input.status);
     const q = input.q?.trim();
     const taskId = input.taskId?.trim();
-    const idQuery = this.createListIdQuery(actor, status, q, taskId);
+    const idQuery = this.createListIdQuery(actor, status, q, taskId, {
+      scene: input.scene,
+      dateFrom: input.dateFrom,
+      dateTo: input.dateTo,
+      sortBy: input.sortBy,
+      sortOrder: input.sortOrder,
+    });
     const total = await idQuery.getCount();
     if (paged) {
       idQuery.skip((page - 1) * pageSize).take(pageSize);
@@ -1019,7 +1033,13 @@ export class SubmissionsService {
   async exportCsv(actor: PublicUser, input: SubmissionListQuery = {}) {
     const status = listStatus(input.status);
     const q = input.q?.trim();
-    const idQuery = this.createListIdQuery(actor, status, q);
+    const idQuery = this.createListIdQuery(actor, status, q, undefined, {
+      scene: input.scene,
+      dateFrom: input.dateFrom,
+      dateTo: input.dateTo,
+      sortBy: input.sortBy,
+      sortOrder: input.sortOrder,
+    });
     const total = await idQuery.getCount();
     if (total > MAX_SYNCHRONOUS_CSV_ROWS) {
       throw new PayloadTooLargeException({
@@ -2197,6 +2217,13 @@ export class SubmissionsService {
     status: SubmissionListStatus,
     q: string | undefined,
     taskId?: string,
+    extra: {
+      scene?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      sortBy?: "createdAt" | "finalScore";
+      sortOrder?: "asc" | "desc";
+    } = {},
   ) {
     const idQuery = this.submissions
       .createQueryBuilder("submission")
@@ -2225,11 +2252,39 @@ export class SubmissionsService {
       )
       .select("submission.id", "id")
       .addSelect("submission.createdAt", "created_at")
+      .addSelect("quality.finalScore", "final_score")
       .distinct(true);
     this.applyListScope(idQuery, actor);
     this.applyListFilters(idQuery, status, q, taskId);
+
+    // 场景筛选（提交时快照的任务场景名）
+    const scene = extra.scene?.trim();
+    if (scene) {
+      idQuery.andWhere("submission.taskSceneName = :scene", { scene });
+    }
+    // 提交时间范围
+    if (extra.dateFrom) {
+      idQuery.andWhere("submission.createdAt >= :dateFrom", {
+        dateFrom: new Date(extra.dateFrom),
+      });
+    }
+    if (extra.dateTo) {
+      idQuery.andWhere("submission.createdAt <= :dateTo", {
+        dateTo: new Date(extra.dateTo),
+      });
+    }
+
+    // 排序：提交时间 / 质量评分 × 升/降序
+    const order: "ASC" | "DESC" =
+      extra.sortOrder === "asc" ? "ASC" : "DESC";
+    if (extra.sortBy === "finalScore") {
+      return idQuery
+        .orderBy("quality.finalScore", order, "NULLS LAST")
+        .addOrderBy("submission.createdAt", "DESC")
+        .addOrderBy("submission.id", "DESC");
+    }
     return idQuery
-      .orderBy("submission.createdAt", "DESC")
+      .orderBy("submission.createdAt", order)
       .addOrderBy("submission.id", "DESC");
   }
 

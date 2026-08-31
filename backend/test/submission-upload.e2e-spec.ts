@@ -1829,4 +1829,138 @@ describe("submission multipart upload API", () => {
       }),
     ).toBe(1);
   });
+
+  it("filters and sorts the submission list by time, scene and score", async () => {
+    const prompt = await dataSource.getRepository(VideoQualityPromptVersionEntity).save({
+      id: "VQP-SORT-01",
+      revision: 99,
+      systemPrompt: "sort test prompt",
+      contentSha256: "a".repeat(64),
+      promptVersion: "qwen_video_qc_prompt_v1",
+      ruleVersion: "video_qc_v2",
+      outputSchema: "video_qc_result_v1",
+      initialModel: "qwen3.7-plus",
+      reviewModel: "qwen3.7-flash",
+      active: false,
+      createdByAccountId: "U-UPLOAD-ADMIN",
+      createdByName: "上传管理员",
+    });
+    const base = {
+      ownerId: "U-UPLOAD-COLLECTOR",
+      teamId: "TEAM-UPLOAD-01",
+      contentType: "video/mp4",
+      expectedSizeBytes: "1048576",
+      checksumSha256: "f".repeat(64),
+      uploadStatus: "uploaded",
+      processingStatus: "completed",
+      uploadedAt: new Date(),
+    } as const;
+    const seedIds = ["SUB-SORT-01", "SUB-SORT-02", "SUB-SORT-03"];
+    await dataSource.getRepository(SubmissionEntity).save([
+      {
+        ...base,
+        id: seedIds[0],
+        originalFileName: "sort-a.mp4",
+        objectKey: "uploads/sort-a.mp4",
+        taskSceneName: "家庭-厨房",
+        createdAt: new Date("2026-08-10T02:00:00.000Z"),
+      },
+      {
+        ...base,
+        id: seedIds[1],
+        originalFileName: "sort-b.mp4",
+        objectKey: "uploads/sort-b.mp4",
+        taskSceneName: "家庭-客厅",
+        createdAt: new Date("2026-08-12T02:00:00.000Z"),
+      },
+      {
+        ...base,
+        id: seedIds[2],
+        originalFileName: "sort-c.mp4",
+        objectKey: "uploads/sort-c.mp4",
+        taskSceneName: "家庭-厨房",
+        createdAt: new Date("2026-08-14T02:00:00.000Z"),
+      },
+    ]);
+    const scores = ["60.0", "90.0", "75.0"];
+    for (let index = 0; index < seedIds.length; index += 1) {
+      await dataSource.getRepository(VideoQualityResultEntity).save({
+        submissionId: seedIds[index],
+        status: "scored",
+        attempts: 1,
+        promptVersionId: prompt.id,
+        promptRevision: prompt.revision,
+        promptContentSha256: prompt.contentSha256,
+        systemPromptSnapshot: prompt.systemPrompt,
+        initialModel: prompt.initialModel,
+        reviewModel: prompt.reviewModel,
+        finalScore: scores[index],
+        settlementRatio: "0.7000",
+        invalidDurationMs: "0",
+        billableDurationMs: "10000",
+        summary: "排序测试",
+        modelRuns: [],
+        recommendations: [],
+        deductions: [],
+        reviewRequired: false,
+        reviewReasons: [],
+        normalizedResult: {},
+        rawModelResult: {},
+        completedAt: new Date(),
+      });
+    }
+
+    const adminCookie = await login("upload-admin");
+
+    // 质量评分降序：90 → 75 → 60
+    const byScore = await request(app.getHttpServer())
+      .get("/api/v1/submissions?sortBy=finalScore&sortOrder=desc&pageSize=10")
+      .set("Cookie", adminCookie)
+      .expect(200);
+    const scoreOrder = byScore.body.submissions
+      .filter((item: { id: string }) => seedIds.includes(item.id))
+      .map((item: { id: string; quality: { finalScore: string } | null }) => ({
+        id: item.id,
+        score: item.quality?.finalScore ?? null,
+      }));
+    expect(scoreOrder[0]).toMatchObject({ id: "SUB-SORT-02", score: 90 });
+    expect(scoreOrder[1]).toMatchObject({ id: "SUB-SORT-03", score: 75 });
+    expect(scoreOrder[2]).toMatchObject({ id: "SUB-SORT-01", score: 60 });
+
+    // 提交时间升序：08-10 → 08-12 → 08-14
+    const byTime = await request(app.getHttpServer())
+      .get("/api/v1/submissions?sortBy=createdAt&sortOrder=asc&pageSize=10")
+      .set("Cookie", adminCookie)
+      .expect(200);
+    const timeOrder = byTime.body.submissions
+      .filter((item: { id: string }) => seedIds.includes(item.id))
+      .map((item: { id: string }) => item.id);
+    expect(timeOrder).toEqual(["SUB-SORT-01", "SUB-SORT-02", "SUB-SORT-03"]);
+
+    // 场景筛选：家庭-厨房 → 只返回 01 与 03
+    const byScene = await request(app.getHttpServer())
+      .get("/api/v1/submissions?scene=%E5%AE%B6%E5%BA%AD-%E5%8E%A8%E6%88%BF&pageSize=10")
+      .set("Cookie", adminCookie)
+      .expect(200);
+    const sceneIds = byScene.body.submissions
+      .filter((item: { id: string }) => seedIds.includes(item.id))
+      .map((item: { id: string }) => item.id);
+    expect(sceneIds.sort()).toEqual(["SUB-SORT-01", "SUB-SORT-03"]);
+
+    // 提交时间范围：08-11 之后 → 只返回 02 与 03
+    const byDate = await request(app.getHttpServer())
+      .get("/api/v1/submissions?dateFrom=2026-08-11&pageSize=10")
+      .set("Cookie", adminCookie)
+      .expect(200);
+    const dateIds = byDate.body.submissions
+      .filter((item: { id: string }) => seedIds.includes(item.id))
+      .map((item: { id: string }) => item.id);
+    expect(dateIds.sort()).toEqual(["SUB-SORT-02", "SUB-SORT-03"]);
+
+    await Promise.all(
+      seedIds.map((id) =>
+        dataSource.getRepository(SubmissionEntity).delete({ id }),
+      ),
+    );
+  });
 });

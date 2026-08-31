@@ -3,6 +3,7 @@ import {
   ArrayMinSize,
   IsArray,
   IsBoolean,
+  IsDateString,
   IsIn,
   IsInt,
   IsNumber,
@@ -222,4 +223,30 @@ export class ListSubmissionsQueryDto {
   @IsBoolean()
   @Transform(({ value }) => value === true || value === "true" || value === "1")
   includeThumbnails?: boolean;
+
+  /** 提交时间范围起（createdAt >= dateFrom，ISO 日期或时间） */
+  @IsOptional()
+  @IsDateString({}, { message: "dateFrom 必须是 ISO 日期或时间" })
+  dateFrom?: string;
+
+  /** 提交时间范围止（createdAt <= dateTo，ISO 日期或时间） */
+  @IsOptional()
+  @IsDateString({}, { message: "dateTo 必须是 ISO 日期或时间" })
+  dateTo?: string;
+
+  /** 场景筛选（按提交时的任务场景名匹配） */
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  scene?: string;
+
+  /** 排序字段：createdAt=提交时间 / finalScore=质量评分 */
+  @IsOptional()
+  @IsIn(["createdAt", "finalScore"])
+  sortBy?: "createdAt" | "finalScore";
+
+  /** 排序方向 */
+  @IsOptional()
+  @IsIn(["asc", "desc"])
+  sortOrder?: "asc" | "desc";
 }

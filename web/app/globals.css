@@ -2968,3 +2968,10 @@ button:disabled { cursor: not-allowed; opacity: .56; }
   font-size: 11.5px;
   color: #334159;
 }
+
+/* ===== 提交时间列 ===== */
+.submitted-at-cell {
+  white-space: nowrap;
+  color: #5b6b82;
+  font-size: 11px;
+}

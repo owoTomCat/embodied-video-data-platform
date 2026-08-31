@@ -177,6 +177,14 @@ export type SearchSubmissionsInput = {
   page?: number;
   pageSize?: number;
   includeThumbnails?: boolean;
+  /** 提交时间范围（createdAt >= dateFrom，ISO 日期） */
+  dateFrom?: string;
+  dateTo?: string;
+  /** 场景筛选（taskSceneName 匹配） */
+  scene?: string;
+  /** 排序字段：createdAt=提交时间 / finalScore=质量评分 */
+  sortBy?: "createdAt" | "finalScore";
+  sortOrder?: "asc" | "desc";
 };
 
 export type LoadAllSubmissionsInput = Omit<
@@ -199,6 +207,11 @@ function buildSubmissionSearchParams(
   if (input.q?.trim()) params.set("q", input.q.trim());
   if (input.status && input.status !== "all") params.set("status", input.status);
   if (input.taskId && input.taskId !== "all") params.set("taskId", input.taskId);
+  if (input.dateFrom) params.set("dateFrom", input.dateFrom);
+  if (input.dateTo) params.set("dateTo", input.dateTo);
+  if (input.scene && input.scene !== "all") params.set("scene", input.scene);
+  if (input.sortBy) params.set("sortBy", input.sortBy);
+  if (input.sortOrder) params.set("sortOrder", input.sortOrder);
   if (input.includeThumbnails) params.set("includeThumbnails", "1");
   if (options.includePagination !== false && input.page !== undefined) {
     params.set("page", String(input.page));

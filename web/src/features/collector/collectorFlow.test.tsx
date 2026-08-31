@@ -522,8 +522,38 @@ describe("collector journey", () => {
       page: 1,
       pageSize: 20,
       includeThumbnails: true,
+      sortBy: "createdAt",
+      sortOrder: "desc",
     });
     expect(screen.queryByText("warehouse_packing_0803.mp4")).not.toBeInTheDocument();
+  });
+
+  it("filters by submission time and sorts by score on the data page", async () => {
+    const user = userEvent.setup();
+    renderCollector("/collector/submissions");
+
+    expect(await screen.findByText("kitchen_breakfast_0803.mov")).toBeVisible();
+    // 提交时间作为独立列展示
+    expect(screen.getByRole("columnheader", { name: "提交时间" })).toBeVisible();
+
+    // 切到「近 7 天」→ 携带 dateFrom/dateTo
+    await user.selectOptions(screen.getByLabelText("提交时间筛选"), "7d");
+    await waitFor(() => {
+      expect(searchSubmissions).toHaveBeenCalledWith(
+        expect.objectContaining({
+          dateFrom: expect.any(String),
+          dateTo: expect.any(String),
+        }),
+      );
+    });
+
+    // 切到「质量评分 · 降序」→ sortBy=finalScore / sortOrder=desc
+    await user.selectOptions(screen.getByLabelText("排序方式"), "finalScore-desc");
+    await waitFor(() => {
+      expect(searchSubmissions).toHaveBeenCalledWith(
+        expect.objectContaining({ sortBy: "finalScore", sortOrder: "desc" }),
+      );
+    });
   });
 
   it("shows and filters by the submission task source", async () => {
@@ -572,6 +602,8 @@ describe("collector journey", () => {
       page: 1,
       pageSize: 20,
       includeThumbnails: true,
+      sortBy: "createdAt",
+      sortOrder: "desc",
     });
   });
 

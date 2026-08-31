@@ -16,6 +16,44 @@ const PAGE_SIZE = 20;
 
 type ListMode = "loading" | "live" | "unavailable";
 
+/** 提交时间范围 → dateFrom/dateTo（本地时区整天） */
+function resolveDateRange(range: string): {
+  dateFrom?: string;
+  dateTo?: string;
+} {
+  if (range === "all") return {};
+  const now = new Date();
+  const end = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+    23,
+    59,
+    59,
+  );
+  if (range === "today") {
+    const start = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+      0,
+      0,
+      0,
+    );
+    return { dateFrom: start.toISOString(), dateTo: end.toISOString() };
+  }
+  const days = range === "7d" ? 7 : 30;
+  const start = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate() - days,
+    0,
+    0,
+    0,
+  );
+  return { dateFrom: start.toISOString(), dateTo: end.toISOString() };
+}
+
 function backendStatus(status: string, qualityOnly: boolean): string {
   if (qualityOnly && status === "all") return "reviewed";
   return status;
@@ -33,6 +71,9 @@ export function SubmissionsPage({
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [taskId, setTaskId] = useState("all");
+  const [dateRange, setDateRange] = useState("all");
+  const [scene, setScene] = useState("all");
+  const [sort, setSort] = useState("createdAt-desc");
   const [page, setPage] = useState(1);
   const [mode, setMode] = useState<ListMode>("loading");
   const [submissions, setSubmissions] = useState<Submission[]>([]);
@@ -47,8 +88,21 @@ export function SubmissionsPage({
       totalPages: 1,
     });
 
+  const sceneOptions = useMemo(
+    () => [
+      ...new Set(
+        taskSources
+          .map((source) => source.sceneName)
+          .filter((name): name is string => Boolean(name)),
+      ),
+    ],
+    [taskSources],
+  );
+
   useEffect(() => {
     let active = true;
+    const [sortBy, sortOrder] =
+      sort === "all" ? [] : (sort.split("-") as [string, string]);
     searchSubmissions({
       q: query,
       status: backendStatus(status, qualityOnly),
@@ -56,6 +110,11 @@ export function SubmissionsPage({
       pageSize: PAGE_SIZE,
       includeThumbnails: true,
       ...(taskId !== "all" ? { taskId } : {}),
+      ...resolveDateRange(dateRange),
+      ...(scene !== "all" ? { scene } : {}),
+      ...(sortBy === "createdAt" || sortBy === "finalScore"
+        ? { sortBy, sortOrder: sortOrder === "asc" ? "asc" : "desc" }
+        : {}),
     })
       .then((result) => {
         if (!active) return;
@@ -74,7 +133,7 @@ export function SubmissionsPage({
     return () => {
       active = false;
     };
-  }, [currentAccount.id, page, qualityOnly, query, status, taskId]);
+  }, [currentAccount.id, page, qualityOnly, query, status, taskId, dateRange, scene, sort]);
 
   const range = useMemo(() => {
     if (pagination.total === 0) return "0";
@@ -142,6 +201,22 @@ export function SubmissionsPage({
                 }
           }
           taskSources={taskSources}
+          dateRange={dateRange}
+          onDateRangeChange={(value) => {
+            setDateRange(value);
+            setPage(1);
+          }}
+          scene={scene}
+          onSceneChange={(value) => {
+            setScene(value);
+            setPage(1);
+          }}
+          sceneOptions={sceneOptions}
+          sort={sort}
+          onSortChange={(value) => {
+            setSort(value);
+            setPage(1);
+          }}
         />
         <div className="table-summary">
           <span>
@@ -157,6 +232,7 @@ export function SubmissionsPage({
           submissions={submissions}
           loading={mode === "loading"}
           showTaskSource={!qualityOnly}
+          showSubmittedAt
           onAction={view}
         />
         <div className="table-summary">
