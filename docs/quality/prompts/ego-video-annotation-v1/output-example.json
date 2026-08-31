@@ -1,0 +1,36 @@
+{
+  "schema_version": "ego_video_annotation_v1",
+  "video_id": "<video_id>",
+  "video_summary": "双手在桌面上折叠纸张，采样帧显示了部分操作过程。",
+  "scene": {
+    "coarse_label": "室内",
+    "fine_label": "桌面操作区",
+    "confidence": 0.9,
+    "evidence_timestamps_ms": [0, 5000]
+  },
+  "temporal_structure_type": "single_task",
+  "tasks": [
+    {
+      "start_ms": 0,
+      "end_ms": 15000,
+      "task_label": "折叠纸张",
+      "task_verb": "fold",
+      "task_object": "纸张",
+      "evidence_level": "direct_visual",
+      "evidence_timestamps_ms": [0, 5000, 10000],
+      "manipulated_objects": ["纸张"],
+      "tools": [],
+      "hand_mode": "both",
+      "interaction_primitives": ["grasp", "hold"],
+      "completion": "uncertain",
+      "result_observability": "partial",
+      "result_status": "unknown",
+      "visible_postcondition": "末帧可见纸张出现折痕，但无法确认完整目标。",
+      "result_evidence_timestamps_ms": [15000],
+      "failure_recovery": "not_assessable",
+      "uncertainty_reasons": ["采样帧不足以确认完整操作过程和最终结果"],
+      "confidence": 0.82
+    }
+  ],
+  "global_limitations": ["输入为稀疏采样帧，不能排除帧间短暂动作或失败"]
+}

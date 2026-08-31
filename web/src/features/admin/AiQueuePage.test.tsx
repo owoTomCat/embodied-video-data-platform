@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { InteractionProvider } from "../../interactions/InteractionContext";
 import {
   getQueueSnapshot,
+  getAnnotationOperations,
   reclaimWorkerTimeouts,
 } from "../../operations/client/operationsApi";
 import { rerunAiQuality, loadAllSubmissions } from "../../submissions/client/submissionApi";
@@ -12,7 +13,9 @@ import { AiQueuePage } from "./AiQueuePage";
 
 vi.mock("../../operations/client/operationsApi", () => ({
   getQueueSnapshot: vi.fn(),
+  getAnnotationOperations: vi.fn(),
   reclaimWorkerTimeouts: vi.fn(),
+  pruneInactiveWorkers: vi.fn(),
 }));
 
 vi.mock("../../submissions/client/submissionApi", async (importOriginal) => {
@@ -26,6 +29,7 @@ vi.mock("../../submissions/client/submissionApi", async (importOriginal) => {
 });
 
 const getQueueSnapshotMock = vi.mocked(getQueueSnapshot);
+const getAnnotationOperationsMock = vi.mocked(getAnnotationOperations);
 const reclaimWorkerTimeoutsMock = vi.mocked(reclaimWorkerTimeouts);
 const rerunAiQualityMock = vi.mocked(rerunAiQuality);
 const loadAllSubmissionsMock = vi.mocked(loadAllSubmissions);
@@ -42,6 +46,18 @@ describe("AiQueuePage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     loadAllSubmissionsMock.mockResolvedValue([]);
+    getAnnotationOperationsMock.mockResolvedValue({
+      calculatedAt: Date.now(),
+      summary: {
+        runs: { historicalTotal: 0, queued: 0, running: 0, retryScheduled: 0, succeeded: 0, systemFailed: 0, stuck: 0, cancelled: 0 },
+        reviews: { pending: 0, acceptedUnchanged: 0, acceptedCorrected: 0, rejected: 0, unableToJudge: 0 },
+        gate: { gateEvaluated: 0, eligible: 0, manualRequired: 0, autoAccepted: 0, auditPending: 0, auditCompleted: 0, publishedByAuto: 0, publishedByHuman: 0 },
+        usage: { scope: "all_reported_model_calls", providerCalls: 0, succeededCalls: 0, failedCalls: 0, callsWithReportedUsage: 0, totalReportedInputTokens: 0, totalReportedOutputTokens: 0, totalReportedTokens: 0, averageReportedModelLatencyMs: null, schemaRepairCalls: 0, targetedRepairCalls: 0, infrastructureRetries: 0 },
+      },
+      coverage: { eligibleSubmissions: 0, submissionsWithAnyRun: 0, submissionsWithSucceededRun: 0, submissionsHumanVerified: 0, anyRunRate: null, succeededRate: null, verifiedRate: null },
+      pagination: { page: 1, pageSize: 50, total: 0, totalPages: 0 },
+      runs: [],
+    });
     reclaimWorkerTimeoutsMock.mockResolvedValue({ reclaimed: [], stuck: [] });
     rerunAiQualityMock.mockResolvedValue({
       id: "SUB-019",
@@ -169,6 +185,66 @@ describe("AiQueuePage", () => {
     expect(aiRow).not.toBeNull();
     expect(within(aiRow as HTMLTableRowElement).getByText("AI 质检")).toBeVisible();
     expect(within(aiRow as HTMLTableRowElement).getByText("已发布")).toBeVisible();
+  });
+
+  it("renders independent annotation runs and opens the run-id review route", async () => {
+    const user = userEvent.setup();
+    const navigate = vi.fn();
+    getQueueSnapshotMock.mockRejectedValue(new Error("offline"));
+    getAnnotationOperationsMock.mockResolvedValue({
+      calculatedAt: Date.now(),
+      summary: {
+        runs: { historicalTotal: 2, queued: 0, running: 0, retryScheduled: 0, succeeded: 1, systemFailed: 1, stuck: 0, cancelled: 0 },
+        reviews: { pending: 1, acceptedUnchanged: 0, acceptedCorrected: 0, rejected: 0, unableToJudge: 0 },
+        gate: { gateEvaluated: 1, eligible: 0, manualRequired: 1, autoAccepted: 0, auditPending: 0, auditCompleted: 0, publishedByAuto: 0, publishedByHuman: 0 },
+        usage: { scope: "all_reported_model_calls", providerCalls: 1, succeededCalls: 1, failedCalls: 0, callsWithReportedUsage: 1, totalReportedInputTokens: 100, totalReportedOutputTokens: 20, totalReportedTokens: 120, averageReportedModelLatencyMs: 2_000, schemaRepairCalls: 0, targetedRepairCalls: 0, infrastructureRetries: 0 },
+      },
+      coverage: { eligibleSubmissions: 1, submissionsWithAnyRun: 1, submissionsWithSucceededRun: 1, submissionsHumanVerified: 0, anyRunRate: 1, succeededRate: 1, verifiedRate: 0 },
+      pagination: { page: 1, pageSize: 50, total: 1, totalPages: 1 },
+      runs: [{
+        id: "ANR-EXACT",
+        submissionId: "SUB-EXACT",
+        fileName: "exact.mp4",
+        executionStatus: "succeeded",
+        reviewStatus: "pending",
+        publicationStatus: "candidate_only",
+        trigger: "initial",
+        pipelineVersion: "pipeline-v1",
+        schemaVersion: "schema-v1",
+        evidencePolicyVersion: "evidence-v1",
+        model: "qwen-vl-max",
+        promptVersion: "prompt-v1",
+        attemptCount: 1,
+        fullModelAttempts: 1,
+        schemaRepairCalls: 0,
+        targetedRepairCalls: 0,
+        infrastructureRetryCount: 0,
+        providerCallCount: 1,
+        reviewRevision: 0,
+        autoEligibility: "manual_required",
+        autoGateVersion: "annotation_auto_gate_v1",
+        wouldAutoAccept: false,
+        autoAcceptEnabledSnapshot: false,
+        autoGateEvaluatedAt: Date.now() - 1_000,
+        auditStatus: "not_selected",
+        auditSelectedAt: null,
+        blockingReasons: [],
+        advisories: [],
+        repairs: [],
+        lastErrorCode: null,
+        lastErrorMessage: null,
+        queuedAt: Date.now() - 2_000,
+        startedAt: Date.now() - 1_500,
+        completedAt: Date.now() - 1_000,
+        createdAt: Date.now() - 2_000,
+        updatedAt: Date.now() - 1_000,
+      }],
+    });
+
+    render(<InteractionProvider><AiQueuePage navigate={navigate} /></InteractionProvider>);
+    expect(await screen.findByText("ANR-EXACT")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "打开复核" }));
+    expect(navigate).toHaveBeenCalledWith("/admin/ai/annotation-runs/ANR-EXACT/review");
   });
 
   it("reclaims timed out worker tasks and refreshes the live snapshot", async () => {

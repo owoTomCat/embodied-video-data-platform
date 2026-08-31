@@ -1,5 +1,7 @@
 import type {
   BackendOperationsStatus,
+  BackendAnnotationOperations,
+  AnnotationOperationsView,
   BackendQueueSnapshot,
   BackendWorkerReclaimResult,
 } from "../contracts";
@@ -56,6 +58,23 @@ async function requestJson<T>(
 
 export function getQueueSnapshot(): Promise<BackendQueueSnapshot> {
   return requestJson<BackendQueueSnapshot>("/operations/queue");
+}
+
+export function getAnnotationOperations(input: {
+  view: AnnotationOperationsView;
+  page: number;
+  pageSize?: number;
+  includeSummary: boolean;
+}): Promise<BackendAnnotationOperations> {
+  const parameters = new URLSearchParams({
+    view: input.view,
+    page: String(input.page),
+    pageSize: String(input.pageSize ?? 50),
+    includeSummary: String(input.includeSummary),
+  });
+  return requestJson<BackendAnnotationOperations>(
+    `/operations/annotation-runs?${parameters.toString()}`,
+  );
 }
 
 export function getOperationsStatus(): Promise<BackendOperationsStatus> {

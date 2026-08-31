@@ -52,6 +52,21 @@ function formatSeconds(seconds: number): string {
   return minutes > 0 ? `${minutes}分${String(rest).padStart(2, "0")}秒` : `${rest}秒`;
 }
 
+const completionLabels: Record<string, string> = {
+  complete: "完成",
+  incomplete: "未完成",
+  partial: "部分完成",
+  uncertain: "无法确认",
+};
+
+const resultLabels: Record<string, string> = {
+  success: "成功",
+  failure: "失败",
+  partial: "部分成功",
+  not_applicable: "不适用",
+  unknown: "无法确认",
+};
+
 export function QualityReportCard({
   submission,
   pointsLabel,
@@ -279,6 +294,92 @@ export function QualityReportCard({
                 {quality.recommendations.map((recommendation, index) => (
                   <div key={`${index}-${recommendation}`}><em>{String(index + 1).padStart(2, "0")}</em><span><strong>{recommendation}</strong></span></div>
                 ))}
+              </div>
+            )}
+            {quality?.candidateAnnotation?.status === "system_failed" && (
+              <div className="report-issue-group">
+                <strong>结构化内容标注（影子运行）</strong>
+                <p className="report-fold-empty">候选链路异常：{quality.candidateAnnotation.error}</p>
+              </div>
+            )}
+            {quality?.candidateAnnotation && quality.candidateAnnotation.status !== "system_failed" && (
+              <div className="report-issue-group">
+                <strong>
+                  结构化内容标注（影子运行）
+                  <em className="report-compliance-ratio">
+                    {quality.candidateAnnotation.status === "candidate" ? "候选可用" : "待人工确认"}
+                  </em>
+                </strong>
+                <p className="report-summary">{quality.candidateAnnotation.effective.video_summary || "未生成摘要"}</p>
+                <div className="metadata-grid">
+                  <div><small>场景</small><strong>{quality.candidateAnnotation.effective.scene.fine_label || quality.candidateAnnotation.effective.scene.coarse_label || "未识别"}</strong></div>
+                  <div><small>采样证据</small><strong>{quality.candidateAnnotation.frameCount} 帧</strong></div>
+                  {quality.candidateAnnotation.effective.model_assessability && (
+                    <div><small>模型可判定性</small><strong>{quality.candidateAnnotation.effective.model_assessability === "assessable" ? "可判定" : "需要复核"}</strong></div>
+                  )}
+                  {quality.candidateAnnotation.usage?.totalTokens !== undefined && (
+                    <div><small>模型 Token</small><strong>{quality.candidateAnnotation.usage.totalTokens ?? "未返回"}</strong></div>
+                  )}
+                </div>
+                {quality.candidateAnnotation.effective.assessability_reason && (
+                  <p className="report-fold-empty">可判定性说明：{quality.candidateAnnotation.effective.assessability_reason}</p>
+                )}
+                {quality.candidateAnnotation.effective.tasks.length > 0 ? (
+                  <ul>
+                    {quality.candidateAnnotation.effective.tasks.map((task, index) => (
+                      <li key={`annotation-task-${index}`}>
+                        <span>
+                          <em>{task.task_label}</em>
+                          <small>
+                            {Math.round(task.start_ms / 1000)}s—{Math.round(task.end_ms / 1000)}s
+                            {` · 完成度：${completionLabels[task.effective_completion] ?? task.effective_completion}`}
+                            {` · 结果：${resultLabels[task.effective_result_status] ?? task.effective_result_status}`}
+                            {` · 确信度 ${Math.round(task.confidence * 100)}%`}
+                          </small>
+                          {task.execution_pattern && (
+                            <small>执行模式：{task.execution_pattern} · 原子步骤：{task.atomic_action_sequence?.map((action) => action.verb).join(" → ") || "无充分证据"}</small>
+                          )}
+                          {(task.effective_complexity_signals?.length ?? 0) > 0 && (
+                            <small>复杂度信号：{task.effective_complexity_signals!.join("、")}</small>
+                          )}
+                          {task.visible_postcondition && (
+                            <small>可见后状态：{task.visible_postcondition}</small>
+                          )}
+                          {task.policy_reasons.length > 0 && (
+                            <small>证据策略：{task.policy_reasons.join("、")}</small>
+                          )}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="report-fold-empty">未识别到具有足够证据的可见任务</p>
+                )}
+                {quality.candidateAnnotation.labelMappings.length > 0 && (
+                  <ul>
+                    {quality.candidateAnnotation.labelMappings.map((mapping, index) => (
+                      <li key={`annotation-label-${mapping.type}-${index}`}>
+                        <span>
+                          <em>
+                            {mapping.type === "scene" ? "场景" : mapping.type === "action" ? "动作" : "对象"}：{mapping.sourceText}
+                          </em>
+                          <small>
+                            {mapping.status === "matched"
+                              ? `已匹配标签 ${mapping.labelName}`
+                              : "标签集无精确匹配，仅作为新增候选"}
+                          </small>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {quality.candidateAnnotation.reviewReasons.length > 0 && (
+                  <p className="report-fold-empty">复核原因：{quality.candidateAnnotation.reviewReasons.join("；")}</p>
+                )}
+                {(quality.candidateAnnotation.effective.uncertain_fields?.length ?? 0) > 0 && (
+                  <p className="report-fold-empty">不确定字段：{quality.candidateAnnotation.effective.uncertain_fields!.join("、")}</p>
+                )}
+                <small>Schema {quality.candidateAnnotation.schemaVersion} · Prompt {quality.candidateAnnotation.promptVersion} · 不参与当前质检与结算</small>
               </div>
             )}
           </div>

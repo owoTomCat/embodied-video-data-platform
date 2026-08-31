@@ -14,6 +14,8 @@ import type {
   TimestampedFrame,
   VideoQcInputV1,
 } from "./video-quality.types.js";
+import type { VideoAnnotationProvider } from "../video-annotation/qwen-video-annotation.provider.js";
+import type { VideoAnnotationCandidate } from "../video-annotation/video-annotation.js";
 
 export interface VideoEvidencePreprocessor {
   prepare(
@@ -49,6 +51,12 @@ export type EvaluateVideoQualityRequest = {
   inventoryContext?: InventoryContextInput;
   /** 场景/动作/对象标签字典（供模型结构化分类） */
   labelDictionary?: string[];
+  /** 候选内容标注使用的带类型标签；不包含任务合同或任务要求。 */
+  annotationLabels?: Array<{
+    id: string;
+    name: string;
+    type: "scene" | "action" | "object";
+  }>;
 };
 
 export type QualityProgressObserver = (stage: QualityStage) => void;
@@ -135,16 +143,36 @@ function supplementReviewFrames(
   );
 }
 
+export function isInDeterministicSample(
+  videoId: string,
+  sampleRate: number,
+): boolean {
+  if (sampleRate <= 0) return false;
+  if (sampleRate >= 1) return true;
+  let hash = 2_166_136_261;
+  for (const character of videoId) {
+    hash ^= character.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 16_777_619);
+  }
+  return (hash >>> 0) / 4_294_967_296 < sampleRate;
+}
+
 export class VideoQualityService {
   private readonly preprocessor: VideoEvidencePreprocessor;
   private readonly provider: VideoQualityModelProvider;
+  private readonly annotationProvider?: VideoAnnotationProvider;
+  private readonly annotationSampleRate: number;
 
   constructor(options: {
     preprocessor: VideoEvidencePreprocessor;
     provider: VideoQualityModelProvider;
+    annotationProvider?: VideoAnnotationProvider;
+    annotationSampleRate?: number;
   }) {
     this.preprocessor = options.preprocessor;
     this.provider = options.provider;
+    this.annotationProvider = options.annotationProvider;
+    this.annotationSampleRate = options.annotationSampleRate ?? 1;
   }
 
   async evaluate(
@@ -166,6 +194,21 @@ export class VideoQualityService {
       inventoryContext: request.inventoryContext,
       labelDictionary: request.labelDictionary,
     });
+    const annotationPromise:
+      | Promise<VideoAnnotationCandidate | undefined>
+      | undefined =
+      this.annotationProvider &&
+      isInDeterministicSample(request.videoId, this.annotationSampleRate)
+        ? this.annotationProvider.annotate(
+            {
+              videoId: request.videoId,
+              durationMs: evidence.metadata.duration_ms,
+              frames: evidence.fullVideoFrames,
+              enabledLabels: request.annotationLabels ?? [],
+            },
+            signal,
+          ).catch(() => undefined)
+        : undefined;
 
     observer("initial_review");
     const initialRun = await this.provider.analyze(
@@ -180,7 +223,7 @@ export class VideoQualityService {
     });
     if (!needsReview(initialRun.raw, initial)) {
       observer(initial.evaluationStatus === "review_pending" ? "review_pending" : "completed");
-      return initial;
+      return this.attachCandidateAnnotation(initial, annotationPromise, signal);
     }
 
     observer("secondary_review");
@@ -219,20 +262,43 @@ export class VideoQualityService {
           ? "review_pending"
           : "completed",
       );
-      return reviewed;
+      return this.attachCandidateAnnotation(reviewed, annotationPromise, signal);
     } catch (error) {
       if (signal?.aborted) throw error;
       observer("review_pending");
-      return {
-        ...initial,
-        evaluationStatus: "review_pending",
-        settlementRatio: null,
-        reviewRequired: true,
-        reviewReasons: [
-          ...initial.reviewReasons,
-          `复核模型失败：${error instanceof Error ? error.message : "未知错误"}`,
-        ],
-      };
+      return this.attachCandidateAnnotation(
+        {
+          ...initial,
+          evaluationStatus: "review_pending",
+          settlementRatio: null,
+          reviewRequired: true,
+          reviewReasons: [
+            ...initial.reviewReasons,
+            `复核模型失败：${error instanceof Error ? error.message : "未知错误"}`,
+          ],
+        },
+        annotationPromise,
+        signal,
+      );
+    }
+  }
+
+  private async attachCandidateAnnotation(
+    result: NormalizedVideoQcResultV1,
+    annotationPromise:
+      | Promise<VideoAnnotationCandidate | undefined>
+      | undefined,
+    signal?: AbortSignal,
+  ): Promise<NormalizedVideoQcResultV1> {
+    if (!annotationPromise) return result;
+    try {
+      const candidateAnnotation = await annotationPromise;
+      if (!candidateAnnotation) return result;
+      return { ...result, candidateAnnotation };
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      // Shadow annotation must never change the authoritative quality outcome.
+      return result;
     }
   }
 }

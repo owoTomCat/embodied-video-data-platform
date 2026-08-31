@@ -24,6 +24,112 @@ export type SettlementStatus = "unsettled" | "settled";
 export type AssetStatus = "active" | "quarantined";
 export type StorageStatus = "available" | "delete_pending" | "deleted";
 
+export type VideoAnnotationTask = {
+  start_ms: number;
+  end_ms: number;
+  task_label: string;
+  task_verb: string;
+  task_object: string;
+  evidence_level: "direct_visual" | "partially_inferred" | "uncertain";
+  execution_pattern?: "single_goal" | "repeated_cycles" | "continuous_operation" | "uncertain";
+  evidence_timestamps_ms: number[];
+  manipulated_objects: string[];
+  tools: string[];
+  hand_mode: string;
+  atomic_action_sequence?: Array<{
+    order: number;
+    verb: string;
+    object: string;
+    evidence_timestamps_ms: number[];
+  }>;
+  interaction_primitives: string[];
+  completion: "complete" | "incomplete" | "partial" | "uncertain";
+  result_observability?: "visible" | "partial" | "not_visible";
+  result_status: "success" | "failure" | "partial" | "not_applicable" | "unknown";
+  result_evidence_type?: "direct_visible_postcondition" | "action_completion_only" | "contextual_inference" | "not_observed";
+  visible_postcondition?: string;
+  result_evidence_timestamps_ms?: number[];
+  failure_recovery?: string;
+  complexity_signals?: string[];
+  confidence: number;
+  effective_completion: "complete" | "incomplete" | "partial" | "uncertain";
+  effective_result_status: "success" | "failure" | "partial" | "not_applicable" | "unknown";
+  effective_failure_recovery: string;
+  effective_complexity_signals?: string[];
+  policy_reasons: string[];
+};
+
+export type VideoAnnotationCandidate =
+  | {
+      status: "system_failed";
+      schemaVersion: string;
+      policyVersion: string;
+      promptVersion: string;
+      promptContentSha256: string;
+      model: string;
+      error: string;
+    }
+  | {
+      status: "candidate" | "review_required";
+      schemaVersion: string;
+      policyVersion: string;
+      promptVersion: string;
+      promptContentSha256: string;
+      model: string;
+      responseModel?: string | null;
+      requestId: string | null;
+      durationMs: number;
+      frameCount: number;
+      usage?: {
+        promptTokens: number | null;
+        completionTokens: number | null;
+        totalTokens: number | null;
+      };
+      sampling: {
+        maxFrameGapMs: number | null;
+        sourceTimestampsMs: number[];
+      };
+      labelMappings: Array<{
+        type: "scene" | "action" | "object";
+        sourceText: string;
+        status: "matched" | "proposed";
+        labelId: string | null;
+        labelName: string | null;
+        confidence: number;
+      }>;
+      raw: Record<string, unknown> & {
+        video_summary: string;
+        scene: {
+          coarse_label: string | null;
+          fine_label: string | null;
+          confidence: number;
+        };
+      };
+      effective: {
+        video_summary: string;
+        temporal_structure_type?: string;
+        model_assessability?: "assessable" | "needs_review";
+        assessability_reason?: string;
+        scene: {
+          coarse_label: string | null;
+          fine_label: string | null;
+          confidence: number;
+        };
+        tasks: VideoAnnotationTask[];
+        coverage_segments?: Array<{
+          start_ms: number;
+          end_ms: number;
+          segment_type: "task" | "transition" | "unclear";
+          linked_task_index: number | null;
+          visible_activity: string;
+          evidence_timestamps_ms: number[];
+        }>;
+        uncertain_fields?: string[];
+      };
+      validation: { errors: string[]; warnings: string[] };
+      reviewReasons: string[];
+    };
+
 export interface DuplicateCandidate {
   id: string;
   candidateSubmissionId: string;
@@ -190,6 +296,27 @@ export interface Submission {
         confidence: number;
         evidence_timestamps_ms: number[];
       }>;
+    };
+    candidateAnnotation?: VideoAnnotationCandidate;
+    annotationReview?: {
+      decision: "accepted" | "needs_correction";
+      reason: string;
+      reviewedByAccountId: string;
+      reviewedByName: string;
+      reviewedAt: string;
+      candidateSchemaVersion: string | null;
+      candidatePolicyVersion: string | null;
+      candidatePromptVersion: string | null;
+      candidatePromptContentSha256: string | null;
+      correctedAnnotation?: {
+        source: "human_correction";
+        schemaVersion: string;
+        policyVersion: string;
+        raw: Record<string, unknown>;
+        effective: Record<string, unknown>;
+        labelMappings: unknown[];
+        validation: { errors: string[]; warnings: string[] };
+      };
     };
   };
   settlementStatus: SettlementStatus;

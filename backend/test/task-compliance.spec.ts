@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  alignTaskComplianceToRequirements,
   applyServerTaskCompliance,
   normalizeTaskCompliance,
   serverComplianceRatio,
@@ -174,6 +175,31 @@ describe("applyServerTaskCompliance", () => {
     expect(applied.dimensions.task_authenticity_completeness.coefficient).toBe(0.5);
   });
 
+  it("keeps evidence-incomplete compliance out of automatic settlement", () => {
+    const compliance = normalizeTaskCompliance(
+      {
+        scene_match: { matched: true, confidence: 0.95 },
+        items: [
+          {
+            requirement: "建议保持操作台整洁",
+            type: "soft",
+            result: "met",
+            confidence: 0.8,
+            evidence_timestamps_ms: [],
+          },
+        ],
+        compliance_ratio: null,
+        review_required: true,
+      },
+      [],
+    )!;
+
+    const applied = applyServerTaskCompliance(baseNormalized(), compliance);
+    expect(applied.evaluationStatus).toBe("review_pending");
+    expect(applied.reviewRequired).toBe(true);
+    expect(applied.reviewReasons.join(" ")).toContain("证据不足");
+  });
+
   it("keeps hard_reject status when already rejected", () => {
     const compliance = normalizeTaskCompliance(
       {
@@ -192,6 +218,101 @@ describe("applyServerTaskCompliance", () => {
     );
     expect(applied.evaluationStatus).toBe("hard_reject");
     expect(applied.settlementRatio).toBe(0);
+  });
+});
+
+describe("alignTaskComplianceToRequirements", () => {
+  it("uses the locked requirement order and authoritative hard/soft types", () => {
+    const warnings: string[] = [];
+    const aligned = alignTaskComplianceToRequirements(
+      normalizeTaskCompliance(
+        {
+          scene_match: { matched: true, confidence: 0.9 },
+          items: [
+            {
+              requirement: "光线充足",
+              type: "hard",
+              result: "met",
+              confidence: 0.9,
+              evidence_timestamps_ms: [1_000],
+            },
+            {
+              requirement: "必须出现双手",
+              type: "soft",
+              result: "partial",
+              confidence: 0.8,
+              evidence_timestamps_ms: [500],
+            },
+          ],
+          compliance_ratio: null,
+          review_required: false,
+        },
+        [],
+      ),
+      [
+        { type: "hard", content: "必须出现双手" },
+        { type: "soft", content: "光线充足" },
+      ],
+      warnings,
+    );
+
+    expect(aligned.items.map((item) => [item.requirement, item.type])).toEqual([
+      ["必须出现双手", "hard"],
+      ["光线充足", "soft"],
+    ]);
+    expect(aligned.compliance_ratio).toBe(0.75);
+    expect(warnings.join(" ")).toContain("服务端快照覆盖");
+  });
+
+  it("makes missing and unexpected model items non-settleable", () => {
+    const warnings: string[] = [];
+    const aligned = alignTaskComplianceToRequirements(
+      normalizeTaskCompliance(
+        {
+          scene_match: { matched: true, confidence: 0.9 },
+          items: [
+            {
+              requirement: "模型自行增加的要求",
+              type: "soft",
+              result: "met",
+              confidence: 0.9,
+              evidence_timestamps_ms: [500],
+            },
+          ],
+          compliance_ratio: null,
+          review_required: false,
+        },
+        [],
+      ),
+      [{ type: "hard", content: "必须出现双手" }],
+      warnings,
+    );
+
+    expect(aligned.items).toEqual([
+      expect.objectContaining({
+        requirement: "必须出现双手",
+        type: "hard",
+        result: "unmet",
+        confidence: 0,
+      }),
+    ]);
+    expect(aligned.review_required).toBe(true);
+    expect(warnings.join(" ")).toContain("缺少锁定要求");
+    expect(warnings.join(" ")).toContain("已忽略");
+  });
+
+  it("requires review when the model omits task compliance entirely", () => {
+    const warnings: string[] = [];
+    const aligned = alignTaskComplianceToRequirements(
+      null,
+      [{ type: "hard", content: "第一人称拍摄" }],
+      warnings,
+    );
+
+    expect(aligned.scene_match.matched).toBe(false);
+    expect(aligned.review_required).toBe(true);
+    expect(aligned.compliance_ratio).toBe(0);
+    expect(warnings).toContain("模型未返回任务符合度区块");
   });
 });
 

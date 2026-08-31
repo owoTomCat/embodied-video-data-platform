@@ -1,19 +1,34 @@
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Brackets, Repository, type EntityManager, type SelectQueryBuilder } from "typeorm";
+import { Brackets, In, Not, Repository, type EntityManager, type SelectQueryBuilder } from "typeorm";
 import { randomUUID } from "node:crypto";
 
 import { AuditService } from "../audit/audit.service.js";
 import type { PublicUser } from "../auth/auth.types.js";
 import { AuditLogEntity } from "../database/entities/audit-log.entity.js";
+import { AnnotationRunEntity } from "../database/entities/annotation-run.entity.js";
 import { JobOutboxEntity } from "../database/entities/job-outbox.entity.js";
 import { PointCycleItemEntity } from "../database/entities/point-cycle-item.entity.js";
 import { SubmissionEntity } from "../database/entities/submission.entity.js";
 import { VideoQualityResultEntity } from "../database/entities/video-quality-result.entity.js";
 import { OperationsFailure } from "./operations-failure.js";
 import { WorkerHeartbeatService } from "./worker-heartbeat.service.js";
+import { enqueueAnnotationRun } from "../video-annotation/annotation-run.queue.js";
+import type {
+  AnnotationOperationsQueryDto,
+  AnnotationOperationsView,
+} from "./dto/annotation-operations-query.dto.js";
 
 const MAX_AUTO_RETRY_ATTEMPTS = 3;
+
+function redactAnnotationError(value: string | null): string | null {
+  if (!value) return null;
+  return value
+    .replace(/Bearer\s+[^\s"']+/giu, "Bearer <redacted>")
+    .replace(/sk-(?:ws-)?[A-Za-z0-9._-]+/gu, "<redacted>")
+    .replace(/data:[^;,\s]+;base64,[A-Za-z0-9+/=]+/gu, "<data-url-redacted>")
+    .slice(0, 1_500);
+}
 
 const QUALITY_PASSED_SQL = `
   (
@@ -136,6 +151,8 @@ export class OperationsService {
     private readonly jobs: Repository<JobOutboxEntity>,
     @InjectRepository(SubmissionEntity)
     private readonly submissions: Repository<SubmissionEntity>,
+    @InjectRepository(AnnotationRunEntity)
+    private readonly annotationRunsRepository: Repository<AnnotationRunEntity>,
     @InjectRepository(VideoQualityResultEntity)
     private readonly qualityResults: Repository<VideoQualityResultEntity>,
     @InjectRepository(AuditLogEntity)
@@ -143,6 +160,275 @@ export class OperationsService {
     private readonly workerHeartbeats: WorkerHeartbeatService,
     private readonly audit: AuditService,
   ) {}
+
+  async annotationRuns(actor: PublicUser, input: AnnotationOperationsQueryDto) {
+    assertAdmin(actor);
+    const view = input.view ?? "pending_review";
+    const page = input.page ?? 1;
+    const pageSize = input.pageSize ?? 50;
+    const includeSummary = input.includeSummary ?? true;
+    const query = this.annotationRunsRepository
+      .createQueryBuilder("run")
+      .leftJoinAndSelect("run.submission", "submission");
+    this.applyAnnotationView(query, view);
+    query
+      .orderBy("run.updatedAt", "DESC")
+      .addOrderBy("run.id", "DESC")
+      .skip((page - 1) * pageSize)
+      .take(pageSize);
+    const [runs, total] = await query.getManyAndCount();
+    const calculatedAt = Date.now();
+    const response: Record<string, unknown> = {
+      calculatedAt,
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: total === 0 ? 0 : Math.ceil(total / pageSize),
+      },
+      runs: runs.map((run) => ({
+        id: run.id,
+        submissionId: run.submissionId,
+        fileName: run.submission?.originalFileName ?? run.submissionId,
+        executionStatus: run.executionStatus,
+        reviewStatus: run.reviewStatus,
+        publicationStatus: run.publicationStatus,
+        trigger: run.trigger,
+        pipelineVersion: run.pipelineVersion,
+        schemaVersion: run.schemaVersion,
+        evidencePolicyVersion: run.evidencePolicyVersion,
+        model: run.model,
+        promptVersion: run.promptVersion,
+        attemptCount: run.attemptCount,
+        fullModelAttempts: run.fullModelAttempts,
+        schemaRepairCalls: run.schemaRepairCalls,
+        targetedRepairCalls: run.targetedRepairCalls,
+        infrastructureRetryCount: run.infrastructureRetryCount,
+        providerCallCount: run.providerCallCount,
+        reviewRevision: run.reviewRevision,
+        autoEligibility: run.autoEligibility,
+        autoGateVersion: run.autoGateVersion,
+        wouldAutoAccept: run.wouldAutoAccept,
+        autoAcceptEnabledSnapshot: run.autoAcceptEnabledSnapshot,
+        autoGateEvaluatedAt: run.autoGateEvaluatedAt?.getTime() ?? null,
+        auditStatus: run.auditStatus,
+        auditSelectedAt: run.auditSelectedAt?.getTime() ?? null,
+        blockingReasons: run.autoGateIssues.filter(
+          (issue) =>
+            issue.level === "manual_review" ||
+            (issue.level === "retryable" && issue.resolution === "unresolved"),
+        ),
+        advisories: run.autoGateIssues.filter((issue) => issue.level === "advisory"),
+        repairs: run.autoGateIssues.filter(
+          (issue) =>
+            issue.level === "repairable" || issue.resolution === "retried",
+        ),
+        lastErrorCode: run.lastErrorCode,
+        lastErrorMessage: redactAnnotationError(run.lastErrorMessage),
+        queuedAt: run.queuedAt.getTime(),
+        startedAt: run.startedAt?.getTime() ?? null,
+        completedAt: run.completedAt?.getTime() ?? null,
+        createdAt: run.createdAt.getTime(),
+        updatedAt: run.updatedAt.getTime(),
+      })),
+    };
+    if (includeSummary) {
+      const [summary, coverage] = await Promise.all([
+        this.annotationSummary(),
+        this.annotationCoverage(),
+      ]);
+      response.summary = summary;
+      response.coverage = coverage;
+    }
+    return response;
+  }
+
+  private applyAnnotationView(
+    query: SelectQueryBuilder<AnnotationRunEntity>,
+    view: AnnotationOperationsView,
+  ): void {
+    if (view === "pending_review") {
+      query
+        .andWhere("run.executionStatus = :succeeded", { succeeded: "succeeded" })
+        .andWhere("run.reviewStatus = :pending", { pending: "pending" })
+        .andWhere("run.publicationStatus = :candidate", { candidate: "candidate_only" });
+      query.andWhere("run.autoEligibility = :manualRequired", {
+        manualRequired: "manual_required",
+      });
+      return;
+    }
+    if (view === "audit_pending") {
+      query
+        .andWhere("run.publicationStatus = :published", {
+          published: "auto_accepted",
+        })
+        .andWhere("run.auditStatus = :pending", { pending: "pending" });
+      return;
+    }
+    if (view === "auto_published") {
+      query.andWhere("run.publicationStatus = :published", {
+        published: "auto_accepted",
+      });
+      return;
+    }
+    if (view === "execution_failed") {
+      query.andWhere("run.executionStatus IN (:...failed)", {
+        failed: ["system_failed", "stuck"],
+      });
+      return;
+    }
+    if (view === "in_progress") {
+      query.andWhere("run.executionStatus IN (:...running)", {
+        running: ["queued", "running", "retry_scheduled"],
+      });
+      return;
+    }
+    if (view === "resolved") {
+      query.andWhere("run.reviewStatus IN (:...resolved)", {
+        resolved: [
+          "accepted_unchanged",
+          "accepted_corrected",
+          "rejected",
+          "unable_to_judge",
+        ],
+      });
+    }
+  }
+
+  private async annotationSummary() {
+    const row = await this.annotationRunsRepository
+      .createQueryBuilder("run")
+      .select("COUNT(*)", "historicalTotal")
+      .addSelect("COUNT(*) FILTER (WHERE run.executionStatus = 'queued')", "queued")
+      .addSelect("COUNT(*) FILTER (WHERE run.executionStatus = 'running')", "running")
+      .addSelect("COUNT(*) FILTER (WHERE run.executionStatus = 'retry_scheduled')", "retryScheduled")
+      .addSelect("COUNT(*) FILTER (WHERE run.executionStatus = 'succeeded')", "succeeded")
+      .addSelect("COUNT(*) FILTER (WHERE run.executionStatus = 'system_failed')", "systemFailed")
+      .addSelect("COUNT(*) FILTER (WHERE run.executionStatus = 'stuck')", "stuck")
+      .addSelect("COUNT(*) FILTER (WHERE run.executionStatus = 'cancelled')", "cancelled")
+      .addSelect(`COUNT(*) FILTER (
+        WHERE run.executionStatus = 'succeeded'
+          AND run.reviewStatus = 'pending'
+          AND run.publicationStatus = 'candidate_only'
+          AND run.autoEligibility = 'manual_required'
+      )`, "pending")
+      .addSelect("COUNT(*) FILTER (WHERE run.reviewStatus = 'accepted_unchanged')", "acceptedUnchanged")
+      .addSelect("COUNT(*) FILTER (WHERE run.reviewStatus = 'accepted_corrected')", "acceptedCorrected")
+      .addSelect("COUNT(*) FILTER (WHERE run.reviewStatus = 'rejected')", "rejected")
+      .addSelect("COUNT(*) FILTER (WHERE run.reviewStatus = 'unable_to_judge')", "unableToJudge")
+      .addSelect("COUNT(*) FILTER (WHERE run.autoGateEvaluatedAt IS NOT NULL)", "gateEvaluated")
+      .addSelect("COUNT(*) FILTER (WHERE run.autoEligibility = 'eligible')", "eligible")
+      .addSelect("COUNT(*) FILTER (WHERE run.autoEligibility = 'manual_required')", "manualRequired")
+      .addSelect(`COUNT(*) FILTER (
+        WHERE run.executionStatus = 'succeeded'
+          AND run.autoEligibility = 'eligible'
+          AND run.autoAcceptEnabledSnapshot = true
+      )`, "autoAccepted")
+      .addSelect("COUNT(*) FILTER (WHERE run.auditStatus = 'pending')", "auditPending")
+      .addSelect("COUNT(*) FILTER (WHERE run.auditStatus = 'completed')", "auditCompleted")
+      .addSelect("COUNT(*) FILTER (WHERE run.publicationStatus = 'auto_accepted')", "publishedByAuto")
+      .addSelect("COUNT(*) FILTER (WHERE run.publicationStatus = 'human_verified')", "publishedByHuman")
+      .addSelect("COALESCE(SUM(run.providerCallCount), 0)", "providerCalls")
+      .addSelect("COALESCE(SUM(run.schemaRepairCalls), 0)", "schemaRepairCalls")
+      .addSelect("COALESCE(SUM(run.targetedRepairCalls), 0)", "targetedRepairCalls")
+      .addSelect("COALESCE(SUM(run.infrastructureRetryCount), 0)", "infrastructureRetries")
+      .getRawOne<Record<string, string | null>>();
+    const callRows = (await this.annotationRunsRepository.manager.query(`
+      SELECT
+        COUNT(*) AS "providerCalls",
+        COUNT(*) FILTER (WHERE call_status = 'succeeded') AS "succeededCalls",
+        COUNT(*) FILTER (WHERE call_status = 'failed') AS "failedCalls",
+        COUNT(*) FILTER (
+          WHERE input_tokens IS NOT NULL OR output_tokens IS NOT NULL OR total_tokens IS NOT NULL
+        ) AS "callsWithReportedUsage",
+        COALESCE(SUM(input_tokens), 0) AS "totalReportedInputTokens",
+        COALESCE(SUM(output_tokens), 0) AS "totalReportedOutputTokens",
+        COALESCE(SUM(total_tokens), 0) AS "totalReportedTokens",
+        AVG(latency_ms) AS "averageReportedModelLatencyMs"
+      FROM annotation_model_calls
+    `)) as Array<Record<string, string | null>>;
+    const calls = callRows[0] ?? {};
+    const number = (key: string) => Number(row?.[key] ?? 0);
+    return {
+      runs: {
+        historicalTotal: number("historicalTotal"),
+        queued: number("queued"),
+        running: number("running"),
+        retryScheduled: number("retryScheduled"),
+        succeeded: number("succeeded"),
+        systemFailed: number("systemFailed"),
+        stuck: number("stuck"),
+        cancelled: number("cancelled"),
+      },
+      reviews: {
+        pending: number("pending"),
+        acceptedUnchanged: number("acceptedUnchanged"),
+        acceptedCorrected: number("acceptedCorrected"),
+        rejected: number("rejected"),
+        unableToJudge: number("unableToJudge"),
+      },
+      gate: {
+        gateEvaluated: number("gateEvaluated"),
+        eligible: number("eligible"),
+        manualRequired: number("manualRequired"),
+        autoAccepted: number("autoAccepted"),
+        auditPending: number("auditPending"),
+        auditCompleted: number("auditCompleted"),
+        publishedByAuto: number("publishedByAuto"),
+        publishedByHuman: number("publishedByHuman"),
+      },
+      usage: {
+        scope: "all_reported_model_calls" as const,
+        providerCalls: Number(calls.providerCalls ?? 0),
+        succeededCalls: Number(calls.succeededCalls ?? 0),
+        failedCalls: Number(calls.failedCalls ?? 0),
+        callsWithReportedUsage: Number(calls.callsWithReportedUsage ?? 0),
+        totalReportedInputTokens: Number(calls.totalReportedInputTokens ?? 0),
+        totalReportedOutputTokens: Number(calls.totalReportedOutputTokens ?? 0),
+        totalReportedTokens: Number(calls.totalReportedTokens ?? 0),
+        averageReportedModelLatencyMs:
+          calls.averageReportedModelLatencyMs === null ||
+          calls.averageReportedModelLatencyMs === undefined
+            ? null
+            : Math.round(Number(calls.averageReportedModelLatencyMs)),
+        schemaRepairCalls: number("schemaRepairCalls"),
+        targetedRepairCalls: number("targetedRepairCalls"),
+        infrastructureRetries: number("infrastructureRetries"),
+      },
+    };
+  }
+
+  private async annotationCoverage() {
+    const rows = (await this.annotationRunsRepository.manager.query(`
+      SELECT
+        COUNT(DISTINCT submission.id) AS "eligibleSubmissions",
+        COUNT(DISTINCT submission.id) FILTER (WHERE run.id IS NOT NULL) AS "submissionsWithAnyRun",
+        COUNT(DISTINCT submission.id) FILTER (WHERE run.execution_status = 'succeeded') AS "submissionsWithSucceededRun",
+        COUNT(DISTINCT submission.id) FILTER (WHERE run.publication_status = 'human_verified') AS "submissionsHumanVerified"
+      FROM submissions AS submission
+      INNER JOIN media_metadata AS media ON media.submission_id = submission.id
+      LEFT JOIN annotation_runs AS run ON run.submission_id = submission.id
+      WHERE submission.upload_status = 'uploaded'
+        AND submission.storage_status = 'available'
+        AND submission.asset_status = 'active'
+        AND submission.is_test_data = false
+    `)) as Array<Record<string, string>>;
+    const row = rows[0] ?? {};
+    const eligibleSubmissions = Number(row.eligibleSubmissions ?? 0);
+    const submissionsWithAnyRun = Number(row.submissionsWithAnyRun ?? 0);
+    const submissionsWithSucceededRun = Number(row.submissionsWithSucceededRun ?? 0);
+    const submissionsHumanVerified = Number(row.submissionsHumanVerified ?? 0);
+    const rate = (value: number) => eligibleSubmissions === 0 ? null : value / eligibleSubmissions;
+    return {
+      eligibleSubmissions,
+      submissionsWithAnyRun,
+      submissionsWithSucceededRun,
+      submissionsHumanVerified,
+      anyRunRate: rate(submissionsWithAnyRun),
+      succeededRate: rate(submissionsWithSucceededRun),
+      verifiedRate: rate(submissionsHumanVerified),
+    };
+  }
 
   async queue(actor: PublicUser) {
     assertAdmin(actor);
@@ -175,6 +461,10 @@ export class OperationsService {
           "ai",
         )
         .addSelect(
+          "COUNT(*) FILTER (WHERE job.eventType = :annotationEventType)",
+          "annotation",
+        )
+        .addSelect(
           `COALESCE(
             AVG(
               GREATEST(
@@ -191,6 +481,7 @@ export class OperationsService {
           publishedStatus: "published",
           mediaEventType: "media.probe.v1",
           aiEventType: "ai.quality.v1",
+          annotationEventType: "ai.annotation.v1",
         })
         .getRawOne<{
           total: string;
@@ -199,6 +490,7 @@ export class OperationsService {
           failed: string;
           media: string;
           ai: string;
+          annotation: string;
           averagePublishLatencyMs: string;
         }>(),
       this.workerHeartbeats.list(),
@@ -211,6 +503,7 @@ export class OperationsService {
         failed: Number(rawSummary?.failed ?? 0),
         media: Number(rawSummary?.media ?? 0),
         ai: Number(rawSummary?.ai ?? 0),
+        annotation: Number(rawSummary?.annotation ?? 0),
         averagePublishLatencyMs: Math.round(
           Number(rawSummary?.averagePublishLatencyMs ?? 0),
         ),
@@ -465,6 +758,7 @@ export class OperationsService {
       workers
         .filter(
           (worker) =>
+            worker.kind !== "ai_annotation" &&
             worker.currentSubmissionId &&
             worker.status === "running" &&
             !worker.stale &&
@@ -476,6 +770,7 @@ export class OperationsService {
       workers
         .filter(
           (worker) =>
+            worker.kind !== "ai_annotation" &&
             worker.currentSubmissionId &&
             (worker.runningTooLong ||
               (worker.stale && worker.status !== "stopped")),
@@ -483,8 +778,32 @@ export class OperationsService {
         .map((worker) => worker.currentSubmissionId as string)
         .filter((submissionId) => !activeProcessorIds.has(submissionId)),
     );
-    if (stuckCandidateIds.size === 0) {
-      return { reclaimed: [], stuck: [] };
+    const activeAnnotationRunIds = new Set(
+      workers
+        .filter(
+          (worker) =>
+            worker.kind === "ai_annotation" &&
+            worker.currentSubmissionId &&
+            worker.status === "running" &&
+            !worker.stale &&
+            !worker.runningTooLong,
+        )
+        .map((worker) => worker.currentSubmissionId as string),
+    );
+    const stuckAnnotationRunIds = new Set(
+      workers
+        .filter(
+          (worker) =>
+            worker.kind === "ai_annotation" &&
+            worker.currentSubmissionId &&
+            (worker.runningTooLong ||
+              (worker.stale && worker.status !== "stopped")),
+        )
+        .map((worker) => worker.currentSubmissionId as string)
+        .filter((runId) => !activeAnnotationRunIds.has(runId)),
+    );
+    if (stuckCandidateIds.size === 0 && stuckAnnotationRunIds.size === 0) {
+      return { reclaimed: [], stuck: [], annotationReclaimed: [], annotationStuck: [] };
     }
 
     return await this.submissions.manager.transaction(async (manager) => {
@@ -504,6 +823,19 @@ export class OperationsService {
         eventType: string;
       }> = [];
       const stuck: Array<{
+        submissionId: string;
+        previousStatus: string;
+        reason: string;
+      }> = [];
+      const annotationReclaimed: Array<{
+        runId: string;
+        submissionId: string;
+        previousStatus: string;
+        nextStatus: string;
+        eventType: string;
+      }> = [];
+      const annotationStuck: Array<{
+        runId: string;
         submissionId: string;
         previousStatus: string;
         reason: string;
@@ -577,7 +909,73 @@ export class OperationsService {
           eventType,
         });
       }
-      return { reclaimed, stuck };
+      if (stuckAnnotationRunIds.size > 0) {
+        const runs = await manager
+          .getRepository(AnnotationRunEntity)
+          .createQueryBuilder("run")
+          .setLock("pessimistic_write")
+          .where("run.id IN (:...ids)", { ids: [...stuckAnnotationRunIds] })
+          .andWhere("run.executionStatus IN (:...statuses)", {
+            statuses: ["running", "stuck"],
+          })
+          .getMany();
+        for (const run of runs) {
+          const previousStatus = run.executionStatus;
+          const reason = "候选标注 Worker 运行超时或心跳过期，已标记为卡住";
+          if (run.executionStatus !== "stuck") {
+            run.executionStatus = "stuck";
+            run.lastErrorCode = "WORKER_STUCK";
+            run.lastErrorMessage = reason;
+            run.nextRetryAt = null;
+            await manager.getRepository(AnnotationRunEntity).save(run);
+            annotationStuck.push({
+              runId: run.id,
+              submissionId: run.submissionId,
+              previousStatus,
+              reason,
+            });
+          }
+          if (run.attemptCount >= MAX_AUTO_RETRY_ATTEMPTS) continue;
+          const otherActive = await manager.getRepository(AnnotationRunEntity).exists({
+            where: {
+              id: Not(run.id),
+              submissionId: run.submissionId,
+              executionStatus: In(["queued", "running", "retry_scheduled"]),
+            },
+          });
+          if (otherActive) continue;
+          run.executionStatus = "queued";
+          run.queuedAt = new Date();
+          run.startedAt = null;
+          run.lastErrorCode = "WORKER_STUCK_REQUEUED";
+          run.lastErrorMessage = "卡住的候选标注运行已自动重新排队";
+          await manager.getRepository(AnnotationRunEntity).save(run);
+          await enqueueAnnotationRun(manager, run);
+          const submission = await manager.getRepository(SubmissionEntity).findOneBy({
+            id: run.submissionId,
+          });
+          await this.audit.record(
+            manager,
+            actor,
+            "annotation.run.reclaim",
+            {
+              id: submission?.id ?? run.submissionId,
+              name: submission?.originalFileName ?? run.submissionId,
+            },
+            "卡住的候选标注运行自动重新排队",
+            { runId: run.id, executionStatus: "stuck", attemptCount: run.attemptCount },
+            { runId: run.id, executionStatus: "queued", eventType: "ai.annotation.v1" },
+          );
+          annotationReclaimed.push({
+            runId: run.id,
+            submissionId: run.submissionId,
+            previousStatus,
+            nextStatus: "queued",
+            eventType: "ai.annotation.v1",
+          });
+        }
+      }
+      return { reclaimed, stuck, annotationReclaimed, annotationStuck };
     });
   }
 

@@ -11,6 +11,8 @@ import {
   identityEntities,
 } from "../src/database/data-source.js";
 import { AuditLogEntity } from "../src/database/entities/audit-log.entity.js";
+import { AnnotationRunEntity } from "../src/database/entities/annotation-run.entity.js";
+import { AnnotationModelCallEntity } from "../src/database/entities/annotation-model-call.entity.js";
 import { JobOutboxEntity } from "../src/database/entities/job-outbox.entity.js";
 import { MediaMetadataEntity } from "../src/database/entities/media-metadata.entity.js";
 import { PointCycleItemEntity } from "../src/database/entities/point-cycle-item.entity.js";
@@ -191,6 +193,113 @@ describe("operations API", () => {
       sizeBytes: "1000",
       rawProbe: {},
     });
+    const annotationBase = {
+      pipelineVersion: "annotation-pipeline-v1",
+      schemaVersion: "annotation-schema-v1",
+      evidencePolicyVersion: "annotation-evidence-v1",
+      promptVersion: "annotation-prompt-v1",
+      promptContentSha256: "9".repeat(64),
+      systemPromptSnapshot: "locked annotation prompt",
+      outputExampleSnapshot: { video_id: "example" },
+      model: "qwen-vl-max",
+      attemptCount: 1,
+      reviewRevision: 0,
+      queuedAt: new Date("2026-08-28T08:00:00Z"),
+    } as const;
+    await dataSource.getRepository(AnnotationRunEntity).save([
+      {
+        ...annotationBase,
+        id: "ANR-OPS-PENDING",
+        submissionId: "SUB-OPS-REVIEW",
+        trigger: "initial",
+        executionStatus: "succeeded",
+        reviewStatus: "pending",
+        publicationStatus: "candidate_only",
+        autoEligibility: "manual_required",
+        autoGateVersion: "annotation_auto_gate_v1",
+        autoGateEvaluatedAt: new Date("2026-08-28T08:01:00Z"),
+        autoGateIssues: [{
+          code: "NO_TASK_DETECTED",
+          level: "manual_review",
+          fieldPath: null,
+          taskIndex: null,
+          message: "视频未识别到任何可见任务",
+          evidenceTimestampsMs: [],
+          resolution: "not_applicable",
+        }],
+        inputTokens: 100,
+        outputTokens: 20,
+        totalTokens: 120,
+        latencyMs: 2_000,
+        completedAt: new Date("2026-08-28T08:01:00Z"),
+      },
+      {
+        ...annotationBase,
+        id: "ANR-OPS-VERIFIED",
+        submissionId: "SUB-OPS-REVIEW",
+        trigger: "manual",
+        executionStatus: "succeeded",
+        reviewStatus: "accepted_corrected",
+        publicationStatus: "human_verified",
+        reviewRevision: 1,
+        completedAt: new Date("2026-08-27T08:01:00Z"),
+      },
+      {
+        ...annotationBase,
+        id: "ANR-OPS-FAILED",
+        submissionId: "SUB-OPS-FAILED",
+        trigger: "initial",
+        executionStatus: "system_failed",
+        reviewStatus: "pending",
+        publicationStatus: "candidate_only",
+        lastErrorCode: "MODEL_HTTP_500",
+        lastErrorMessage: `Bearer secret-token sk-secret data:image/jpeg;base64,${"A".repeat(80)}`,
+        completedAt: new Date("2026-08-28T08:02:00Z"),
+      },
+      {
+        ...annotationBase,
+        id: "ANR-OPS-STUCK",
+        submissionId: "SUB-OPS-STRICT-RULE",
+        trigger: "initial",
+        executionStatus: "stuck",
+        reviewStatus: "pending",
+        publicationStatus: "candidate_only",
+      },
+      {
+        ...annotationBase,
+        id: "ANR-OPS-AUDIT",
+        submissionId: "SUB-OPS-FAILED",
+        trigger: "manual",
+        executionStatus: "succeeded",
+        reviewStatus: "not_required",
+        publicationStatus: "auto_accepted",
+        autoEligibility: "eligible",
+        autoGateVersion: "annotation_auto_gate_v1",
+        autoGateIssues: [],
+        wouldAutoAccept: true,
+        autoAcceptEnabledSnapshot: true,
+        autoGateEvaluatedAt: new Date("2026-08-28T08:04:00Z"),
+        auditStatus: "pending",
+        auditSelectedAt: new Date("2026-08-28T08:04:00Z"),
+        completedAt: new Date("2026-08-28T08:04:00Z"),
+      },
+    ]);
+    await dataSource.getRepository(AnnotationModelCallEntity).save({
+      id: "AMC-OPS-PENDING",
+      annotationRunId: "ANR-OPS-PENDING",
+      logicalFullAttempt: 1,
+      callKind: "full",
+      callStatus: "succeeded",
+      httpStatus: 200,
+      inputTokens: 100,
+      outputTokens: 20,
+      totalTokens: 120,
+      latencyMs: 2_000,
+    });
+    await dataSource.query(
+      `UPDATE annotation_runs SET updated_at = $1 WHERE id IN ($2, $3)`,
+      [new Date("2026-08-28T08:03:00Z"), "ANR-OPS-FAILED", "ANR-OPS-STUCK"],
+    );
     const prompt = await dataSource
       .getRepository(VideoQualityPromptVersionEntity)
       .save({
@@ -450,6 +559,130 @@ describe("operations API", () => {
     const collectorCookie = await login("ops-collector");
     await request(app.getHttpServer())
       .get("/api/v1/operations/queue")
+      .set("Cookie", collectorCookie)
+      .expect(403);
+  });
+
+  it("returns independent annotation operations with explicit metric scopes", async () => {
+    const adminCookie = await login("ops-admin");
+    const response = await request(app.getHttpServer())
+      .get("/api/v1/operations/annotation-runs?view=pending_review&page=1&pageSize=50&includeSummary=true")
+      .set("Cookie", adminCookie)
+      .expect(200);
+
+    expect(response.body.runs).toEqual([
+      expect.objectContaining({
+        id: "ANR-OPS-PENDING",
+        submissionId: "SUB-OPS-REVIEW",
+        fileName: "review.mp4",
+      }),
+    ]);
+    expect(response.body.summary).toMatchObject({
+      runs: { historicalTotal: 5, succeeded: 3, systemFailed: 1, stuck: 1 },
+      reviews: { pending: 1, acceptedCorrected: 1 },
+      gate: { gateEvaluated: 2, eligible: 1, manualRequired: 1, autoAccepted: 1, auditPending: 1 },
+      usage: {
+        scope: "all_reported_model_calls",
+        providerCalls: 1,
+        succeededCalls: 1,
+        failedCalls: 0,
+        callsWithReportedUsage: 1,
+        totalReportedInputTokens: 100,
+        totalReportedOutputTokens: 20,
+        totalReportedTokens: 120,
+        averageReportedModelLatencyMs: 2000,
+      },
+    });
+    expect(response.body.coverage).toMatchObject({
+      eligibleSubmissions: 1,
+      submissionsWithAnyRun: 1,
+      submissionsWithSucceededRun: 1,
+      submissionsHumanVerified: 1,
+      anyRunRate: 1,
+      succeededRate: 1,
+      verifiedRate: 1,
+    });
+  });
+
+  it("returns only currently published pending audits in the audit view", async () => {
+    const adminCookie = await login("ops-admin");
+    const response = await request(app.getHttpServer())
+      .get("/api/v1/operations/annotation-runs?view=audit_pending&page=1&pageSize=50&includeSummary=false")
+      .set("Cookie", adminCookie)
+      .expect(200);
+
+    expect(response.body.runs).toEqual([
+      expect.objectContaining({
+        id: "ANR-OPS-AUDIT",
+        publicationStatus: "auto_accepted",
+        auditStatus: "pending",
+        autoEligibility: "eligible",
+      }),
+    ]);
+  });
+
+  it("maps failure views, omits expensive summary, and redacts stored errors", async () => {
+    const adminCookie = await login("ops-admin");
+    const response = await request(app.getHttpServer())
+      .get("/api/v1/operations/annotation-runs?view=execution_failed&page=1&pageSize=50&includeSummary=false")
+      .set("Cookie", adminCookie)
+      .expect(200);
+
+    expect(response.body.summary).toBeUndefined();
+    expect(response.body.coverage).toBeUndefined();
+    expect(response.body.runs.map((run: { id: string }) => run.id)).toEqual([
+      "ANR-OPS-STUCK",
+      "ANR-OPS-FAILED",
+    ]);
+    const failed = response.body.runs.find((run: { id: string }) => run.id === "ANR-OPS-FAILED");
+    expect(failed.lastErrorMessage).toContain("<redacted>");
+    expect(failed.lastErrorMessage).toContain("<data-url-redacted>");
+    expect(failed.lastErrorMessage).not.toContain("secret-token");
+    expect(failed.lastErrorMessage).not.toContain("sk-secret");
+  });
+
+  it("does not change annotation metrics when legacy candidateAnnotation changes", async () => {
+    const adminCookie = await login("ops-admin");
+    const before = await request(app.getHttpServer())
+      .get("/api/v1/operations/annotation-runs?view=all&includeSummary=true")
+      .set("Cookie", adminCookie)
+      .expect(200);
+    const quality = await dataSource.getRepository(VideoQualityResultEntity).findOneByOrFail({
+      submissionId: "SUB-OPS-REVIEW",
+    });
+    quality.normalizedResult = {
+      candidateAnnotation: {
+        status: "candidate",
+        model: "legacy-shadow-must-not-count",
+        usage: { totalTokens: 999_999 },
+      },
+    };
+    await dataSource.getRepository(VideoQualityResultEntity).save(quality);
+    const after = await request(app.getHttpServer())
+      .get("/api/v1/operations/annotation-runs?view=all&includeSummary=true")
+      .set("Cookie", adminCookie)
+      .expect(200);
+
+    expect(after.body.summary).toEqual(before.body.summary);
+    expect(after.body.coverage).toEqual(before.body.coverage);
+    expect(after.body.runs).toEqual(before.body.runs);
+  });
+
+  it("rejects invalid annotation pagination and non-admin access", async () => {
+    const [adminCookie, collectorCookie] = await Promise.all([
+      login("ops-admin"),
+      login("ops-collector"),
+    ]);
+    await request(app.getHttpServer())
+      .get("/api/v1/operations/annotation-runs?page=0")
+      .set("Cookie", adminCookie)
+      .expect(400);
+    await request(app.getHttpServer())
+      .get("/api/v1/operations/annotation-runs?pageSize=101")
+      .set("Cookie", adminCookie)
+      .expect(400);
+    await request(app.getHttpServer())
+      .get("/api/v1/operations/annotation-runs")
       .set("Cookie", collectorCookie)
       .expect(403);
   });

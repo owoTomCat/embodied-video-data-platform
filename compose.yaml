@@ -118,6 +118,8 @@ services:
       - .env
     environment:
       NODE_ENV: production
+      AI_ANNOTATION_SHADOW_ENABLED: ${AI_ANNOTATION_SHADOW_ENABLED:-true}
+      AI_ANNOTATION_SAMPLE_RATE: ${AI_ANNOTATION_SAMPLE_RATE:-1}
     read_only: true
     tmpfs:
       - /tmp:size=3221225472,mode=1777
@@ -145,6 +147,37 @@ services:
       AI_QUALITY_CONCURRENCY: 3
       AI_QUALITY_MODEL_TIMEOUT_MS: 600000
       VIDEO_QUALITY_PROMPT_PATH: /quality/prompts/qwen-video-ai-quality-framework-v2/manifest.json
+    read_only: true
+    tmpfs:
+      - /tmp:size=3221225472,mode=1777
+    depends_on:
+      api:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - ./docs/quality:/quality:ro
+    restart: unless-stopped
+
+  ai-annotation-worker:
+    image: evdp-ai-annotation-worker:${EVDP_RELEASE_VERSION:-dev}
+    init: true
+    build:
+      context: ./backend
+      target: ai-annotation-worker
+      args:
+        EVDP_RELEASE_VERSION: ${EVDP_RELEASE_VERSION:-dev}
+        EVDP_GIT_SHA: ${EVDP_GIT_SHA:-unknown}
+        EVDP_BUILD_TIME: ${EVDP_BUILD_TIME:-unknown}
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      AI_ANNOTATION_CONCURRENCY: 1
+      AI_ANNOTATION_MODEL_TIMEOUT_MS: 180000
+      ANNOTATION_AUTO_ACCEPT_ENABLED: ${ANNOTATION_AUTO_ACCEPT_ENABLED:-true}
+      ANNOTATION_AUTO_ACCEPT_AUDIT_RATE: ${ANNOTATION_AUTO_ACCEPT_AUDIT_RATE:-0}
+      VIDEO_ANNOTATION_PROMPT_PATH: /quality/prompts/ego-video-annotation-v2/manifest.json
     read_only: true
     tmpfs:
       - /tmp:size=3221225472,mode=1777
@@ -197,8 +230,53 @@ services:
       retries: 20
     restart: unless-stopped
 
+  ai-annotation-lab:
+    image: evdp-ai-quality-lab:${EVDP_RELEASE_VERSION:-dev}
+    profiles: ["ai-test"]
+    init: true
+    build:
+      context: ./backend
+      target: ai-quality-lab
+      args:
+        EVDP_RELEASE_VERSION: ${EVDP_RELEASE_VERSION:-dev}
+        EVDP_GIT_SHA: ${EVDP_GIT_SHA:-unknown}
+        EVDP_BUILD_TIME: ${EVDP_BUILD_TIME:-unknown}
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      QUALITY_LAB_MODE: fused
+      QUALITY_LAB_HOST: 0.0.0.0
+      QUALITY_LAB_PORT: 4011
+      VIDEO_QUALITY_PROMPT_PATH: /quality/prompts/qwen-video-ai-quality-framework-v2/manifest.json
+      VIDEO_ANNOTATION_PROMPT_PATH: /quality/prompts/ego-video-annotation-v2/manifest.json
+      QUALITY_LAB_HISTORY_PATH: /data/quality-lab/jobs.json
+      QUALITY_LAB_HISTORY_RETENTION_DAYS: 30
+      AI_ANNOTATION_CONCURRENCY: 1
+      AI_ANNOTATION_MODEL_TIMEOUT_MS: 180000
+    ports:
+      - "127.0.0.1:4011:4011"
+    read_only: true
+    tmpfs:
+      - /tmp:size=3221225472,mode=1777
+    volumes:
+      - ./docs/quality:/quality:ro
+      - ./Data:/samples:ro
+      - annotation_lab_data:/data/quality-lab
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q -O - http://127.0.0.1:4011/api/health >/dev/null || exit 1",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   redis_data:
   rabbitmq_data:
   quality_lab_data:
+  annotation_lab_data:

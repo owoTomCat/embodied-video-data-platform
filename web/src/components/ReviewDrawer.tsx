@@ -35,6 +35,7 @@ import {
 import type { BackendSubmissionPreview } from "../submissions/contracts";
 import { useInteractions } from "../interactions/InteractionContext";
 import { StatusBadge } from "./StatusBadge";
+import { AnnotationRunReview } from "./AnnotationRunReview";
 
 type IssueDraft = {
   id: string;
@@ -86,11 +87,17 @@ export function ReviewDrawer({
   onClose,
   readOnly = false,
   variant = "drawer",
+  annotationOnly = false,
+  annotationRunId,
+  onAnnotationReviewed,
 }: {
   submission: Submission;
   onClose(): void;
   readOnly?: boolean;
   variant?: "drawer" | "page";
+  annotationOnly?: boolean;
+  annotationRunId?: string;
+  onAnnotationReviewed?(): void;
 }) {
   const { teams } = useIdentity();
   const { notify } = useInteractions();
@@ -105,6 +112,9 @@ export function ReviewDrawer({
   const [error, setError] = useState("");
   const [duplicateSaving, setDuplicateSaving] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [hasIndependentAnnotation, setHasIndependentAnnotation] = useState<
+    boolean | null
+  >(null);
   const [pointRule, setPointRule] = useState<BackendPointRule | null>(null);
   const [pointRuleState, setPointRuleState] = useState<
     "loading" | "ready" | "unavailable"
@@ -162,6 +172,7 @@ export function ReviewDrawer({
         : "danger";
 
   useEffect(() => {
+    if (annotationOnly) return;
     let active = true;
     getPointRule()
       .then((rule) => {
@@ -175,7 +186,7 @@ export function ReviewDrawer({
     return () => {
       active = false;
     };
-  }, []);
+  }, [annotationOnly]);
 
   useEffect(() => {
     let active = true;
@@ -279,6 +290,47 @@ export function ReviewDrawer({
     </section>
   );
 
+  if (annotationOnly) {
+    const annotationContent = annotationRunId ? (
+      <AnnotationRunReview
+        submissionId={submission.id}
+        runId={annotationRunId}
+        readOnly={readOnly}
+        onReviewed={onAnnotationReviewed}
+      />
+    ) : (
+      <p className="form-message error">缺少 Annotation Run ID</p>
+    );
+    if (variant === "page") {
+      return (
+        <div className="page-stack review-page">
+          <button className="back-page" onClick={onClose}><ArrowLeft size={16} />返回 AI 标注</button>
+          <div className="page-heading">
+            <div>
+              <p className="page-kicker">{annotationRunId}</p>
+              <h1>{submission.fileName}</h1>
+              <span>{submission.id} · {submission.ownerName} · {submission.teamName} · {submission.durationSeconds} 秒</span>
+            </div>
+            <StatusBadge label={readOnly ? "标注结果" : "结构化标注复核"} tone={readOnly ? "info" : "warning"} />
+          </div>
+          <div className="detail-grid report-layout review-page-layout">
+            {videoPreview}
+            <div className="review-page-side">{annotationContent}</div>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <>
+        <button className="drawer-backdrop" aria-label="关闭标注复核" onClick={onClose} />
+        <aside className="review-drawer" aria-label="结构化标注复核面板">
+          <header><div><span>结构化标注复核</span><h2>{submission.fileName}</h2><p>{annotationRunId}</p></div><button className="icon-button" aria-label="关闭标注复核" onClick={onClose}><X size={18} /></button></header>
+          <div className="drawer-body">{videoPreview}{annotationContent}</div>
+        </aside>
+      </>
+    );
+  }
+
   const bodyContent = (
     <>
       <section className="ai-conclusion">
@@ -315,6 +367,49 @@ export function ReviewDrawer({
           )}
         </div>
       )}
+      <AnnotationRunReview
+        submissionId={submission.id}
+        readOnly={readOnly}
+        onIndependentState={setHasIndependentAnnotation}
+      />
+      {submission.qualityResult?.candidateAnnotation &&
+        hasIndependentAnnotation === false &&
+        submission.qualityResult.candidateAnnotation.status !== "system_failed" && (
+          <section className="ai-conclusion">
+            <div className="ai-conclusion-head">
+              <span>结构化内容标注（旧影子结果，只读）</span>
+              <StatusBadge
+                label={submission.qualityResult.candidateAnnotation.status === "candidate" ? "候选可用" : "待确认"}
+                tone={submission.qualityResult.candidateAnnotation.status === "candidate" ? "info" : "warning"}
+              />
+            </div>
+            <p>{submission.qualityResult.candidateAnnotation.effective.video_summary}</p>
+            {submission.qualityResult.candidateAnnotation.effective.assessability_reason && (
+              <small>可判定性：{submission.qualityResult.candidateAnnotation.effective.model_assessability === "assessable" ? "可判定" : "需要复核"} · {submission.qualityResult.candidateAnnotation.effective.assessability_reason}</small>
+            )}
+            <ul>
+              {submission.qualityResult.candidateAnnotation.effective.tasks.map((task, index) => (
+                <li key={`review-annotation-task-${index}`}>
+                  <strong>{task.task_label}</strong> · {Math.round(task.start_ms / 1000)}s—{Math.round(task.end_ms / 1000)}s · {Math.round(task.confidence * 100)}%
+                  <small>
+                    完成度 {task.effective_completion} · 结果 {task.effective_result_status}
+                    {task.execution_pattern ? ` · ${task.execution_pattern}` : ""}
+                  </small>
+                  {(task.atomic_action_sequence?.length ?? 0) > 0 && (
+                    <small>原子步骤：{task.atomic_action_sequence!.map((action) => action.verb).join(" → ")}</small>
+                  )}
+                  {task.visible_postcondition && <small>可见后状态：{task.visible_postcondition}</small>}
+                  {task.policy_reasons.length > 0 && <small>证据策略：{task.policy_reasons.join("、")}</small>}
+                </li>
+              ))}
+            </ul>
+            {submission.qualityResult.annotationReview && (
+              <small>
+                上次标注复核：{submission.qualityResult.annotationReview.correctedAnnotation ? "已修正并接受" : submission.qualityResult.annotationReview.decision === "accepted" ? "已接受" : "需要修正"} · {submission.qualityResult.annotationReview.reviewedByName}
+              </small>
+            )}
+          </section>
+        )}
       {duplicateCandidate && (
         <section className="ai-conclusion duplicate-review">
           <div className="ai-conclusion-head"><span>近似重复候选</span><StatusBadge label="待确认" tone="warning" /></div>

@@ -66,7 +66,8 @@ export function isKnownAuthenticatedPath(path: string, role: Role): boolean {
   if (role === "admin") {
     return (
       hasSingleDetailSegment(path, "/admin/submissions/") ||
-      hasSingleDetailSegment(path, "/admin/review/")
+      hasSingleDetailSegment(path, "/admin/review/") ||
+      /^\/admin\/ai\/annotation-runs\/[^/]+\/review$/u.test(path)
     );
   }
   return false;

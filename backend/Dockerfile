@@ -47,6 +47,11 @@ RUN apk add --no-cache ffmpeg
 USER node
 CMD ["node", "dist/ai-quality/ai-quality-worker.js"]
 
+FROM runtime-base AS ai-annotation-worker
+RUN apk add --no-cache ffmpeg
+USER node
+CMD ["node", "dist/video-annotation/annotation-worker.js"]
+
 FROM runtime-base AS ai-quality-lab
 RUN apk add --no-cache ffmpeg su-exec
 EXPOSE 4010

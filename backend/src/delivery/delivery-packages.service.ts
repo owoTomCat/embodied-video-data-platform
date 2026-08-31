@@ -8,7 +8,7 @@ import { pipeline } from "node:stream/promises";
 
 import { Inject, Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { DataSource, MoreThan, Repository, type EntityManager } from "typeorm";
+import { DataSource, In, MoreThan, Repository, type EntityManager } from "typeorm";
 
 import { AuditService } from "../audit/audit.service.js";
 import type { PublicUser } from "../auth/auth.types.js";
@@ -23,10 +23,16 @@ import { MediaMetadataEntity } from "../database/entities/media-metadata.entity.
 import { PointCycleItemEntity } from "../database/entities/point-cycle-item.entity.js";
 import { loadLatestPointCycleAdjustments } from "../points/latest-point-cycle-adjustments.js";
 import { SubmissionEntity } from "../database/entities/submission.entity.js";
+import { AnnotationRunEntity } from "../database/entities/annotation-run.entity.js";
+import { AnnotationReviewEntity } from "../database/entities/annotation-review.entity.js";
 import {
   OBJECT_STORAGE,
   type ObjectStoragePort,
 } from "../storage/object-storage.port.js";
+import {
+  acceptedAnnotationRun,
+  type AcceptedDeliveryAnnotation,
+} from "./delivery-annotation.js";
 import { DeliveryFailure } from "./delivery-failure.js";
 
 const DELIVERY_DOWNLOAD_URL_TTL_SECONDS = 30 * 60;
@@ -81,6 +87,7 @@ type Candidate = {
   sizeBytes: string;
   finalScore: string;
   points: string;
+  acceptedAnnotation: AcceptedDeliveryAnnotation | null;
 };
 
 type ZipEntry = {
@@ -94,6 +101,9 @@ type ZipEntry = {
 };
 
 function publicItem(item: DeliveryPackageItemEntity) {
+  const annotation = item.acceptedAnnotationSnapshot as
+    | AcceptedDeliveryAnnotation
+    | null;
   return {
     id: item.id,
     submissionId: item.submissionId,
@@ -104,6 +114,15 @@ function publicItem(item: DeliveryPackageItemEntity) {
     finalScore: Number(item.finalScore),
     points: Number(item.points),
     sizeBytes: item.sizeBytes,
+    annotation: annotation
+      ? {
+          available: true,
+          schemaVersion: annotation.schemaVersion,
+          policyVersion: annotation.policyVersion,
+          promptVersion: annotation.promptVersion,
+          reviewedAt: annotation.acceptance.acceptedAt,
+        }
+      : { available: false },
   };
 }
 
@@ -193,19 +212,32 @@ function manifestCsvFor(deliveryPackage: DeliveryPackageEntity): string {
       "final_score",
       "points",
       "size_bytes",
+      "annotation_file",
+      "annotation_schema_version",
+      "annotation_policy_version",
+      "annotation_prompt_version",
     ],
-    ...(deliveryPackage.items ?? []).map((item) => [
-      deliveryPackage.id,
-      deliveryPackage.name,
-      item.submissionId,
-      item.fileName,
-      item.objectKey,
-      item.teamName,
-      item.ownerName,
-      Number(item.finalScore).toFixed(1),
-      Number(item.points).toFixed(2),
-      item.sizeBytes,
-    ]),
+    ...(deliveryPackage.items ?? []).map((item) => {
+      const annotation = item.acceptedAnnotationSnapshot as
+        | AcceptedDeliveryAnnotation
+        | null;
+      return [
+        deliveryPackage.id,
+        deliveryPackage.name,
+        item.submissionId,
+        item.fileName,
+        item.objectKey,
+        item.teamName,
+        item.ownerName,
+        Number(item.finalScore).toFixed(1),
+        Number(item.points).toFixed(2),
+        item.sizeBytes,
+        annotation ? annotationArchiveName(item) : "",
+        annotation?.schemaVersion ?? "",
+        annotation?.policyVersion ?? "",
+        annotation?.promptVersion ?? "",
+      ];
+    }),
   ];
   return csvDocument(rows);
 }
@@ -249,6 +281,22 @@ function tarPadding(size: number | bigint): Buffer {
 function archiveAssetName(item: DeliveryPackageItemEntity): string {
   const extension = extname(item.fileName).toLowerCase() || ".mp4";
   return `assets/${item.submissionId}${extension}`;
+}
+
+function annotationArchiveName(item: DeliveryPackageItemEntity): string {
+  const safeSubmissionId = item.submissionId.replace(
+    /[^a-zA-Z0-9._-]/gu,
+    "_",
+  );
+  return `annotations/${safeSubmissionId}.json`;
+}
+
+function annotationBuffer(item: DeliveryPackageItemEntity): Buffer | null {
+  if (!item.acceptedAnnotationSnapshot) return null;
+  return Buffer.from(
+    `${JSON.stringify(item.acceptedAnnotationSnapshot, null, 2)}\n`,
+    "utf8",
+  );
 }
 
 function archiveContentType(format: DeliveryArchiveFormat): string {
@@ -514,7 +562,14 @@ export class DeliveryPackagesService {
         });
       await manager.getRepository(DeliveryPackageItemEntity).save(
         candidates.map(
-          ({ pointItem, submission, sizeBytes, finalScore, points }) => ({
+          ({
+            pointItem,
+            submission,
+            sizeBytes,
+            finalScore,
+            points,
+            acceptedAnnotation,
+          }) => ({
             id: `DPI-${randomUUID()}`,
             packageId: id,
             pointCycleItemId: pointItem.id,
@@ -526,6 +581,7 @@ export class DeliveryPackagesService {
             finalScore,
             points,
             sizeBytes,
+            acceptedAnnotationSnapshot: acceptedAnnotation,
           }),
         ),
       );
@@ -1107,6 +1163,12 @@ export class DeliveryPackagesService {
       yield tarPadding(BigInt(manifest.length));
 
       for (const [index, item] of items.entries()) {
+        const annotation = annotationBuffer(item);
+        if (annotation) {
+          yield tarHeader(annotationArchiveName(item), annotation.length);
+          yield annotation;
+          yield tarPadding(BigInt(annotation.length));
+        }
         const size = BigInt(item.sizeBytes);
         yield tarHeader(archiveAssetName(item), size);
         const source = await storage.readObject({ objectKey: item.objectKey });
@@ -1190,6 +1252,14 @@ export class DeliveryPackagesService {
       );
 
       for (const [index, item] of items.entries()) {
+        const annotation = annotationBuffer(item);
+        if (annotation) {
+          yield* addEntry(
+            annotationArchiveName(item),
+            BigInt(annotation.length),
+            Readable.from([annotation]),
+          );
+        }
         const source = await storage.readObject({ objectKey: item.objectKey });
         const expectedSize = BigInt(item.sizeBytes);
         yield* addEntry(
@@ -1320,6 +1390,39 @@ export class DeliveryPackagesService {
       manager,
       pointItems.map((pointItem) => pointItem.id),
     );
+    const submissionIds = pointItems.flatMap((pointItem) =>
+      pointItem.submission ? [pointItem.submission.id] : [],
+    );
+    const verifiedRuns =
+      submissionIds.length === 0
+        ? []
+        : await manager.getRepository(AnnotationRunEntity).find({
+            where: {
+              submissionId: In(submissionIds),
+              publicationStatus: In(["human_verified", "auto_accepted"]),
+            },
+            order: { createdAt: "DESC", id: "DESC" },
+          });
+    const latestVerifiedRun = new Map<string, AnnotationRunEntity>();
+    for (const run of verifiedRuns) {
+      if (!latestVerifiedRun.has(run.submissionId)) {
+        latestVerifiedRun.set(run.submissionId, run);
+      }
+    }
+    const verifiedRunIds = [...latestVerifiedRun.values()].map((run) => run.id);
+    const verifiedReviews =
+      verifiedRunIds.length === 0
+        ? []
+        : await manager.getRepository(AnnotationReviewEntity).find({
+            where: { annotationRunId: In(verifiedRunIds) },
+            order: { revision: "DESC" },
+          });
+    const latestVerifiedReview = new Map<string, AnnotationReviewEntity>();
+    for (const review of verifiedReviews) {
+      if (!latestVerifiedReview.has(review.annotationRunId)) {
+        latestVerifiedReview.set(review.annotationRunId, review);
+      }
+    }
     return pointItems.flatMap((pointItem) => {
       const submission = pointItem.submission;
       if (!submission) return [];
@@ -1333,6 +1436,7 @@ export class DeliveryPackagesService {
           metadata?: MediaMetadataEntity | null;
         }
       ).metadata;
+      const annotationRun = latestVerifiedRun.get(submission.id);
       return [
         {
           pointItem,
@@ -1340,6 +1444,13 @@ export class DeliveryPackagesService {
           sizeBytes: metadata?.sizeBytes ?? submission.expectedSizeBytes,
           finalScore: adjustment?.nextFinalScore ?? pointItem.finalScore,
           points: adjustment?.nextPoints ?? pointItem.points,
+          acceptedAnnotation:
+            acceptedAnnotationRun(
+              annotationRun,
+              annotationRun
+                ? latestVerifiedReview.get(annotationRun.id)
+                : undefined,
+            ),
         },
       ];
     });

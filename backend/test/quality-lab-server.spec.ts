@@ -21,7 +21,11 @@ function environment(
     port: 4010,
     maxUploadBytes: 1_024,
     modelTimeoutMs: 600_000,
+    mode: "quality",
     promptPath: "/quality/prompt.md",
+    annotationPromptPath: "/quality/annotation/manifest.json",
+    annotationModelTimeoutMs: 180_000,
+    annotationConcurrency: 1,
     qwenApiKey: "configured",
     qwenBaseUrl: "https://workspace.example.com/compatible-mode/v1",
     initialModel: "qwen3.7-plus",
@@ -96,6 +100,7 @@ describe("quality lab environment", () => {
     const parsed = parseQualityLabEnvironment({});
     expect(parsed.host).toBe("127.0.0.1");
     expect(parsed.port).toBe(4010);
+    expect(parsed.mode).toBe("quality");
     expect(parsed.modelConfigured).toBe(false);
     expect(parsed.qwenApiKey).toBeUndefined();
     expect(parsed.initialModel).toBe("qwen3.7-plus");
@@ -106,6 +111,24 @@ describe("quality lab environment", () => {
       QUALITY_LAB_HISTORY_PATH: "/data/quality-lab/jobs.json",
     });
     expect(persisted.promptStatePath).toBe("/data/quality-lab/prompt.json");
+
+    const fused = parseQualityLabEnvironment({
+      QUALITY_LAB_MODE: "fused",
+      QUALITY_LAB_PORT: "4011",
+      VIDEO_ANNOTATION_PROMPT_PATH: "/quality/annotation/manifest.json",
+      AI_ANNOTATION_MODEL_TIMEOUT_MS: "200000",
+      AI_ANNOTATION_CONCURRENCY: "2",
+    });
+    expect(fused).toMatchObject({
+      mode: "fused",
+      port: 4011,
+      annotationPromptPath: "/quality/annotation/manifest.json",
+      annotationModelTimeoutMs: 200_000,
+      annotationConcurrency: 2,
+    });
+    expect(() =>
+      parseQualityLabEnvironment({ QUALITY_LAB_MODE: "unknown" }),
+    ).toThrow("QUALITY_LAB_MODE");
   });
 });
 
@@ -164,6 +187,49 @@ describe("quality lab server", () => {
     expect(secondResult.body.promptContentSha256).not.toBe(
       firstResult.body.promptContentSha256,
     );
+  });
+
+  it("identifies the fused lab and its annotation contract in health", async () => {
+    const app = createQualityLabApp({
+      environment: environment({ mode: "fused", port: 4011 }),
+      evaluator: { evaluate: vi.fn() },
+      annotation: {
+        model: "qwen3.7-plus",
+        promptVersion: "ego_video_annotation_prompt_v2",
+        schemaVersion: "ego_video_annotation_v2",
+        systemPrompt: "你是任务盲内容观察器。",
+      },
+    });
+
+    const health = await request(app).get("/api/health").expect(200);
+    expect(health.body).toMatchObject({
+      labMode: "fused",
+      annotationEnabled: true,
+      annotationModel: "qwen3.7-plus",
+      annotationPromptVersion: "ego_video_annotation_prompt_v2",
+      annotationSchemaVersion: "ego_video_annotation_v2",
+    });
+    expect((await request(app).get("/")).text).toContain("融合 AI 标注实验页");
+    const annotationPrompt = await request(app)
+      .get("/api/annotation-prompt")
+      .expect(200);
+    expect(annotationPrompt.body).toEqual({
+      prompt: {
+        systemPrompt: "你是任务盲内容观察器。",
+        promptVersion: "ego_video_annotation_prompt_v2",
+        outputSchema: "ego_video_annotation_v2",
+        model: "qwen3.7-plus",
+      },
+    });
+  });
+
+  it("does not expose a fused prompt from the original baseline lab", async () => {
+    const app = createQualityLabApp({
+      environment: environment(),
+      evaluator: { evaluate: vi.fn() },
+    });
+
+    await request(app).get("/api/annotation-prompt").expect(404);
   });
 
   it("rejects invalid prompt updates without changing the active revision", async () => {

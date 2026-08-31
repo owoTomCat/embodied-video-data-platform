@@ -212,6 +212,13 @@ export function backendSubmissionToDomain(
           hardVeto: source.quality.hardVeto,
           taskCompliance: source.quality.taskCompliance,
           billingObservations: source.quality.billingObservations,
+          candidateAnnotation: source.quality.candidateAnnotation,
+          annotationReview: source.quality.annotationReview
+            ? {
+                ...source.quality.annotationReview,
+                reviewedAt: createdAt(source.quality.annotationReview.reviewedAt),
+              }
+            : undefined,
           detectedTask: source.quality.detectedTask
             ? {
                 task_id: source.quality.detectedTask.task_id,

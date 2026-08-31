@@ -1,0 +1,9 @@
+{
+  "promptVersion": "ego_video_annotation_prompt_v2",
+  "outputSchema": "ego_video_annotation_v2",
+  "model": "qwen3.7-plus",
+  "files": {
+    "systemPrompt": "system.txt",
+    "outputExample": "output-example.json"
+  }
+}

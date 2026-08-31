@@ -2,12 +2,18 @@ import { dirname, resolve } from "node:path";
 
 export type RawQualityLabEnvironment = Record<string, string | undefined>;
 
+export type QualityLabMode = "quality" | "fused";
+
 export type QualityLabEnvironment = {
   host: string;
   port: number;
   maxUploadBytes: number;
   modelTimeoutMs: number;
+  mode: QualityLabMode;
   promptPath: string;
+  annotationPromptPath: string;
+  annotationModelTimeoutMs: number;
+  annotationConcurrency: number;
   qwenApiKey?: string;
   qwenBaseUrl: string;
   initialModel: string;
@@ -49,6 +55,10 @@ export function parseQualityLabEnvironment(
     throw new Error("QUALITY_LAB_HOST 只能是 127.0.0.1 或 0.0.0.0");
   }
   const historyPath = source.QUALITY_LAB_HISTORY_PATH?.trim() || undefined;
+  const modeValue = source.QUALITY_LAB_MODE?.trim().toLowerCase() || "quality";
+  if (modeValue !== "quality" && modeValue !== "fused") {
+    throw new Error("QUALITY_LAB_MODE 必须是 quality 或 fused");
+  }
   return {
     host,
     port: integer(source, "QUALITY_LAB_PORT", 4010, 1, 65_535),
@@ -66,12 +76,33 @@ export function parseQualityLabEnvironment(
       1_000,
       3_600_000,
     ),
+    mode: modeValue,
     promptPath:
       source.VIDEO_QUALITY_PROMPT_PATH?.trim() ||
       resolve(
         process.cwd(),
         "../docs/quality/prompts/qwen-video-ai-quality-framework-v2/manifest.json",
       ),
+    annotationPromptPath:
+      source.VIDEO_ANNOTATION_PROMPT_PATH?.trim() ||
+      resolve(
+        process.cwd(),
+        "../docs/quality/prompts/ego-video-annotation-v2/manifest.json",
+      ),
+    annotationModelTimeoutMs: integer(
+      source,
+      "AI_ANNOTATION_MODEL_TIMEOUT_MS",
+      180_000,
+      10_000,
+      600_000,
+    ),
+    annotationConcurrency: integer(
+      source,
+      "AI_ANNOTATION_CONCURRENCY",
+      1,
+      1,
+      8,
+    ),
     qwenApiKey,
     qwenBaseUrl: url.toString().replace(/\/$/u, ""),
     initialModel:

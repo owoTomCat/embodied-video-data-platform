@@ -40,25 +40,29 @@ function required(name: string): string {
     {
       provide: AI_QUALITY_EVALUATOR_FACTORY,
       useFactory: () =>
-        (prompt: ConstructorParameters<typeof QwenVideoQualityProvider>[0]["prompt"]) => {
-        const provider = new QwenVideoQualityProvider({
-          config: {
-            apiKey: required("QWEN_API_KEY"),
-            baseUrl: required("QWEN_BASE_URL"),
-            initialModel: prompt.initialModel,
-            reviewModel: prompt.reviewModel,
-            timeoutMs: aiQualityModelTimeoutMs(
-              process.env.AI_QUALITY_MODEL_TIMEOUT_MS,
-            ),
-          },
-          prompt,
-          diagnosticSink: (diagnostic) => {
-            process.stdout.write(`${JSON.stringify({
-              event: "ai_quality_model_call",
-              ...diagnostic,
-            })}\n`);
-          },
-        });
+        (
+          prompt: ConstructorParameters<
+            typeof QwenVideoQualityProvider
+          >[0]["prompt"],
+        ) => {
+          const provider = new QwenVideoQualityProvider({
+            config: {
+              apiKey: required("QWEN_API_KEY"),
+              baseUrl: required("QWEN_BASE_URL"),
+              initialModel: prompt.initialModel,
+              reviewModel: prompt.reviewModel,
+              timeoutMs: aiQualityModelTimeoutMs(
+                process.env.AI_QUALITY_MODEL_TIMEOUT_MS,
+              ),
+            },
+            prompt,
+            diagnosticSink: (diagnostic) => {
+              process.stdout.write(`${JSON.stringify({
+                event: "ai_quality_model_call",
+                ...diagnostic,
+              })}\n`);
+            },
+          });
           return new VideoQualityService({
             preprocessor: new VideoQualityMediaPreprocessor(),
             provider,

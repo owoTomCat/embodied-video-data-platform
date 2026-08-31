@@ -3,6 +3,15 @@ import { describe, expect, it } from "vitest";
 import { renderQualityLabPage } from "../src/quality-lab/page.js";
 
 describe("quality lab page", () => {
+  it("emits syntactically valid browser scripts for both modes", () => {
+    for (const mode of ["quality", "fused"] as const) {
+      const html = renderQualityLabPage(mode);
+      const script = html.match(/<script>([\s\S]*?)<\/script>/u)?.[1];
+      expect(script).toBeTruthy();
+      expect(() => Function(script ?? "")).not.toThrow();
+    }
+  });
+
   it("contains only the local upload queue and result workflow", () => {
     const html = renderQualityLabPage();
 
@@ -100,5 +109,32 @@ describe("quality lab page", () => {
     expect(html).toContain("function formatDateTime(value)");
     expect(html).toContain('"queue-upload-time","上传时间 · "+formatDateTime(entry.createdAt)');
     expect(html).toContain('"result-upload-time","上传时间 · "+formatDateTime(entry.createdAt)');
+  });
+
+  it("keeps the 4010 baseline page separate from the fused experiment", () => {
+    const html = renderQualityLabPage("quality");
+
+    expect(html).toContain("原业务 AI 质检实验页");
+    expect(html).toContain("4010 · 原业务质检");
+    expect(html).toContain('const labMode = "quality"');
+    expect(html).not.toContain('id="annotation-meta"');
+  });
+
+  it("renders structured candidate annotations on the 4011 fused page", () => {
+    const html = renderQualityLabPage("fused");
+
+    expect(html).toContain("融合 AI 标注实验页");
+    expect(html).toContain("4011 · 融合标注");
+    expect(html).toContain('const labMode = "fused"');
+    expect(html).toContain('id="annotation-meta"');
+    expect(html).toContain('id="annotation-prompt-editor"');
+    expect(html).toContain("链路 1 · 原业务质检 Prompt");
+    expect(html).toContain("链路 2 · 现有融合标注 Prompt");
+    expect(html).toContain('fetch("/api/annotation-prompt")');
+    expect(html).toContain("function renderAnnotation(card,result)");
+    expect(html).toContain("result.candidateAnnotation");
+    expect(html).toContain("融合结构化标注");
+    expect(html).toContain("候选新标签");
+    expect(html).toContain("fused-annotation-history.json");
   });
 });

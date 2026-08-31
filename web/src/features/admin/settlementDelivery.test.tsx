@@ -185,7 +185,7 @@ describe("settlement actions", () => {
         createdByName: "管理员",
         createdAt: 1_786_118_400_000,
         items: [],
-        
+
       },
     ]);
     previewDeliveryPackageMock.mockResolvedValue({

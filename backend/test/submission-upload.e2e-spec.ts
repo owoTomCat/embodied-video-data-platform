@@ -540,6 +540,15 @@ describe("submission multipart upload API", () => {
           confidence: 0.98,
         },
         invalidSegments: [],
+        candidateAnnotation: {
+          status: "candidate",
+          schemaVersion: "ego_video_annotation_v1",
+          policyVersion: "ego_annotation_evidence_policy_v1",
+          promptVersion: "ego_video_annotation_prompt_v1",
+          promptContentSha256: "a".repeat(64),
+          effective: { video_summary: "整理厨房台面", tasks: [] },
+          validation: { errors: [], warnings: [] },
+        },
       },
       rawModelResult: {},
       startedAt: new Date(),
@@ -1045,6 +1054,87 @@ describe("submission multipart upload API", () => {
 
   it("persists manual quality review with audit and optimistic revision checks", async () => {
     const adminCookie = await login("upload-admin");
+    const correction = {
+      schema_version: "ego_video_annotation_v2",
+      video_id: completedSubmissionId,
+      video_summary: "人工复核确认当前采样帧没有可交付任务。",
+      scene: {
+        coarse_label: "室内",
+        fine_label: "家庭厨房",
+        confidence: 0.95,
+        evidence_timestamps_ms: [0],
+      },
+      temporal_structure_type: "unclear",
+      model_assessability: "assessable",
+      assessability_reason: "人工核对原视频后确认该结构化结果。",
+      tasks: [],
+      coverage_segments: [
+        {
+          start_ms: 0,
+          end_ms: 750,
+          segment_type: "transition",
+          linked_task_index: null,
+          visible_activity: "无独立手物操作",
+          evidence_timestamps_ms: [0, 250, 500, 750],
+        },
+      ],
+      uncertain_fields: [],
+      global_limitations: [],
+    };
+    const qualityBeforeReview = await dataSource
+      .getRepository(VideoQualityResultEntity)
+      .findOneByOrFail({ submissionId: completedSubmissionId });
+    qualityBeforeReview.normalizedResult = {
+      ...(qualityBeforeReview.normalizedResult ?? {}),
+      candidateAnnotation: {
+        status: "review_required",
+        schemaVersion: "ego_video_annotation_v2",
+        policyVersion: "ego_annotation_evidence_policy_v2",
+        promptVersion: "ego_video_annotation_prompt_v2",
+        promptContentSha256: "a".repeat(64),
+        model: "qwen3.7-plus",
+        sampling: {
+          maxFrameGapMs: 250,
+          sourceTimestampsMs: [0, 250, 500, 750],
+        },
+        raw: correction,
+        effective: correction,
+        labelMappings: [],
+        validation: { errors: [], warnings: [] },
+      },
+    };
+    qualityBeforeReview.labelSetSnapshot = {
+      id: "LSV-ANNOTATION-TEST",
+      revision: 1,
+      version: "LABELS-ANNOTATION-TEST",
+      labels: [
+        {
+          id: "SCENE-001",
+          name: "家庭厨房",
+          type: "scene",
+          enabled: true,
+        },
+      ],
+    };
+    await dataSource
+      .getRepository(VideoQualityResultEntity)
+      .save(qualityBeforeReview);
+    await request(app.getHttpServer())
+      .patch(`/api/v1/submissions/${completedSubmissionId}/quality-review`)
+      .set("Origin", WEB_ORIGIN)
+      .set("Cookie", adminCookie)
+      .send({
+        finalScore: 92,
+        reason: "旧影子字段不得再写入正式复核",
+        expectedReviewRevision: 0,
+        issues: [],
+        annotationDecision: "accepted",
+        annotationCorrection: correction,
+      })
+      .expect(400);
+    expect(await dataSource.getRepository(VideoQualityResultEntity).findOneByOrFail({
+      submissionId: completedSubmissionId,
+    })).toMatchObject({ reviewRevision: 0 });
     const reviewed = await request(app.getHttpServer())
       .patch(`/api/v1/submissions/${completedSubmissionId}/quality-review`)
       .set("Origin", WEB_ORIGIN)
@@ -1071,6 +1161,7 @@ describe("submission multipart upload API", () => {
         finalScore: 92,
       },
     });
+    expect(reviewed.body.submission.quality.annotationReview).toBeUndefined();
     expect(reviewed.body.submission.quality.manualIssues).toEqual([
       { label: "轻微晃动", start: 1, end: 3.5 },
     ]);

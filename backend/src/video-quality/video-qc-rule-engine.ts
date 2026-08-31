@@ -473,6 +473,88 @@ export function normalizeTaskCompliance(
   };
 }
 
+function canonicalRequirement(value: string): string {
+  return value.normalize("NFKC").trim().replace(/\s+/gu, " ");
+}
+
+/**
+ * 将模型条目逐条绑定到提交时锁定的任务要求。
+ * 要求文本和 hard/soft 类型由服务端快照覆盖；缺项不得静默跳过。
+ */
+export function alignTaskComplianceToRequirements(
+  compliance: TaskComplianceResult | null,
+  expectedRequirements: Array<{
+    type: "hard" | "soft";
+    content: string;
+  }>,
+  warnings: string[],
+): TaskComplianceResult {
+  const available = new Map<string, TaskComplianceItem[]>();
+  for (const item of compliance?.items ?? []) {
+    const key = canonicalRequirement(item.requirement);
+    const candidates = available.get(key) ?? [];
+    candidates.push(item);
+    available.set(key, candidates);
+  }
+
+  let requiresReview = compliance?.review_required === true;
+  const items = expectedRequirements.map((expected) => {
+    const key = canonicalRequirement(expected.content);
+    const candidates = available.get(key) ?? [];
+    const matched = candidates.shift();
+    if (candidates.length === 0) available.delete(key);
+    else available.set(key, candidates);
+
+    if (!matched) {
+      warnings.push(`任务符合度缺少锁定要求：${expected.content}`);
+      requiresReview = true;
+      return {
+        requirement: expected.content,
+        type: expected.type,
+        result: "unmet" as const,
+        confidence: 0,
+        evidence_timestamps_ms: [],
+      };
+    }
+    if (matched.type !== expected.type) {
+      warnings.push(`任务要求类型已由服务端快照覆盖：${expected.content}`);
+    }
+    if (matched.evidence_timestamps_ms.length === 0) {
+      warnings.push(`任务符合度判定缺少证据时间点：${expected.content}`);
+      requiresReview = true;
+    }
+    return {
+      ...matched,
+      requirement: expected.content,
+      type: expected.type,
+    };
+  });
+
+  const unexpectedCount = [...available.values()].reduce(
+    (total, candidates) => total + candidates.length,
+    0,
+  );
+  if (unexpectedCount > 0) {
+    warnings.push(`模型返回 ${unexpectedCount} 条不属于锁定快照的任务要求，已忽略`);
+    requiresReview = true;
+  }
+  if (!compliance) {
+    warnings.push("模型未返回任务符合度区块");
+    requiresReview = true;
+  }
+
+  return {
+    scene_match: compliance?.scene_match ?? {
+      matched: false,
+      confidence: 0,
+      note: "模型未返回场景匹配结论",
+    },
+    items,
+    compliance_ratio: serverComplianceRatio(items),
+    review_required: requiresReview,
+  };
+}
+
 /** 服务端按条目复算符合度比例：met=1、partial=0.5、unmet=0（无条目时为 0） */
 export function serverComplianceRatio(
   items: TaskComplianceResult["items"],
@@ -505,8 +587,12 @@ export function applyServerTaskCompliance(
   const hardUnmet = compliance.items.filter(
     (item) => item.type === "hard" && item.result === "unmet",
   );
-  const complianceReview = !sceneMatched || hardUnmet.length > 0;
+  const complianceReview =
+    compliance.review_required || !sceneMatched || hardUnmet.length > 0;
   const reviewReasons = [...normalized.reviewReasons];
+  if (compliance.review_required) {
+    reviewReasons.push("任务符合度：条目不完整或证据不足，需人工复核");
+  }
   if (!sceneMatched) {
     reviewReasons.push("任务符合度：视频内容与任务声明场景不匹配");
   }

@@ -116,4 +116,24 @@ describe("video quality media preprocessor", () => {
     expect(runner.calls.some((call) => call.command === "ffprobe")).toBe(true);
     expect(runner.calls.filter((call) => call.command === "ffmpeg")).toHaveLength(2);
   });
+
+  it("prepares annotation frames without running quality detectors", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "evdp-annotation-media-test-"));
+    temporaryDirectories.push(directory);
+    const source = join(directory, "video.mp4");
+    await writeFile(source, Buffer.from("test-content"));
+    const runner = new FakeRunner();
+    const preprocessor = new VideoQualityMediaPreprocessor({ runner });
+
+    const prepared = await preprocessor.prepareAnnotation(
+      source,
+      join(directory, "work"),
+    );
+
+    expect(prepared.fullVideoFrames).toHaveLength(4);
+    expect(runner.calls.filter((call) => call.command === "ffmpeg")).toHaveLength(1);
+    expect(
+      runner.calls.some((call) => call.args.some((argument) => argument.includes("blackdetect"))),
+    ).toBe(false);
+  });
 });

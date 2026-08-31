@@ -7,7 +7,7 @@ import {
   UpdateDateColumn,
 } from "typeorm";
 
-export type WorkerKind = "media" | "ai_quality";
+export type WorkerKind = "media" | "ai_quality" | "ai_annotation";
 export type WorkerHeartbeatStatus = "idle" | "running" | "stopped";
 
 @Entity({ name: "worker_heartbeats" })

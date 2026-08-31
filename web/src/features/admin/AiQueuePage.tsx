@@ -1,7 +1,7 @@
 "use client";
 
-import { CheckCircle2, CircleX, Clock3, Cpu, RotateCcw, Server, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { CheckCircle2, CircleX, Clock3, CopyCheck, Cpu, RotateCcw, Server, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { MetricCard } from "../../components/MetricCard";
 import { StatusBadge } from "../../components/StatusBadge";
@@ -9,6 +9,7 @@ import { stageLabel, stagePercent } from "../../components/AiQualityProgress";
 import type { Submission } from "../../domain/types";
 import {
   getQueueSnapshot,
+  getAnnotationOperations,
   pruneInactiveWorkers,
   reclaimWorkerTimeouts,
 } from "../../operations/client/operationsApi";
@@ -16,6 +17,9 @@ import type {
   BackendQueueJob,
   BackendQueueSnapshot,
   BackendWorkerHeartbeat,
+  BackendAnnotationOperations,
+  BackendAnnotationRunListItem,
+  AnnotationOperationsView,
 } from "../../operations/contracts";
 import {
   loadAllSubmissions,
@@ -73,11 +77,13 @@ function queueJobStatus(job: BackendQueueJob): {
 function eventLabel(eventType: string): string {
   if (eventType === "media.probe.v1") return "媒体分析";
   if (eventType === "ai.quality.v1") return "AI 质检";
+  if (eventType === "ai.annotation.v1") return "结构化标注";
   return eventType;
 }
 
 function workerKindLabel(kind: BackendWorkerHeartbeat["kind"]): string {
   if (kind === "media") return "媒体 Worker";
+  if (kind === "ai_annotation") return "结构化标注 Worker";
   return "AI 质检 Worker";
 }
 
@@ -111,7 +117,33 @@ function formatDurationMs(milliseconds?: number): string {
   return remainingSeconds ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`;
 }
 
-export function AiQueuePage() {
+const annotationViews: Array<{ value: AnnotationOperationsView; label: string }> = [
+  { value: "pending_review", label: "待人工复核" },
+  { value: "audit_pending", label: "待抽检" },
+  { value: "auto_published", label: "自动发布" },
+  { value: "execution_failed", label: "执行失败" },
+  { value: "in_progress", label: "执行中" },
+  { value: "resolved", label: "已处理" },
+  { value: "all", label: "全部" },
+];
+
+function annotationRunStatus(run: BackendAnnotationRunListItem) {
+  if (run.publicationStatus === "human_verified") return { label: "正式发布", tone: "success" as const };
+  if (run.publicationStatus === "auto_accepted") {
+    return run.auditStatus === "pending"
+      ? { label: "自动发布·待抽检", tone: "info" as const }
+      : { label: "自动发布", tone: "success" as const };
+  }
+  if (run.publicationStatus === "superseded") return { label: "已替代/废弃", tone: "neutral" as const };
+  if (run.reviewStatus === "rejected") return { label: "人工拒绝", tone: "danger" as const };
+  if (run.reviewStatus === "unable_to_judge") return { label: "无法判断", tone: "warning" as const };
+  if (run.executionStatus === "succeeded") return { label: "待复核", tone: "warning" as const };
+  if (["system_failed", "stuck"].includes(run.executionStatus)) return { label: "执行失败", tone: "danger" as const };
+  if (run.executionStatus === "cancelled") return { label: "已取消", tone: "neutral" as const };
+  return { label: "执行中", tone: "info" as const };
+}
+
+export function AiQueuePage({ navigate }: { navigate?(path: string): void } = {}) {
   const { notify } = useInteractions();
   const [liveSubmissions, setLiveSubmissions] = useState<Submission[] | null>(null);
   const jobs = useMemo(() => liveSubmissions ?? [], [liveSubmissions]);
@@ -122,6 +154,12 @@ export function AiQueuePage() {
   const [pruning, setPruning] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [rerunTarget, setRerunTarget] = useState<Submission | null>(null);
+  const [annotationView, setAnnotationView] = useState<AnnotationOperationsView>("pending_review");
+  const [annotationPage, setAnnotationPage] = useState(1);
+  const [annotationSnapshot, setAnnotationSnapshot] = useState<BackendAnnotationOperations | null>(null);
+  const [annotationStale, setAnnotationStale] = useState(false);
+  const annotationRequestRunning = useRef(false);
+  const annotationSummaryCache = useRef<Pick<BackendAnnotationOperations, "summary" | "coverage"> | null>(null);
 
   const loadTasks = useCallback(() => {
     loadAllSubmissions({ status: "all" })
@@ -153,6 +191,50 @@ export function AiQueuePage() {
     }, 10_000);
     return () => clearInterval(timer);
   }, [loadTasks, loadSnapshot]);
+
+  const loadAnnotationRuns = useCallback(async (includeSummary: boolean) => {
+    if (document.hidden || annotationRequestRunning.current) return;
+    annotationRequestRunning.current = true;
+    try {
+      const next = await getAnnotationOperations({
+        view: annotationView,
+        page: annotationPage,
+        includeSummary,
+      });
+      if (includeSummary) {
+        annotationSummaryCache.current = {
+          summary: next.summary,
+          coverage: next.coverage,
+        };
+      }
+      const cached = annotationSummaryCache.current;
+      setAnnotationSnapshot({
+        ...next,
+        ...(cached?.summary ? { summary: cached.summary } : {}),
+        ...(cached?.coverage ? { coverage: cached.coverage } : {}),
+      });
+      setAnnotationStale(false);
+    } catch {
+      setAnnotationStale(true);
+    } finally {
+      annotationRequestRunning.current = false;
+    }
+  }, [annotationPage, annotationView]);
+
+  useEffect(() => {
+    void loadAnnotationRuns(annotationSummaryCache.current === null);
+    const listTimer = setInterval(() => void loadAnnotationRuns(false), 10_000);
+    const summaryTimer = setInterval(() => void loadAnnotationRuns(true), 60_000);
+    const onVisibilityChange = () => {
+      if (!document.hidden) void loadAnnotationRuns(true);
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      clearInterval(listTimer);
+      clearInterval(summaryTimer);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [loadAnnotationRuns]);
 
   const fallbackMetrics = useMemo(() => {
     const queued = jobs.filter(
@@ -186,7 +268,6 @@ export function AiQueuePage() {
     ).length;
     return { queued, mediaRunning, aiRunning, completed, failed, stuck };
   }, [jobs]);
-
   const liveSummary = snapshot?.summary;
   const liveWorkers = snapshot?.workers ?? [];
   const inactiveWorkers = snapshot?.inactive ?? [];
@@ -277,7 +358,7 @@ export function AiQueuePage() {
         {liveSummary ? (
           <>
             <MetricCard label="等待发布" value={String(liveSummary.pending)} detail={`最近 ${liveSummary.total} 条队列记录`} icon={Clock3} tone="amber" />
-            <MetricCard label="AI 质检事件" value={String(liveSummary.ai)} detail={`媒体分析事件 ${liveSummary.media} 条`} icon={Cpu} />
+            <MetricCard label="AI 质检事件" value={String(liveSummary.ai)} detail={`结构化标注 ${liveSummary.annotation ?? 0} 条 · 媒体分析 ${liveSummary.media} 条`} icon={Cpu} />
             <MetricCard label="已发布" value={String(liveSummary.published)} detail={`平均发布 ${formatDurationMs(liveSummary.averagePublishLatencyMs)}`} icon={CheckCircle2} tone="green" />
             <MetricCard label="发布异常" value={String(liveSummary.failed)} detail="保留失败原因和重试次数" icon={CircleX} tone="red" />
           </>
@@ -291,6 +372,102 @@ export function AiQueuePage() {
         )}
         <MetricCard label="卡住任务" value={taskMetricValue(stuckCount)} detail={tasksMode === "live" ? "超时或心跳过期，可重新排队" : "任务数据尚未加载"} icon={CircleX} tone={stuckCount > 0 ? "amber" : "green"} />
       </div>
+      <section className="content-card table-card">
+        <div className="card-heading">
+          <div>
+            <h2>结构化内容标注</h2>
+            <p>独立 AnnotationRun 的执行、人工复核与发布状态；不解析旧影子标注，也不改变质检或结算</p>
+          </div>
+          {annotationStale ? <span className="form-message error">数据可能已过期，保留上次成功结果</span> : null}
+        </div>
+        <div className="metric-grid metric-grid-5">
+          <MetricCard
+            label="Run 覆盖率"
+            value={annotationSnapshot?.coverage?.anyRunRate == null ? "—" : `${Math.round(annotationSnapshot.coverage.anyRunRate * 100)}%`}
+            detail={annotationSnapshot?.coverage ? `${annotationSnapshot.coverage.submissionsWithAnyRun}/${annotationSnapshot.coverage.eligibleSubmissions} 条可执行视频 · 成功 ${Math.round((annotationSnapshot.coverage.succeededRate ?? 0) * 100)}%` : "按标注可执行视频去重统计"}
+            icon={Cpu}
+          />
+          <MetricCard
+            label="历史 Run"
+            value={annotationSnapshot?.summary ? String(annotationSnapshot.summary.runs.historicalTotal) : "—"}
+            detail={annotationSnapshot?.summary ? `成功 ${annotationSnapshot.summary.runs.succeeded} · 失败 ${annotationSnapshot.summary.runs.systemFailed + annotationSnapshot.summary.runs.stuck} · 取消 ${annotationSnapshot.summary.runs.cancelled}` : "按 Run 统计"}
+            icon={CheckCircle2}
+          />
+          <MetricCard
+            label="待人工复核"
+            value={annotationSnapshot?.summary ? String(annotationSnapshot.summary.reviews.pending) : "—"}
+            detail="仅统计具有确定 reason code 的 manual_required Run"
+            icon={Clock3}
+            tone={(annotationSnapshot?.summary?.reviews.pending ?? 0) > 0 ? "amber" : "green"}
+          />
+          <MetricCard
+            label="人工已处理"
+            value={annotationSnapshot?.summary ? String(annotationSnapshot.summary.reviews.acceptedUnchanged + annotationSnapshot.summary.reviews.acceptedCorrected + annotationSnapshot.summary.reviews.rejected + annotationSnapshot.summary.reviews.unableToJudge) : "—"}
+            detail={annotationSnapshot?.summary ? `原样 ${annotationSnapshot.summary.reviews.acceptedUnchanged} · 修正 ${annotationSnapshot.summary.reviews.acceptedCorrected} · 拒绝/无法判断 ${annotationSnapshot.summary.reviews.rejected + annotationSnapshot.summary.reviews.unableToJudge}` : "废弃候选不计入人工结论"}
+            icon={CopyCheck}
+          />
+          <MetricCard
+            label="模型调用"
+            value={annotationSnapshot?.summary ? String(annotationSnapshot.summary.usage.providerCalls) : "—"}
+            detail={annotationSnapshot?.summary ? `成功 ${annotationSnapshot.summary.usage.succeededCalls} · 失败 ${annotationSnapshot.summary.usage.failedCalls} · 修复 ${annotationSnapshot.summary.usage.schemaRepairCalls + annotationSnapshot.summary.usage.targetedRepairCalls}；所有已报告调用累计` : "包含失败与修复调用"}
+            icon={Cpu}
+          />
+        </div>
+        <div className="segmented-control" aria-label="结构化标注视图">
+          {annotationViews.map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              className={annotationView === item.value ? "active" : ""}
+              onClick={() => {
+                setAnnotationView(item.value);
+                setAnnotationPage(1);
+                setAnnotationSnapshot(null);
+              }}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+        <div className="table-summary">
+          <span>{annotationSnapshot ? `${annotationSnapshot.pagination.total} 个 Run` : "正在读取独立标注数据"}</span>
+          <span>第 {annotationSnapshot?.pagination.page ?? annotationPage} / {Math.max(1, annotationSnapshot?.pagination.totalPages ?? 1)} 页</span>
+        </div>
+        <div className="table-scroll">
+          <table className="data-table">
+            <thead><tr><th>Run / Submission</th><th>视频</th><th>状态</th><th>模型 / Prompt</th><th>尝试</th><th>时间</th><th>最近错误</th><th/></tr></thead>
+            <tbody>
+              {(annotationSnapshot?.runs ?? []).map((run) => {
+                const status = annotationRunStatus(run);
+                return (
+                  <tr key={run.id}>
+                    <td><strong>{run.id}</strong><br/><small>{run.submissionId}</small></td>
+                    <td>{run.fileName}</td>
+                    <td><StatusBadge label={status.label} tone={status.tone} /><br/><small>{run.executionStatus} / {run.reviewStatus} / {run.publicationStatus}</small></td>
+                    <td>{run.model ?? "待锁定"}<br/><small>{run.promptVersion ?? "待锁定"}</small></td>
+                    <td>{run.attemptCount}<br/><small>模型 {run.fullModelAttempts} · 调用 {run.providerCallCount} · 基础设施重试 {run.infrastructureRetryCount}</small></td>
+                    <td>{formatQueueTime(run.updatedAt)}<br/><small>入队 {formatQueueTime(run.queuedAt)}</small></td>
+                    <td>{run.lastErrorMessage ?? "—"}</td>
+                    <td><button className="table-action" type="button" onClick={() => {
+                      const path = `/admin/ai/annotation-runs/${encodeURIComponent(run.id)}/review`;
+                      if (navigate) navigate(path);
+                      else window.location.assign(path);
+                    }}>{run.executionStatus === "succeeded" && ((run.reviewStatus === "pending" && run.publicationStatus === "candidate_only") || run.auditStatus === "pending") ? "打开复核" : "查看 Run"}</button></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {annotationSnapshot && annotationSnapshot.runs.length === 0 ? <div className="empty-state compact-empty"><CopyCheck size={26} /><strong>当前视图暂无 Run</strong><span>独立标注运行产生后会显示在这里</span></div> : null}
+        </div>
+        <div className="table-summary">
+          <span>每页 {annotationSnapshot?.pagination.pageSize ?? 50} 条</span>
+          <span className="row-actions">
+            <button className="table-action" type="button" disabled={annotationPage <= 1} onClick={() => setAnnotationPage((current) => Math.max(1, current - 1))}>上一页</button>
+            <button className="table-action" type="button" disabled={!annotationSnapshot || annotationPage >= annotationSnapshot.pagination.totalPages} onClick={() => setAnnotationPage((current) => current + 1)}>下一页</button>
+          </span>
+        </div>
+      </section>
       {snapshot && (
         <section className="content-card table-card">
           <div className="card-heading"><div><h2>当前 Worker</h2><p>仅展示存活且心跳正常的处理进程；已停止或心跳过期的记录收进下方历史区</p></div></div>

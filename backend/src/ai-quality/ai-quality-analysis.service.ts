@@ -34,7 +34,10 @@ import {
   settlementRatioForScore,
   type QualityRuleSnapshot,
 } from "../rules/rule-calculator.js";
-import { applyServerTaskCompliance } from "../video-quality/video-qc-rule-engine.js";
+import {
+  alignTaskComplianceToRequirements,
+  applyServerTaskCompliance,
+} from "../video-quality/video-qc-rule-engine.js";
 import { videoQualityPromptPath } from "./ai-quality.config.js";
 import { AiQualityPromptService } from "./ai-quality-prompt.service.js";
 import {
@@ -50,6 +53,7 @@ import {
   parseTaskRequirementsSnapshot,
   promptContentSha256,
 } from "./evaluation-context.js";
+import { containsSensitiveRisk } from "./sensitive-risk.js";
 
 const TERMINAL_RESULT_STATUSES = new Set<VideoQualityResultStatus>([
   "scored",
@@ -57,8 +61,6 @@ const TERMINAL_RESULT_STATUSES = new Set<VideoQualityResultStatus>([
   "review_pending",
   "system_failed",
 ]);
-const SENSITIVE_RESULT_PATTERN =
-  /PRIVACY_OR_SAFETY|privacy|sensitive|隐私|敏感|合规|安全|人脸|门牌|定位|账号/u;
 
 export class TerminalAiQualityError extends Error {}
 
@@ -174,26 +176,6 @@ function classify(error: unknown): Error {
 
 function decimal(value: number | null, digits: number): string | null {
   return value === null ? null : value.toFixed(digits);
-}
-
-function textValue(value: unknown): string {
-  if (typeof value === "string") return value;
-  if (!value || typeof value !== "object") return "";
-  return Object.values(value as Record<string, unknown>).map(textValue).join(" ");
-}
-
-function containsSensitiveRisk(result: NormalizedVideoQcResultV1): boolean {
-  return SENSITIVE_RESULT_PATTERN.test(
-    [
-      ...result.reviewReasons,
-      result.summary,
-      ...result.hardVeto.reasons.map(textValue),
-      ...result.deductions.flatMap((deduction) => [
-        deduction.reason_code,
-        deduction.description,
-      ]),
-    ].join(" "),
-  );
 }
 
 function qualityProgressFromStage(
@@ -340,6 +322,21 @@ export class AiQualityAnalysisService {
                 label.type === "object"),
           )
           .map((label) => label.name);
+        const annotationLabels = (labelSet?.labels ?? [])
+          .filter(
+            (label): label is typeof label & {
+              type: "scene" | "action" | "object";
+            } =>
+              label.enabled &&
+              (label.type === "scene" ||
+                label.type === "action" ||
+                label.type === "object"),
+          )
+          .map((label) => ({
+            id: label.id,
+            name: label.name,
+            type: label.type,
+          }));
         const normalized = await abortable(
           evaluator.evaluate(
             {
@@ -356,6 +353,7 @@ export class AiQualityAnalysisService {
               },
               inventoryContext,
               labelDictionary,
+              annotationLabels,
             },
             (stage) => {
               const progress = qualityProgressFromStage(stage);
@@ -610,10 +608,35 @@ export class AiQualityAnalysisService {
         lock: { mode: "pessimistic_write" },
       });
       if (!result) throw new Error("AI 质检运行记录不存在");
-      // 任务符合度由服务端按条目复算并覆盖 D4（仅当提交携带任务要求快照且模型输出 task_compliance 时）
-      const taskApplied = normalized.taskCompliance
-        ? applyServerTaskCompliance(normalized, normalized.taskCompliance)
-        : normalized;
+      const submission = await manager
+        .getRepository(SubmissionEntity)
+        .findOneBy({ id: submissionId });
+      if (!submission) throw new Error("提交记录不存在");
+      const taskSnapshot = parseTaskRequirementsSnapshot(
+        submission.taskRequirementsSnapshot,
+      );
+      let taskApplied = normalized;
+      if (taskSnapshot) {
+        const alignmentWarnings: string[] = [];
+        const alignedCompliance = alignTaskComplianceToRequirements(
+          normalized.taskCompliance,
+          taskSnapshot.snapshot.requirements,
+          alignmentWarnings,
+        );
+        taskApplied = applyServerTaskCompliance(
+          {
+            ...normalized,
+            validation: {
+              ...normalized.validation,
+              warnings: [
+                ...normalized.validation.warnings,
+                ...alignmentWarnings,
+              ],
+            },
+          },
+          alignedCompliance,
+        );
+      }
       const status = resultStatus(taskApplied);
       const qualityRule = await this.qualityRuleForResult(manager, result);
       const finalScore = taskApplied.finalScore ?? 0;
@@ -678,13 +701,7 @@ export class AiQualityAnalysisService {
                 quarantinedByAccountId: null,
                 quarantinedByName: "AI 质检",
               }
-            : {
-                assetStatus: "active" as const,
-                quarantineReason: null,
-                quarantinedAt: null,
-                quarantinedByAccountId: null,
-                quarantinedByName: null,
-              }),
+            : {}),
         },
       );
     });

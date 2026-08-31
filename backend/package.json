@@ -5,7 +5,7 @@
   "license": "UNLICENSED",
   "type": "module",
   "engines": {
-    "node": ">=22.13.0"
+    "node": ">=22.13.0 <23"
   },
   "scripts": {
     "dev": "nest start --watch",
@@ -25,6 +25,7 @@
     "outbox:publish": "tsx src/cli/publish-outbox.ts",
     "worker:media": "node dist/media/media-worker.js",
     "worker:ai-quality": "node dist/ai-quality/ai-quality-worker.js",
+    "worker:ai-annotation": "node dist/video-annotation/annotation-worker.js",
     "quality:lab": "node dist/quality-lab/main.js",
     "quality:lab:dev": "tsx src/quality-lab/main.ts",
     "quality:smoke": "tsx src/cli/smoke-video-quality.ts"

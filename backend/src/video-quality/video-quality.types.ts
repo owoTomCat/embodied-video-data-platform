@@ -1,3 +1,5 @@
+import type { VideoAnnotationCandidate } from "../video-annotation/video-annotation.js";
+
 export const VIDEO_QC_RULE_VERSION = "video_qc_v2" as const;
 export const VIDEO_QC_PROMPT_VERSION = "qwen_video_qc_prompt_v4" as const;
 export const VIDEO_QC_INPUT_SCHEMA = "video_qc_input_v1" as const;
@@ -310,6 +312,8 @@ export type NormalizedVideoQcResultV1 = {
   validation: ValidationReport;
   rawModelResult: RawVideoQcResultV1;
   modelRuns: ModelRunMetadata[];
+  /** 任务盲内容标注 Shadow 结果；不参与质检、通过或结算决策。 */
+  candidateAnnotation?: VideoAnnotationCandidate;
   media: {
     metadata: VideoMediaMetadata;
     technicalMetrics: TechnicalMetrics;

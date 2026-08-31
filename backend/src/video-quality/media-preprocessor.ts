@@ -329,6 +329,64 @@ export class VideoQualityMediaPreprocessor {
     };
   }
 
+  async prepareAnnotation(
+    filePath: string,
+    workDirectory: string,
+    signal?: AbortSignal,
+  ): Promise<Pick<PreparedVideoEvidence, "sha256" | "metadata" | "fullVideoFrames" | "fullVideoSamplingFps">> {
+    await mkdir(workDirectory, { recursive: true });
+    const [probe, sha256] = await Promise.all([
+      this.runner.run(
+        "ffprobe",
+        [
+          "-v",
+          "error",
+          "-print_format",
+          "json",
+          "-show_format",
+          "-show_streams",
+          filePath,
+        ],
+        signal,
+      ),
+      sha256File(filePath),
+    ]);
+    const metadata = parseQualityProbeOutput(probe.stdout);
+    const fullVideoSamplingFps = calculateSamplingFps(metadata.duration_ms);
+    const framesDirectory = join(workDirectory, "annotation-frames");
+    await mkdir(framesDirectory, { recursive: true });
+    await this.runner.run(
+      "ffmpeg",
+      [
+        "-hide_banner",
+        "-nostdin",
+        "-i",
+        filePath,
+        "-an",
+        "-vf",
+        scaleFilter(fullVideoSamplingFps),
+        "-q:v",
+        "4",
+        join(framesDirectory, "annotation-%06d.jpg"),
+      ],
+      signal,
+    );
+    const fullVideoFrames = await readTimestampedFrames(
+      framesDirectory,
+      "annotation-",
+      fullVideoSamplingFps,
+    );
+    if (fullVideoFrames.length < 4) {
+      throw new Error("视频取样少于千问要求的 4 帧");
+    }
+    return {
+      sha256,
+      metadata,
+      fullVideoFrames,
+      fullVideoSamplingFps,
+    };
+  }
+
   async extractReviewFrames(
     filePath: string,
     windows: ReviewWindow[],

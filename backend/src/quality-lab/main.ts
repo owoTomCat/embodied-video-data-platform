@@ -2,6 +2,8 @@ import { loadVideoQualityPrompt } from "../video-quality/prompt-loader.js";
 import { QwenVideoQualityProvider } from "../video-quality/qwen-video-quality.provider.js";
 import { VideoQualityMediaPreprocessor } from "../video-quality/media-preprocessor.js";
 import { VideoQualityService } from "../video-quality/video-quality.service.js";
+import { loadVideoAnnotationPrompt } from "../video-annotation/prompt-loader.js";
+import { QwenVideoAnnotationProvider } from "../video-annotation/qwen-video-annotation.provider.js";
 import { parseQualityLabEnvironment } from "./environment.js";
 import { createQualityLabApp } from "./server.js";
 import { QualityLabJobStore } from "./job-store.js";
@@ -28,6 +30,20 @@ async function bootstrap(): Promise<void> {
     persistencePath: environment.promptStatePath,
   });
   const qwenApiKey = environment.qwenApiKey;
+  const annotationPrompt =
+    environment.mode === "fused"
+      ? await loadVideoAnnotationPrompt(environment.annotationPromptPath)
+      : undefined;
+  const annotationProvider =
+    qwenApiKey && annotationPrompt
+      ? new QwenVideoAnnotationProvider({
+          apiKey: qwenApiKey,
+          baseUrl: environment.qwenBaseUrl,
+          timeoutMs: environment.annotationModelTimeoutMs,
+          maxConcurrency: environment.annotationConcurrency,
+          prompt: annotationPrompt,
+        })
+      : undefined;
   const evaluatorFactory = qwenApiKey
     ? (prompt: ReturnType<QualityLabPromptStore["getCurrent"]>) =>
         new VideoQualityService({
@@ -46,12 +62,25 @@ async function bootstrap(): Promise<void> {
               writeLog({ event: "bailian_call_attempt", ...diagnostic });
             },
           }),
+          ...(annotationProvider
+            ? { annotationProvider, annotationSampleRate: 1 }
+            : {}),
         })
     : undefined;
   const app = createQualityLabApp({
     environment,
     evaluator: null,
     evaluatorFactory,
+    ...(annotationPrompt
+      ? {
+          annotation: {
+            model: annotationPrompt.model,
+            promptVersion: annotationPrompt.promptVersion,
+            schemaVersion: annotationPrompt.outputSchema,
+            systemPrompt: annotationPrompt.systemPrompt,
+          },
+        }
+      : {}),
     promptStore,
     store,
     logger: writeLog,

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   VideoQualityService,
+  isInDeterministicSample,
   type VideoEvidencePreprocessor,
   type VideoQualityModelProvider,
 } from "../src/video-quality/video-quality.service.js";
@@ -9,6 +10,7 @@ import type {
   PreparedVideoEvidence,
   RawVideoQcResultV1,
 } from "../src/video-quality/video-quality.types.js";
+import type { VideoAnnotationProvider } from "../src/video-annotation/qwen-video-annotation.provider.js";
 
 function evidence(): PreparedVideoEvidence {
   return {
@@ -95,7 +97,13 @@ function raw(reviewRequired = false): RawVideoQcResultV1 {
   };
 }
 
-function setup(options: { review?: boolean; reviewFails?: boolean } = {}) {
+function setup(
+  options: {
+    review?: boolean;
+    reviewFails?: boolean;
+    annotationProvider?: VideoAnnotationProvider;
+  } = {},
+) {
   const prepared = evidence();
   const preprocessor: VideoEvidencePreprocessor = {
     prepare: vi.fn().mockResolvedValue(prepared),
@@ -129,10 +137,24 @@ function setup(options: { review?: boolean; reviewFails?: boolean } = {}) {
           },
         }),
   };
-  return { service: new VideoQualityService({ preprocessor, provider }), preprocessor, provider };
+  return {
+    service: new VideoQualityService({
+      preprocessor,
+      provider,
+      annotationProvider: options.annotationProvider,
+    }),
+    preprocessor,
+    provider,
+  };
 }
 
 describe("video quality service", () => {
+  it("uses stable sampling for staged shadow rollout", () => {
+    expect(isInDeterministicSample("SUB-1", 0)).toBe(false);
+    expect(isInDeterministicSample("SUB-1", 1)).toBe(true);
+    expect(isInDeterministicSample("SUB-80", 0.1)).toBe(true);
+    expect(isInDeterministicSample("SUB-123", 0.1)).toBe(false);
+  });
   it("runs the initial model once and returns a server-normalized result", async () => {
     const { service, provider } = setup();
     const stages: string[] = [];
@@ -215,5 +237,64 @@ describe("video quality service", () => {
     expect(pending.evaluationStatus).toBe("review_pending");
     expect(pending.settlementRatio).toBeNull();
     expect(pending.reviewReasons.join(" ")).toContain("复核模型");
+  });
+
+  it("attaches shadow annotations without changing the quality decision", async () => {
+    const annotationProvider: VideoAnnotationProvider = {
+      annotate: vi.fn().mockResolvedValue({
+        status: "system_failed",
+        schemaVersion: "ego_video_annotation_v2",
+        policyVersion: "ego_annotation_evidence_policy_v2",
+        promptVersion: "annotation-prompt-v2",
+        promptContentSha256: "a".repeat(64),
+        model: "annotation-model",
+        error: "shadow request failed",
+      }),
+    };
+    const { service } = setup({ annotationProvider });
+
+    const result = await service.evaluate({
+      videoId: "LAB-1",
+      filePath: "/tmp/video.mp4",
+      workDirectory: "/tmp/work",
+      registerSha256: () => false,
+      annotationLabels: [
+        { id: "scene-1", name: "厨房", type: "scene" },
+      ],
+    });
+
+    expect(annotationProvider.annotate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        videoId: "LAB-1",
+        durationMs: 30_000,
+        frames: expect.any(Array),
+        enabledLabels: [{ id: "scene-1", name: "厨房", type: "scene" }],
+      }),
+      undefined,
+    );
+    expect(result.candidateAnnotation).toMatchObject({
+      status: "system_failed",
+      error: "shadow request failed",
+    });
+    expect(result.finalScore).toBe(80);
+    expect(result.settlementRatio).toBe(1);
+  });
+
+  it("absorbs an unexpected shadow rejection without failing quality", async () => {
+    const annotationProvider: VideoAnnotationProvider = {
+      annotate: vi.fn().mockRejectedValue(new Error("unexpected shadow error")),
+    };
+    const { service } = setup({ annotationProvider });
+
+    const result = await service.evaluate({
+      videoId: "LAB-1",
+      filePath: "/tmp/video.mp4",
+      workDirectory: "/tmp/work",
+      registerSha256: () => false,
+    });
+
+    expect(result.candidateAnnotation).toBeUndefined();
+    expect(result.finalScore).toBe(80);
+    expect(result.settlementRatio).toBe(1);
   });
 });

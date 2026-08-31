@@ -61,4 +61,11 @@ export class DeliveryPackageItemEntity {
 
   @Column({ name: "size_bytes", type: "bigint" })
   sizeBytes!: string;
+
+  @Column({
+    name: "accepted_annotation_snapshot",
+    type: "jsonb",
+    nullable: true,
+  })
+  acceptedAnnotationSnapshot: Record<string, unknown> | null = null;
 }

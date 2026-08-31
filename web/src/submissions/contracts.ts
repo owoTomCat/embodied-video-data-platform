@@ -72,6 +72,127 @@ export type BackendQualityBillingObservations = {
   }>;
 };
 
+export type BackendVideoAnnotationTask = {
+  start_ms: number;
+  end_ms: number;
+  task_label: string;
+  task_verb: string;
+  task_object: string;
+  evidence_level: "direct_visual" | "partially_inferred" | "uncertain";
+  execution_pattern?: "single_goal" | "repeated_cycles" | "continuous_operation" | "uncertain";
+  evidence_timestamps_ms: number[];
+  manipulated_objects: string[];
+  tools: string[];
+  hand_mode: string;
+  atomic_action_sequence?: Array<{
+    order: number;
+    verb: string;
+    object: string;
+    evidence_timestamps_ms: number[];
+  }>;
+  interaction_primitives: string[];
+  completion: "complete" | "incomplete" | "partial" | "uncertain";
+  result_observability?: "visible" | "partial" | "not_visible";
+  result_status: "success" | "failure" | "partial" | "not_applicable" | "unknown";
+  result_evidence_type?: "direct_visible_postcondition" | "action_completion_only" | "contextual_inference" | "not_observed";
+  visible_postcondition?: string;
+  result_evidence_timestamps_ms?: number[];
+  failure_recovery?: string;
+  complexity_signals?: string[];
+  confidence: number;
+  effective_completion: "complete" | "incomplete" | "partial" | "uncertain";
+  effective_result_status: "success" | "failure" | "partial" | "not_applicable" | "unknown";
+  effective_failure_recovery: string;
+  effective_complexity_signals?: string[];
+  policy_reasons: string[];
+};
+
+export type BackendAnnotationGateIssue = {
+  code: string;
+  level: "repairable" | "retryable" | "manual_review" | "advisory";
+  fieldPath: string | null;
+  taskIndex: number | null;
+  message: string;
+  evidenceTimestampsMs: number[];
+  resolution: "repaired" | "retried" | "unresolved" | "not_applicable";
+};
+
+export type BackendVideoAnnotationCandidate =
+  | {
+      status: "system_failed";
+      schemaVersion: string;
+      policyVersion: string;
+      promptVersion: string;
+      promptContentSha256: string;
+      model: string;
+      error: string;
+    }
+  | {
+      status: "candidate" | "review_required";
+      schemaVersion: string;
+      policyVersion: string;
+      promptVersion: string;
+      promptContentSha256: string;
+      model: string;
+      responseModel?: string | null;
+      requestId: string | null;
+      durationMs: number;
+      frameCount: number;
+      usage?: {
+        promptTokens: number | null;
+        completionTokens: number | null;
+        totalTokens: number | null;
+      };
+      sampling: {
+        maxFrameGapMs: number | null;
+        sourceTimestampsMs: number[];
+      };
+      labelMappings: Array<{
+        type: "scene" | "action" | "object";
+        sourceText: string;
+        status: "matched" | "proposed";
+        labelId: string | null;
+        labelName: string | null;
+        confidence: number;
+      }>;
+      raw: Record<string, unknown> & {
+        video_summary: string;
+        scene: {
+          coarse_label: string | null;
+          fine_label: string | null;
+          confidence: number;
+        };
+      };
+      effective: {
+        video_summary: string;
+        temporal_structure_type?: string;
+        model_assessability?: "assessable" | "needs_review";
+        assessability_reason?: string;
+        scene: {
+          coarse_label: string | null;
+          fine_label: string | null;
+          confidence: number;
+        };
+        tasks: BackendVideoAnnotationTask[];
+        coverage_segments?: Array<{
+          start_ms: number;
+          end_ms: number;
+          segment_type: "task" | "transition" | "unclear";
+          linked_task_index: number | null;
+          visible_activity: string;
+          evidence_timestamps_ms: number[];
+        }>;
+        uncertain_fields?: string[];
+      };
+      validation: { errors: string[]; warnings: string[] };
+      reviewReasons: string[];
+      gate?: {
+        version: string;
+        eligibility: "eligible" | "manual_required";
+        issues: BackendAnnotationGateIssue[];
+      };
+    };
+
 export type BackendQualityResult = {
   status: BackendQualityStatus;
   attempts: number;
@@ -135,6 +256,27 @@ export type BackendQualityResult = {
     review_required: boolean;
   };
   billingObservations?: BackendQualityBillingObservations;
+  candidateAnnotation?: BackendVideoAnnotationCandidate;
+  annotationReview?: {
+    decision: "accepted" | "needs_correction";
+    reason: string;
+    reviewedByAccountId: string;
+    reviewedByName: string;
+    reviewedAt: number;
+    candidateSchemaVersion: string | null;
+    candidatePolicyVersion: string | null;
+    candidatePromptVersion: string | null;
+    candidatePromptContentSha256: string | null;
+    correctedAnnotation?: {
+      source: "human_correction";
+      schemaVersion: string;
+      policyVersion: string;
+      raw: Record<string, unknown>;
+      effective: Record<string, unknown>;
+      labelMappings: unknown[];
+      validation: { errors: string[]; warnings: string[] };
+    };
+  };
   startedAt?: number;
   completedAt?: number;
 };
@@ -279,6 +421,145 @@ export type DeleteSubmissionResult = {
 };
 
 export type ClearDuplicateCandidateInput = {
+  reason: string;
+};
+
+export type BackendAnnotationRun = {
+  id: string;
+  submissionId: string;
+  trigger: "initial" | "manual";
+  pipelineVersion: string;
+  schemaVersion: string;
+  evidencePolicyVersion: string;
+  promptVersion: string | null;
+  promptContentSha256: string | null;
+  model: string | null;
+  labelSetVersionId: string | null;
+  labelSetRevision: number | null;
+  executionStatus:
+    | "queued"
+    | "running"
+    | "retry_scheduled"
+    | "succeeded"
+    | "system_failed"
+    | "stuck"
+    | "cancelled";
+  reviewStatus:
+    | "pending"
+    | "not_required"
+    | "accepted_unchanged"
+    | "accepted_corrected"
+    | "rejected"
+    | "unable_to_judge";
+  publicationStatus:
+    | "candidate_only"
+    | "human_verified"
+    | "auto_accepted"
+    | "rejected"
+    | "superseded";
+  attemptCount: number;
+  fullModelAttempts: number;
+  schemaRepairCalls: number;
+  targetedRepairCalls: number;
+  infrastructureRetryCount: number;
+  providerCallCount: number;
+  reviewRevision: number;
+  autoEligibility: "not_evaluated" | "eligible" | "manual_required";
+  autoGateVersion: string | null;
+  autoGateIssues: BackendAnnotationGateIssue[];
+  wouldAutoAccept: boolean;
+  autoAcceptEnabledSnapshot: boolean;
+  autoGateEvaluatedAt: number | null;
+  auditStatus: "not_selected" | "pending" | "completed";
+  auditSelectedAt: number | null;
+  lastErrorCode: string | null;
+  lastErrorMessage: string | null;
+  nextRetryAt: number | null;
+  candidate: BackendVideoAnnotationCandidate | null;
+  humanResult: Record<string, unknown> | null;
+  review: {
+    id: string;
+    revision: number;
+    disposition: Exclude<BackendAnnotationRun["reviewStatus"], "pending" | "not_required">;
+    reviewKind: "blocking" | "audit";
+    reviewedFields: string[];
+    reasonCodes: string[];
+    reviewDurationMs: number;
+    reason: string;
+    reviewerAccountId: string;
+    reviewerName: string;
+    createdAt: number;
+  } | null;
+  modelCalls: Array<{
+    id: string;
+    logicalFullAttempt: number;
+    callKind: "full" | "schema_repair" | "targeted_repair";
+    callStatus: "succeeded" | "failed";
+    httpStatus: number | null;
+    providerRequestId: string | null;
+    responseModel: string | null;
+    inputTokens: number | null;
+    outputTokens: number | null;
+    totalTokens: number | null;
+    latencyMs: number;
+    errorCode: string | null;
+    errorMessage: string | null;
+    createdAt: number;
+  }>;
+  corrections: Array<{
+    id: string;
+    targetType: string;
+    targetId: string;
+    fieldPath: string;
+    previousValue: unknown;
+    nextValue: unknown;
+    reasonCode: string;
+    comment: string | null;
+    reviewerAccountId: string;
+    createdAt: number;
+  }>;
+  queuedAt: number;
+  startedAt: number | null;
+  completedAt: number | null;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type ReviewAnnotationRunInput = {
+  expectedReviewRevision: number;
+  disposition:
+    | "accepted_unchanged"
+    | "accepted_corrected"
+    | "rejected"
+    | "unable_to_judge";
+  reviewedFields: string[];
+  reasonCodes: string[];
+  reviewDurationMs: number;
+  reason: string;
+  correctedResult?: Record<string, unknown>;
+  corrections?: Array<{
+    targetType:
+      | "scene"
+      | "task_segment"
+      | "object"
+      | "tool"
+      | "completion"
+      | "outcome"
+      | "failure_recovery"
+      | "annotation";
+    targetId: string;
+    fieldPath: string;
+    reasonCode: string;
+    comment?: string;
+  }>;
+};
+
+export type DiscardAnnotationRunInput = {
+  expectedReviewRevision: number;
+  reasonCode:
+    | "version_replaced"
+    | "configuration_error"
+    | "operator_cancelled";
   reason: string;
 };
 

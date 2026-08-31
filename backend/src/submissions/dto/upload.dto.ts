@@ -133,6 +133,7 @@ export class ReviewSubmissionQualityDto {
   @IsOptional()
   @IsBoolean()
   quarantine?: boolean;
+
 }
 
 export class RerunAiQualityDto {

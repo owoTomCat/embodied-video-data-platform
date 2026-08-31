@@ -5,7 +5,9 @@ import { pathToFileURL } from "node:url";
 
 import { NestFactory } from "@nestjs/core";
 
-import { aiQualityConcurrency } from "./ai-quality.config.js";
+import {
+  aiQualityConcurrency,
+} from "./ai-quality.config.js";
 import { AiQualityWorkerModule } from "./ai-quality-worker.module.js";
 import { RabbitAiQualityWorker } from "./rabbit-ai-quality-worker.js";
 

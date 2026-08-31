@@ -1,0 +1,72 @@
+{
+  "schema_version": "ego_video_annotation_v2",
+  "video_id": "<video_id>",
+  "video_summary": "双手在桌面上折叠纸张，采样帧显示了部分操作过程。",
+  "scene": {
+    "coarse_label": "室内",
+    "fine_label": "桌面操作区",
+    "confidence": 0.9,
+    "evidence_timestamps_ms": [0, 5000]
+  },
+  "temporal_structure_type": "single_task",
+  "model_assessability": "needs_review",
+  "assessability_reason": "采样间隔较大，无法确认完整动作边界、最终结果和帧间失败。",
+  "tasks": [
+    {
+      "start_ms": 0,
+      "end_ms": 15000,
+      "task_label": "折叠纸张",
+      "task_verb": "fold",
+      "task_object": "纸张",
+      "evidence_level": "direct_visual",
+      "execution_pattern": "single_goal",
+      "evidence_timestamps_ms": [0, 5000, 10000, 15000],
+      "manipulated_objects": ["纸张"],
+      "tools": [],
+      "hand_mode": "both",
+      "atomic_action_sequence": [
+        {
+          "order": 1,
+          "verb": "grasp",
+          "object": "纸张边缘",
+          "evidence_timestamps_ms": [0]
+        },
+        {
+          "order": 2,
+          "verb": "fold",
+          "object": "纸张",
+          "evidence_timestamps_ms": [5000, 10000]
+        }
+      ],
+      "interaction_primitives": ["grasp", "hold", "bimanual_fix_and_operate"],
+      "completion": "uncertain",
+      "result_observability": "partial",
+      "result_status": "unknown",
+      "result_evidence_type": "contextual_inference",
+      "visible_postcondition": "末帧可见纸张出现折痕，但采样证据不足以确认完整目标。",
+      "result_evidence_timestamps_ms": [15000],
+      "failure_recovery": "not_assessable",
+      "failure_evidence_timestamps_ms": [],
+      "recovery_evidence_timestamps_ms": [],
+      "complexity_signals": ["bimanual_coordination", "deformable_object"],
+      "uncertainty_reasons": ["采样间隔较大，无法确认完整操作过程和稳定终态"],
+      "confidence": 0.82
+    }
+  ],
+  "coverage_segments": [
+    {
+      "start_ms": 0,
+      "end_ms": 15000,
+      "segment_type": "task",
+      "linked_task_index": 0,
+      "visible_activity": "双手持续操作纸张",
+      "evidence_timestamps_ms": [0, 5000, 10000, 15000]
+    }
+  ],
+  "uncertain_fields": [
+    "tasks[0].completion",
+    "tasks[0].result_status",
+    "tasks[0].failure_recovery"
+  ],
+  "global_limitations": ["输入为稀疏采样帧，不能排除帧间短暂动作或失败"]
+}

@@ -4,6 +4,7 @@ import { TypeOrmModule } from "@nestjs/typeorm";
 import { AuthModule } from "../auth/auth.module.js";
 import { AuditModule } from "../audit/audit.module.js";
 import { AuditLogEntity } from "../database/entities/audit-log.entity.js";
+import { AnnotationRunEntity } from "../database/entities/annotation-run.entity.js";
 import { JobOutboxEntity } from "../database/entities/job-outbox.entity.js";
 import { SubmissionEntity } from "../database/entities/submission.entity.js";
 import { VideoQualityResultEntity } from "../database/entities/video-quality-result.entity.js";
@@ -20,6 +21,7 @@ import { SecurityModule } from "../security/security.module.js";
   imports: [
     TypeOrmModule.forFeature([
       AuditLogEntity,
+      AnnotationRunEntity,
       JobOutboxEntity,
       SubmissionEntity,
       VideoQualityResultEntity,

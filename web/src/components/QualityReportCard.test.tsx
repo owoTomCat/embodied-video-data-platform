@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import type { Submission } from "../domain/types";
@@ -76,5 +76,68 @@ describe("QualityReportCard", () => {
 
     expect(screen.getByText("1分50秒")).toBeInTheDocument();
     expect(screen.getByText("10秒")).toBeInTheDocument();
+  });
+
+  it("shows evidence-qualified shadow annotations without presenting them as QC decisions", () => {
+    const submission = makeSubmission({});
+    submission.qualityResult!.candidateAnnotation = {
+      status: "review_required",
+      schemaVersion: "ego_video_annotation_v1",
+      policyVersion: "ego_annotation_evidence_policy_v1",
+      promptVersion: "ego_video_annotation_prompt_v1",
+      promptContentSha256: "a".repeat(64),
+      model: "qwen3.7-plus",
+      requestId: "request-1",
+      durationMs: 100,
+      frameCount: 4,
+      sampling: { maxFrameGapMs: 5_000, sourceTimestampsMs: [0, 5_000] },
+      labelMappings: [],
+      raw: {
+        video_summary: "将杯子放到桌面。",
+        scene: { coarse_label: "indoor", fine_label: "kitchen", confidence: 0.9 },
+      },
+      effective: {
+        video_summary: "将杯子放到桌面。",
+        scene: { coarse_label: "indoor", fine_label: "kitchen", confidence: 0.9 },
+        tasks: [
+          {
+            start_ms: 0,
+            end_ms: 5_000,
+            task_label: "放置杯子",
+            task_verb: "pick_and_place",
+            task_object: "杯子",
+            evidence_level: "direct_visual",
+            evidence_timestamps_ms: [0, 5_000],
+            manipulated_objects: ["杯子"],
+            tools: [],
+            hand_mode: "right",
+            interaction_primitives: ["grasp", "place"],
+            completion: "complete",
+            result_status: "success",
+            confidence: 0.9,
+            effective_completion: "uncertain",
+            effective_result_status: "unknown",
+            effective_failure_recovery: "not_assessable",
+            policy_reasons: ["sparse_sampling_cannot_verify_completion"],
+          },
+        ],
+      },
+      validation: { errors: [], warnings: ["采样稀疏"] },
+      reviewReasons: ["稀疏证据"],
+    };
+
+    render(
+      <QualityReportCard
+        submission={submission}
+        pointsLabel="3.22 分"
+        evidenceByRange={new Map()}
+      />,
+    );
+    fireEvent.click(screen.getByText("更多信息（内容理解）"));
+
+    expect(screen.getByText("结构化内容标注（影子运行）")).toBeInTheDocument();
+    expect(screen.getByText("待人工确认")).toBeInTheDocument();
+    expect(screen.getByText(/完成度：无法确认/)).toBeInTheDocument();
+    expect(screen.getByText(/不参与当前质检与结算/)).toBeInTheDocument();
   });
 });

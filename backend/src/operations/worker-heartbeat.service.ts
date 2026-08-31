@@ -13,6 +13,7 @@ import {
 const STALE_AFTER_MS = 60_000;
 const DEFAULT_MEDIA_TASK_TIMEOUT_MS = 10 * 60_000;
 const DEFAULT_AI_TASK_TIMEOUT_MS = 10 * 60_000;
+const DEFAULT_ANNOTATION_TASK_TIMEOUT_MS = 3 * 60_000;
 const MAX_ACTIVE_WORKERS = 50;
 const MAX_INACTIVE_WORKERS = 20;
 
@@ -69,6 +70,12 @@ function publicWorker(worker: WorkerHeartbeatEntity, now = Date.now()) {
 }
 
 function workerTaskTimeoutMs(kind: WorkerKind): number {
+  if (kind === "ai_annotation") {
+    return parseTimeout(
+      process.env.AI_ANNOTATION_MODEL_TIMEOUT_MS,
+      DEFAULT_ANNOTATION_TASK_TIMEOUT_MS,
+    );
+  }
   if (kind === "ai_quality") {
     return parseTimeout(
       process.env.AI_QUALITY_MODEL_TIMEOUT_MS,

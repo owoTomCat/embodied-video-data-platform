@@ -4,7 +4,7 @@ import { Readable } from "node:stream";
 
 import { Inject, Injectable, PayloadTooLargeException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Brackets, DataSource, EntityManager, Repository } from "typeorm";
+import { Brackets, DataSource, EntityManager, In, Repository } from "typeorm";
 
 import { AuditService } from "../audit/audit.service.js";
 import { AiQualityPromptService } from "../ai-quality/ai-quality-prompt.service.js";
@@ -17,6 +17,7 @@ import { LabelSetService } from "../ai-quality/label-set.service.js";
 import { QualityRuleService } from "../ai-quality/quality-rule.service.js";
 import type { PublicUser } from "../auth/auth.types.js";
 import { AuditLogEntity } from "../database/entities/audit-log.entity.js";
+import { AnnotationRunEntity } from "../database/entities/annotation-run.entity.js";
 import { CollectionTaskEntity } from "../database/entities/collection-task.entity.js";
 import { csvDocument } from "../csv/csv.js";
 import { JobOutboxEntity } from "../database/entities/job-outbox.entity.js";
@@ -99,8 +100,6 @@ const REVIEW_AUDIT_ACTIONS = [
   "ai_quality_rerun",
   "submission_rename",
 ];
-const SENSITIVE_REVIEW_PATTERN =
-  /PRIVACY_OR_SAFETY|privacy|sensitive|隐私|敏感|合规|安全|人脸|门牌|定位|账号/u;
 const HLS_FILE_NAME_PATTERN = /^[A-Za-z0-9._-]+\.(?:m3u8|ts)$/u;
 const QUALITY_EFFECTIVE_PASSED_SQL = `
   CASE
@@ -530,6 +529,22 @@ function publicSubmission(submission: SubmissionEntity) {
             quality.normalizedResult &&
             typeof quality.normalizedResult.taskCompliance === "object"
               ? (quality.normalizedResult.taskCompliance as Record<
+                  string,
+                  unknown
+                >)
+              : undefined,
+          candidateAnnotation:
+            quality.normalizedResult &&
+            typeof quality.normalizedResult.candidateAnnotation === "object"
+              ? (quality.normalizedResult.candidateAnnotation as Record<
+                  string,
+                  unknown
+                >)
+              : undefined,
+          annotationReview:
+            quality.normalizedResult &&
+            typeof quality.normalizedResult.annotationReview === "object"
+              ? (quality.normalizedResult.annotationReview as Record<
                   string,
                   unknown
                 >)
@@ -1279,10 +1294,7 @@ export class SubmissionsService {
       };
       const previousAssetStatus = submission.assetStatus;
       const previousQuarantineReason = submission.quarantineReason;
-      const shouldQuarantine =
-        input.quarantine === true ||
-        (input.quarantine === undefined &&
-          this.reviewContainsSensitiveRisk(reason, issues));
+      const shouldQuarantine = input.quarantine === true;
       const shouldRelease = input.quarantine === false;
       if (shouldQuarantine) {
         submission.assetStatus = "quarantined";
@@ -2592,15 +2604,6 @@ export class SubmissionsService {
       .getMany();
   }
 
-  private reviewContainsSensitiveRisk(
-    reason: string,
-    issues: PublicReviewIssue[],
-  ): boolean {
-    return SENSITIVE_REVIEW_PATTERN.test(
-      [reason, ...issues.map((issue) => issue.label)].join(" "),
-    );
-  }
-
   private async qualityRuleForResult(
     manager: EntityManager,
     quality: VideoQualityResultEntity,
@@ -2715,6 +2718,7 @@ export class SubmissionsService {
         await manager.getRepository(JobOutboxEntity).delete({
           aggregateId: submission.id,
         });
+        await this.cancelAnnotationRuns(manager, submission.id);
         await this.audit.record(
           manager,
           actor,
@@ -2766,6 +2770,7 @@ export class SubmissionsService {
       await manager.getRepository(JobOutboxEntity).delete({
         aggregateId: submission.id,
       });
+      await this.cancelAnnotationRuns(manager, submission.id);
       await this.audit.record(
         manager,
         actor,
@@ -2828,6 +2833,31 @@ export class SubmissionsService {
       }
     }
     return { completedUploads, completedDeletes, failures };
+  }
+
+  private async cancelAnnotationRuns(
+    manager: EntityManager,
+    submissionId: string,
+  ): Promise<void> {
+    const repository = manager.getRepository(AnnotationRunEntity);
+    const runs = await repository.find({ where: { submissionId } });
+    if (runs.length === 0) return;
+    await manager.getRepository(JobOutboxEntity).delete({
+      aggregateId: In(runs.map((run) => run.id)),
+    });
+    await repository.update(
+      {
+        submissionId,
+        executionStatus: In(["queued", "running", "retry_scheduled", "stuck"]),
+      },
+      {
+        executionStatus: "cancelled",
+        nextRetryAt: null,
+        completedAt: new Date(),
+        lastErrorCode: "SOURCE_DELETED",
+        lastErrorMessage: "视频源对象已删除",
+      },
+    );
   }
 
   private async ensureMultipartObject(

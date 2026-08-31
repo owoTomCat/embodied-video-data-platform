@@ -40,6 +40,12 @@ type QualityLabAppOptions = {
   environment: QualityLabEnvironment;
   evaluator: VideoQualityEvaluator | null;
   evaluatorFactory?: (prompt: QualityLabPromptSnapshot) => VideoQualityEvaluator;
+  annotation?: {
+    model: string;
+    promptVersion: string;
+    schemaVersion: string;
+    systemPrompt: string;
+  };
   promptStore?: QualityLabPromptStore;
   store?: QualityLabJobStore;
   logger?: (event: Record<string, unknown>) => void;
@@ -191,12 +197,21 @@ export function createQualityLabApp(options: QualityLabAppOptions): Express {
       ruleVersion: "video_qc_v2",
       promptVersion: "qwen_video_qc_prompt_v4",
       promptRevision: activePrompt?.revision ?? 1,
+      labMode: options.environment.mode,
+      annotationEnabled: Boolean(options.annotation),
+      ...(options.annotation
+        ? {
+            annotationModel: options.annotation.model,
+            annotationPromptVersion: options.annotation.promptVersion,
+            annotationSchemaVersion: options.annotation.schemaVersion,
+          }
+        : {}),
       concurrency: maxConcurrency,
     });
   });
 
   app.get("/", (_request, response) => {
-    response.type("html").send(renderQualityLabPage());
+    response.type("html").send(renderQualityLabPage(options.environment.mode));
   });
 
   app.get("/api/jobs", (_request, response) => {
@@ -223,6 +238,21 @@ export function createQualityLabApp(options: QualityLabAppOptions): Express {
         initialModel: prompt.initialModel,
         reviewModel: prompt.reviewModel,
         updatedAt: prompt.updatedAt,
+      },
+    });
+  });
+
+  app.get("/api/annotation-prompt", (_request, response) => {
+    if (!options.annotation) {
+      response.status(404).json({ error: "当前实验页未启用融合标注链路" });
+      return;
+    }
+    response.json({
+      prompt: {
+        systemPrompt: options.annotation.systemPrompt,
+        promptVersion: options.annotation.promptVersion,
+        outputSchema: options.annotation.schemaVersion,
+        model: options.annotation.model,
       },
     });
   });

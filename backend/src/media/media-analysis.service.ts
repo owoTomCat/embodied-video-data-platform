@@ -27,6 +27,7 @@ import {
   type MediaCommandRunnerProvider,
 } from "./media.tokens.js";
 import type { DetectedMediaSegment } from "./media-command-runner.js";
+import { enqueueInitialAnnotationRun } from "../video-annotation/annotation-run.queue.js";
 
 export class TerminalMediaError extends Error {}
 export class RetryableMediaError extends Error {}
@@ -286,6 +287,7 @@ export class MediaAnalysisService {
           .getRepository(SubmissionEntity)
           .save(currentSubmission);
         await this.enqueueAiQuality(manager, submission.id);
+        await enqueueInitialAnnotationRun(manager, submission.id);
         return true;
       });
       return committed ? "processed" : "skipped";
