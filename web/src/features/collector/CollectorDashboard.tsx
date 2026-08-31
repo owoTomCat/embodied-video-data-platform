@@ -149,7 +149,7 @@ export function CollectorDashboard({
       <div className="page-heading">
         <div>
           <p className="page-kicker">今天也是好数据的一天</p>
-          <h1>{greeting()}，{currentAccount.displayName}</h1>
+          <h1 suppressHydrationWarning>{greeting()}，{currentAccount.displayName}</h1>
           <span>
             本月已上传 {month.length} 条 · 今日 {today.length} 条
           </span>
