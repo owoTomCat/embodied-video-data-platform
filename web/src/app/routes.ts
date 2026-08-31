@@ -7,6 +7,7 @@ const exactPathsByRole: Record<Role, ReadonlySet<string>> = {
     "/collector/upload",
     "/collector/submissions",
     "/collector/quality",
+    "/collector/wallet",
     "/collector/earnings",
     "/collector/guide",
   ]),
