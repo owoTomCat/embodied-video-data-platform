@@ -78,7 +78,8 @@ export class TasksController {
     @Param("id") id: string,
     @Body() input: UpdateTaskDto,
   ) {
-    return { task: await this.tasks.update(actor, id, input) };
+    // update 返回 { task, autoNormalized, normalizationFailed }，直接透传供前端同步规范化信息
+    return await this.tasks.update(actor, id, input);
   }
 
   @Delete(":id")

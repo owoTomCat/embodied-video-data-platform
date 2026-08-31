@@ -51,6 +51,7 @@ const accountActionLabels: Record<KnownAccountAuditAction, string> = {
   label_set_update: "更新标签体系",
   point_rule_publish: "发布单价规则",
   scene_pricing_update: "更新场景定价",
+  task_auto_normalize: "自动规范化提示词",
   public_site_snapshot_publish: "发布公开官网快照",
 };
 
