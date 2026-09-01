@@ -872,9 +872,13 @@ describe("collector journey", () => {
     const segmentRegion = await screen.findByRole("region", { name: "任务切片" });
     expect(segmentRegion).toBeVisible();
     expect(await screen.findByText("5.1s～11.9s 整理餐具")).toBeVisible();
-    expect(
-      screen.getByText(/对象：物品.*动作：抓取、放置.*完成状态：completed/u),
-    ).toBeVisible();
+    // 结构化字段：标签与值分开展示
+    expect(screen.getByText("对象")).toBeVisible();
+    expect(screen.getByText("物品")).toBeVisible();
+    expect(screen.getByText("动作")).toBeVisible();
+    expect(screen.getByText("抓取、放置")).toBeVisible();
+    expect(screen.getByText("完成状态")).toBeVisible();
+    expect(screen.getByText("completed")).toBeVisible();
     expect(segmentRegion).toHaveTextContent("切片就绪");
     expect(segmentRegion).not.toHaveTextContent("Run：");
     expect(segmentRegion).not.toHaveTextContent("Submission：");

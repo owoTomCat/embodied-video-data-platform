@@ -246,6 +246,20 @@ export class TaskSegmentService {
       : null;
     const accepted = acceptedAnnotationRun(run, review);
     if (!accepted) {
+      const snapshot = run.normalizedResult as Record<string, unknown> | null;
+      console.log("[tsg-dbg] not published:", JSON.stringify({
+        exec: run.executionStatus, pub: run.publicationStatus, review: run.reviewStatus,
+        reviewRev: run.reviewRevision, elig: run.autoEligibility, gateVer: run.autoGateVersion,
+        candSchema: snapshot?.schemaVersion, runSchema: run.schemaVersion,
+        candPolicy: snapshot?.policyVersion, runPolicy: run.evidencePolicyVersion,
+        candPrompt: snapshot?.promptVersion, runPrompt: run.promptVersion,
+        candSha: snapshot?.promptContentSha256, runSha: run.promptContentSha256,
+        candModel: snapshot?.model, runModel: run.model,
+        hasExample: Boolean(run.outputExampleSnapshot),
+        hasSystemPrompt: Boolean(run.systemPromptSnapshot),
+        errors: (snapshot?.validation as Record<string, unknown> | undefined)?.errors,
+        issues: (run.autoGateIssues ?? []).map((issue) => `${issue.level}:${issue.resolution}`),
+      }));
       throw new OperationsFailure(
         "ANNOTATION_RUN_NOT_PUBLISHED",
         "只允许从当前正式 auto_accepted 或 human_verified Run 生成片段",
