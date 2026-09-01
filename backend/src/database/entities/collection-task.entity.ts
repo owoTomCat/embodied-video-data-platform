@@ -13,7 +13,12 @@ import { UserEntity } from "./user.entity.js";
 
 export type CollectionTaskStatus = "draft" | "published" | "paused" | "closed";
 export type TaskNormalizationStatus = "pending" | "ready" | "failed";
-export type CollectionTaskType = "generic" | "preset" | "custom";
+/**
+ * 任务类型：
+ * generic = 通用任务（不绑定场景）；scene_type = 场景型任务（平台补量，绑定二级场景 + 目标时长）；
+ * preset = 场景库任务；custom = 自定义场景任务。
+ */
+export type CollectionTaskType = "generic" | "scene_type" | "preset" | "custom";
 
 export type NormalizedRequirementItem = {
   type: "hard" | "soft";
@@ -56,11 +61,19 @@ export class CollectionTaskEntity {
   sceneLibraryId: string | null = null;
 
   /**
-   * 任务类型：generic = 通用任务（不绑定场景）；preset = 预设场景任务；
-   * custom = 自定义场景任务。通用任务在任务大厅与创建页中作为最显眼的入口。
+   * 任务类型：generic = 通用任务（不绑定场景）；scene_type = 场景型任务（平台补量）；
+   * preset = 场景库任务；custom = 自定义场景任务。
    */
   @Column({ name: "task_type", type: "varchar", length: 24, default: "custom" })
   taskType: CollectionTaskType = "custom";
+
+  /** 场景型任务目标时长（秒）；用于场景存量均衡，空表示无目标 */
+  @Column({
+    name: "target_duration_seconds",
+    type: "bigint",
+    nullable: true,
+  })
+  targetDurationSeconds: string | null = null;
 
   /** 管理员自由填写的要求原文 */
   @Column({ name: "raw_requirements", type: "text" })

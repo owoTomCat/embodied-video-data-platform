@@ -94,6 +94,23 @@ export async function deleteSceneLevel1(id: string): Promise<void> {
   );
 }
 
+/** 场景存量/目标/缺口（各二级场景，管理员看板） */
+export type SceneInventoryItem = {
+  sceneName: string;
+  type: "scene_type" | "measured";
+  currentSeconds: number;
+  targetSeconds: number;
+  shortfallSeconds: number;
+  taskCount: number;
+};
+
+export async function getSceneInventory(): Promise<SceneInventoryItem[]> {
+  const result = await requestJson<{ items: SceneInventoryItem[] }>(
+    "/scene-system/inventory",
+  );
+  return result.items;
+}
+
 export async function listSceneClassification(): Promise<
   SceneClassification[]
 > {

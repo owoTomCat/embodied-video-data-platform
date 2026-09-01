@@ -21,7 +21,7 @@ const MAX_SCENE_NAME_LENGTH = 120;
 const MAX_RAW_REQUIREMENTS_LENGTH = 20_000;
 const MAX_REQUIREMENT_ITEMS = 100;
 
-const TASK_TYPES = ["generic", "preset", "custom"] as const;
+const TASK_TYPES = ["generic", "scene_type", "preset", "custom"] as const;
 
 export class CreateTaskDto {
   @IsString()
@@ -45,10 +45,18 @@ export class CreateTaskDto {
   @MaxLength(64)
   sceneLibraryId?: string | null;
 
-  /** 任务类型：generic=通用任务 / preset=场景库场景 / custom=自定义；缺省按 custom */
+  /** 任务类型：generic=通用 / scene_type=场景型（补量） / preset=场景库 / custom=自定义 */
   @IsOptional()
   @IsIn(TASK_TYPES, { message: "任务类型不合法" })
   taskType?: (typeof TASK_TYPES)[number];
+
+  /** 场景型任务目标时长（秒，仅 scene_type 使用；用于场景存量均衡） */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(1_000_000_000)
+  targetDurationSeconds?: number | null;
 
   @IsString()
   @MaxLength(MAX_RAW_REQUIREMENTS_LENGTH, {
@@ -89,6 +97,13 @@ export class UpdateTaskDto {
   @IsOptional()
   @IsIn(TASK_TYPES, { message: "任务类型不合法" })
   taskType?: (typeof TASK_TYPES)[number];
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(1_000_000_000)
+  targetDurationSeconds?: number | null;
 
   @IsOptional()
   @IsString()

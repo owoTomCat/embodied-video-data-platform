@@ -38,6 +38,7 @@ export type PublicTask = {
   sceneLabelId: string | null;
   sceneLibraryId: string | null;
   taskType: CollectionTaskType;
+  targetDurationSeconds: number | null;
   rawRequirements: string;
   normalizedRequirements: NormalizedTaskRequirements | null;
   normalizationStatus: string;
@@ -76,6 +77,7 @@ export function publicTask(task: CollectionTaskEntity): PublicTask {
     sceneLabelId: task.sceneLabelId,
     sceneLibraryId: task.sceneLibraryId,
     taskType: task.taskType,
+    targetDurationSeconds: numericOrNull(task.targetDurationSeconds),
     rawRequirements: task.rawRequirements,
     normalizedRequirements: task.normalizedRequirements,
     normalizationStatus: task.normalizationStatus,
@@ -305,6 +307,11 @@ export class TasksService {
         taskType: input.taskType ?? "custom",
         sceneLabelId: null,
         sceneLibraryId,
+        targetDurationSeconds:
+          input.targetDurationSeconds === null ||
+          input.targetDurationSeconds === undefined
+            ? null
+            : String(input.targetDurationSeconds),
         rawRequirements: input.rawRequirements.trim(),
         normalizedRequirements: null,
         normalizationStatus: "pending",
@@ -384,6 +391,12 @@ export class TasksService {
     }
     if (input.taskType !== undefined) {
       task.taskType = input.taskType;
+    }
+    if (input.targetDurationSeconds !== undefined) {
+      task.targetDurationSeconds =
+        input.targetDurationSeconds === null
+          ? null
+          : String(input.targetDurationSeconds);
     }
     if (input.rawRequirements !== undefined) {
       task.rawRequirements = input.rawRequirements.trim();

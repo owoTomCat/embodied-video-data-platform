@@ -3162,3 +3162,13 @@ button:disabled { cursor: not-allowed; opacity: .56; }
 .wallet-detail-row td { background: #f7f9fc; }
 .wallet-detail-inner { padding: 14px 16px; display: grid; gap: 10px; }
 .wallet-detail-inner h3 { color: #334159; font-size: 12px; }
+
+/* ===== 任务类型：场景型 ===== */
+.task-type-badge-warning {
+  color: #9a6a12;
+  background: #fdf1d8;
+}
+.task-type-scene-icon {
+  color: #9a6a12;
+  background: #fdf1d8;
+}

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { In, Repository } from "typeorm";
+import { DataSource, In, Repository } from "typeorm";
 
 import { AuditService } from "../audit/audit.service.js";
 import type { PublicUser } from "../auth/auth.types.js";
@@ -70,6 +70,7 @@ export class SceneSystemService {
     @InjectRepository(SceneCategoryPricingEntity)
     private readonly pricing: Repository<SceneCategoryPricingEntity>,
     private readonly audit: AuditService,
+    private readonly dataSource: DataSource,
   ) {}
 
   // ---------- 一级场景 ----------
@@ -591,6 +592,84 @@ export class SceneSystemService {
       );
     }
     return rows;
+  }
+
+  // ---------- 场景存量（两层任务体系第一层） ----------
+
+  /**
+   * 各二级场景的存量/目标/缺口。
+   * 存量 = 该场景下质检合格提交的有效时长（可计费时长）；
+   * 目标 = 该场景下所有 scene_type 任务的目标时长之和；
+   * 缺口 = max(0, 目标 − 当前存量)。用于场景存量均衡看板。
+   */
+  async sceneInventory(): Promise<{
+    items: Array<{
+      sceneName: string;
+      type: "scene_type" | "measured";
+      currentSeconds: number;
+      targetSeconds: number;
+      shortfallSeconds: number;
+      taskCount: number;
+    }>;
+  }> {
+    // 目标：按场景名分组 scene_type 任务的目标时长
+    const targetRows = await this.dataSource.query<Array<{
+      scene_name: string;
+      target_seconds: string;
+      task_count: string;
+    }>>(
+      `SELECT scene_name,
+              COALESCE(SUM(target_duration_seconds), 0)::float AS target_seconds,
+              COUNT(*)::int AS task_count
+         FROM collection_tasks
+        WHERE task_type = 'scene_type' AND target_duration_seconds IS NOT NULL
+        GROUP BY scene_name`,
+    );
+
+    // 存量：按提交快照场景名分组合格提交的有效时长（与计费同口径）
+    const stockRows = await this.dataSource.query<Array<{
+      scene_name: string;
+      current_ms: string;
+    }>>(
+      `SELECT COALESCE(submission.task_scene_name, task.scene_name, '') AS scene_name,
+              COALESCE(SUM(
+                COALESCE(quality.manual_billable_duration_ms, quality.billable_duration_ms, 0)
+              ), 0)::float AS current_ms
+         FROM submissions submission
+         LEFT JOIN collection_tasks task ON task.id = submission.task_id
+         LEFT JOIN video_quality_results quality ON quality.submission_id = submission.id
+        WHERE quality.passed = true
+          AND quality.status IN ('scored', 'review_pending')
+        GROUP BY 1`,
+    );
+
+    const stockMap = new Map(
+      stockRows.map((row) => [
+        row.scene_name,
+        Number(row.current_ms) || 0,
+      ]),
+    );
+    const sceneSet = new Set<string>([
+      ...targetRows.map((row) => row.scene_name),
+      ...stockMap.keys(),
+    ]);
+
+    const items = [...sceneSet].map((sceneName) => {
+      const currentMs = stockMap.get(sceneName) ?? 0;
+      const targetRow = targetRows.find((row) => row.scene_name === sceneName);
+      const targetSeconds = Number(targetRow?.target_seconds) || 0;
+      const currentSeconds = currentMs / 1000;
+      return {
+        sceneName,
+        type: targetRow ? ("scene_type" as const) : ("measured" as const),
+        currentSeconds: Math.round(currentSeconds),
+        targetSeconds: Math.round(targetSeconds),
+        shortfallSeconds: Math.max(0, Math.round(targetSeconds - currentSeconds)),
+        taskCount: Number(targetRow?.task_count) || 0,
+      };
+    });
+    items.sort((left, right) => right.shortfallSeconds - left.shortfallSeconds);
+    return { items };
   }
 
   private requireAdmin(actor: PublicUser): void {

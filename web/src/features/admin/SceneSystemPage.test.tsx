@@ -20,6 +20,7 @@ const sceneApi = vi.hoisted(() => ({
   listLevel1Scenes: vi.fn(),
   listSceneClassification: vi.fn(),
   listSceneLibrary: vi.fn(),
+  getSceneInventory: vi.fn(),
   createSceneLevel1: vi.fn(),
   updateSceneLevel1: vi.fn(),
   deleteSceneLevel1: vi.fn(),
@@ -38,6 +39,7 @@ vi.mock("../../scene-system/client/sceneSystemApi", () => ({
   deleteSceneLevel1: sceneApi.deleteSceneLevel1,
   listSceneClassification: sceneApi.listSceneClassification,
   listSceneLibrary: sceneApi.listSceneLibrary,
+  getSceneInventory: sceneApi.getSceneInventory,
   createSceneClassification: sceneApi.createSceneClassification,
   updateSceneClassification: sceneApi.updateSceneClassification,
   deleteSceneClassification: sceneApi.deleteSceneClassification,
@@ -73,6 +75,7 @@ describe("SceneSystemPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     sceneApi.listLevel1Scenes.mockReset().mockResolvedValue(level1);
+    sceneApi.getSceneInventory.mockReset().mockResolvedValue([]);
     sceneApi.listSceneClassification
       .mockReset()
       .mockResolvedValue(classification);

@@ -17,6 +17,7 @@ import {
   deleteSceneClassification,
   deleteSceneLevel1,
   deleteSceneLibrary,
+  getSceneInventory,
   listLevel1Scenes,
   listSceneClassification,
   listSceneLibrary,
@@ -24,6 +25,7 @@ import {
   updateSceneLevel1,
   updateSceneLibrary,
 } from "../../scene-system/client/sceneSystemApi";
+import type { SceneInventoryItem } from "../../scene-system/client/sceneSystemApi";
 import type {
   Level1Scene,
   SceneClassification,
@@ -46,12 +48,18 @@ type LibraryModalState = {
   item?: SceneLibraryItem;
 };
 
+function formatInventoryMinutes(seconds: number): string {
+  if (seconds <= 0) return "0 分钟";
+  return `${Math.round((seconds / 60) * 10) / 10} 分钟`;
+}
+
 export function SceneSystemPage() {
   const { notify } = useInteractions();
   const [mode, setMode] = useState<"loading" | "live" | "unavailable">("loading");
   const [level1, setLevel1] = useState<Level1Scene[]>([]);
   const [classification, setClassification] = useState<SceneClassification[]>([]);
   const [library, setLibrary] = useState<SceneLibraryItem[]>([]);
+  const [inventory, setInventory] = useState<SceneInventoryItem[]>([]);
   const [level1Modal, setLevel1Modal] = useState<Level1ModalState>();
   const [classificationModal, setClassificationModal] =
     useState<ClassificationModalState>();
@@ -73,12 +81,14 @@ export function SceneSystemPage() {
       listLevel1Scenes(),
       listSceneClassification(),
       listSceneLibrary(),
+      getSceneInventory(),
     ])
-      .then(([nextLevel1, nextClassification, nextLibrary]) => {
+      .then(([nextLevel1, nextClassification, nextLibrary, nextInventory]) => {
         if (!active) return;
         setLevel1(nextLevel1);
         setClassification(nextClassification);
         setLibrary(nextLibrary);
+        setInventory(nextInventory);
         setMode("live");
       })
       .catch(() => {
@@ -357,6 +367,31 @@ export function SceneSystemPage() {
           ))}
           {level1.length === 0 && <p className="form-message">暂无一级场景，点击「新增一级场景」创建。</p>}
         </div>
+      </section>
+
+      {/* 场景存量看板 */}
+      <section className="content-card table-card">
+        <div className="card-heading">
+          <div><h2>场景存量看板</h2><p>各二级场景当前合格有效时长 vs 目标时长（场景型任务目标之和），缺口大的优先补量</p></div>
+        </div>
+        <div className="table-scroll"><table className="data-table">
+          <thead><tr><th>场景</th><th>当前存量</th><th>目标时长</th><th>缺口</th><th>场景型任务数</th><th>状态</th></tr></thead>
+          <tbody>
+            {inventory.map((item) => (
+              <tr key={item.sceneName}>
+                <td><strong>{item.sceneName || "（空白场景）"}</strong></td>
+                <td className="nowrap-cell">{formatInventoryMinutes(item.currentSeconds)}</td>
+                <td className="nowrap-cell">{item.type === "scene_type" ? formatInventoryMinutes(item.targetSeconds) : "—"}</td>
+                <td className="nowrap-cell">
+                  {item.shortfallSeconds > 0 ? <strong className="money-in">{formatInventoryMinutes(item.shortfallSeconds)}</strong> : <span className="muted">已达标</span>}
+                </td>
+                <td>{item.taskCount > 0 ? `${item.taskCount} 个` : <span className="muted">—</span>}</td>
+                <td>{item.shortfallSeconds > 0 ? <StatusBadge label="需补量" tone="warning" /> : <StatusBadge label="达标" tone="success" />}</td>
+              </tr>
+            ))}
+            {inventory.length === 0 && <tr><td colSpan={6}><div className="empty-state compact-empty"><Map size={18} /><span>暂无场景型任务存量数据</span></div></td></tr>}
+          </tbody>
+        </table></div>
       </section>
 
       {/* 场景分类表 */}
