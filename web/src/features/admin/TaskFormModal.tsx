@@ -31,6 +31,7 @@ const GENERIC_SCENE_NAME = "通用";
 
 function taskTypeLabel(type: CollectionTaskType): string {
   if (type === "generic") return "通用任务";
+  if (type === "scene_type") return "场景型任务";
   if (type === "preset") return "场景库场景";
   return "自定义";
 }
@@ -72,6 +73,11 @@ export function TaskFormModal({
   const [libraryScenes, setLibraryScenes] = useState<SceneLibraryItem[]>([]);
   const [sceneLibraryId, setSceneLibraryId] = useState(
     task?.sceneLibraryId ?? null,
+  );
+  const [targetMinutes, setTargetMinutes] = useState(
+    task && task.targetDurationSeconds != null
+      ? String(task.targetDurationSeconds / 60)
+      : "",
   );
   const [priceByCategory, setPriceByCategory] = useState<Record<string, number>>({});
   const [genericTemplate, setGenericTemplate] = useState<
@@ -160,8 +166,8 @@ export function TaskFormModal({
     setError("");
     if (next === "generic") {
       applyTemplate("generic");
-    } else if (next === "custom") {
-      // 自定义：从通用/场景库切过来时清空被占用的场景名与自动带出的默认价，让管理员自行填写
+    } else if (next === "custom" || next === "scene_type") {
+      // 自定义/场景型：清空自动带出的场景名与默认价，由管理员填写场景名（场景型=二级场景）与各自参数
       if (sceneName === GENERIC_SCENE_NAME || sceneLibraryId) {
         setSceneName("");
       }
@@ -199,12 +205,16 @@ export function TaskFormModal({
 
     const parsedPrice =
       price.trim() === "" ? null : Number(price);
+    const parsedTargetMinutes = targetMinutes.trim() === "" ? null : Number(targetMinutes);
     const fields = {
       title: title.trim(),
       description: description.trim(),
       sceneName: trimmedScene,
       taskType,
       sceneLibraryId: taskType === "preset" ? sceneLibraryId : null,
+      ...(taskType === "scene_type" && parsedTargetMinutes !== null
+        ? { targetDurationSeconds: Math.max(1, Math.round(parsedTargetMinutes * 60)) }
+        : {}),
       rawRequirements: rawRequirements.trim(),
       ...(parsedPrice !== null && Number.isFinite(parsedPrice)
         ? { pricePointsPerMinute: parsedPrice }
@@ -244,7 +254,7 @@ export function TaskFormModal({
     >
       <form className="modal-form" onSubmit={submit}>
         <p className="task-form-intro">
-          先选择任务类型（通用任务 / 场景库场景 / 自定义），再确认标题、说明与要求；保存后可进行 AI
+          先选择任务类型（通用任务 / 场景型任务 / 场景库场景 / 自定义），再确认标题、说明与要求；保存后可进行 AI
           规范化并确认，最后发布给数采人员。
         </p>
 
@@ -266,6 +276,20 @@ export function TaskFormModal({
               <small>不绑定具体场景的综合类任务，适合跨场景或探索性采集</small>
             </span>
             <span className="task-type-option-check">{taskType === "generic" ? "✓" : ""}</span>
+          </button>
+
+          <button
+            type="button"
+            className={`task-type-option task-type-scene${taskType === "scene_type" ? " active" : ""}`}
+            onClick={() => selectType("scene_type")}
+            aria-pressed={taskType === "scene_type"}
+          >
+            <span className="task-type-scene-icon"><Map size={18} /></span>
+            <span className="task-type-option-copy">
+              <strong>场景型任务</strong>
+              <small>平台按二级场景补量：设置目标时长，用于场景数据存量均衡</small>
+            </span>
+            <span className="task-type-option-check">{taskType === "scene_type" ? "✓" : ""}</span>
           </button>
 
           <div className="task-type-group-heading">场景库场景</div>
@@ -317,9 +341,9 @@ export function TaskFormModal({
             <span className="task-type-option-check">{taskType === "custom" ? "✓" : ""}</span>
           </button>
 
-          {taskType === "custom" && (
+          {(taskType === "custom" || taskType === "scene_type") && (
             <label className="form-label task-scene-field">
-              <span>场景名称 <em>必填</em></span>
+              <span>{taskType === "scene_type" ? "二级场景名称" : "场景名称"} <em>必填</em></span>
               <input
                 value={sceneName}
                 onChange={(event) => {
@@ -333,7 +357,7 @@ export function TaskFormModal({
                 required
                 maxLength={120}
               />
-              <small className="field-help">可选择已有标签；新场景发布时自动加入字典</small>
+              <small className="field-help">{taskType === "scene_type" ? "填写所属二级场景（如 家庭卧室 / 家庭厨房），用于场景存量归口" : "可选择已有标签；新场景发布时自动加入字典"}</small>
               {sceneName.trim() && filteredSceneOptions.length > 0 && (
                 <ul className="suggestion-list">
                   {filteredSceneOptions.slice(0, 8).map((name) => (
@@ -450,6 +474,24 @@ export function TaskFormModal({
             <p className="task-type-note">
               已按「{selectedLibraryScene.categoryName}」大类默认价 {priceByCategory[selectedLibraryScene.categoryKey].toFixed(2)} 元/小时带出，可修改。
             </p>
+          )}
+          {taskType === "scene_type" && (
+            <label className="form-label task-price-field">
+              <span>目标时长（分钟）</span>
+              <div className="input-with-suffix">
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min="1"
+                  step="1"
+                  value={targetMinutes}
+                  onChange={(event) => setTargetMinutes(event.target.value)}
+                  placeholder="例如：120"
+                />
+                <span>分钟</span>
+              </div>
+              <small className="field-help">该场景型任务计划补充的有效时长；用于场景存量均衡看板的缺口计算</small>
+            </label>
           )}
         </section>
 

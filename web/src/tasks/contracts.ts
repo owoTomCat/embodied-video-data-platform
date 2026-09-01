@@ -1,6 +1,6 @@
 export type CollectionTaskStatus = "draft" | "published" | "paused" | "closed";
 export type TaskNormalizationStatus = "pending" | "ready" | "failed";
-export type CollectionTaskType = "generic" | "preset" | "custom";
+export type CollectionTaskType = "generic" | "scene_type" | "preset" | "custom";
 
 export type PresetScene = {
   key: string;
@@ -46,6 +46,7 @@ export type CollectionTask = {
   sceneLabelId: string | null;
   sceneLibraryId: string | null;
   taskType: CollectionTaskType;
+  targetDurationSeconds: number | null;
   rawRequirements: string;
   normalizedRequirements: NormalizedTaskRequirements | null;
   normalizationStatus: TaskNormalizationStatus;
@@ -68,6 +69,7 @@ export type CollectionTaskForCollector = {
   sceneLabelId: string | null;
   sceneLibraryId: string | null;
   taskType: CollectionTaskType;
+  targetDurationSeconds: number | null;
   normalizedRequirements: NormalizedTaskRequirements | null;
   pricePointsPerMinute: number | null;
   status: CollectionTaskStatus;
@@ -82,6 +84,7 @@ export type CreateTaskInput = {
   taskType?: CollectionTaskType;
   rawRequirements: string;
   sceneLibraryId?: string | null;
+  targetDurationSeconds?: number | null;
   pricePointsPerMinute?: number | null;
 };
 

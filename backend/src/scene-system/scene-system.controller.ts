@@ -72,6 +72,13 @@ export class SceneSystemController {
     return this.scenes.deleteLevel1(actor, id);
   }
 
+  /** 场景存量/目标/缺口（各二级场景，管理员）——两层任务体系第一层看板 */
+  @Get("inventory")
+  async inventory(@CurrentUser() actor: PublicUser) {
+    if (actor.role !== "admin") return { items: [] };
+    return await this.scenes.sceneInventory();
+  }
+
   // ---------- 场景分类表（二级场景） ----------
 
   @Get("classification")

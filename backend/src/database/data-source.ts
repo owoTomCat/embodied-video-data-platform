@@ -75,6 +75,7 @@ import { SceneCategoryPricing2026090100001 } from "./migrations/202609010001-sce
 import { SceneSystem2026090200001 } from "./migrations/202609020001-scene-system.js";
 import { SceneLevel1Table2026090300001 } from "./migrations/202609030001-scene-level1.js";
 import { AddDedupIndexes2026090400001 } from "./migrations/202609040001-add-dedup-indexes.js";
+import { SceneTypeTask2026090500001 } from "./migrations/202609050001-scene-type-task.js";
 import { WalletAndSettlement2026083100001 } from "./migrations/202608310001-wallet-and-settlement.js";
 import { TaskSegmentAssets2026090300001 } from "./migrations/202609030001-task-segment-assets.js";
 
@@ -168,6 +169,7 @@ export function createDataSource(
       SceneLevel1Table2026090300001,
       TaskSegmentAssets2026090300001,
       AddDedupIndexes2026090400001,
+      SceneTypeTask2026090500001,
     ],
     synchronize: false,
     logging: false,
