@@ -192,6 +192,9 @@ export class AnnotationRunService {
             durationMs: evidence.metadata.duration_ms,
             frames: evidence.fullVideoFrames,
             enabledLabels,
+            // 重跑旧 Run 时按快照版本生成，保证与 acceptedAnnotationRun 快照一致
+            schemaVersion: task.run.schemaVersion,
+            policyVersion: task.run.evidencePolicyVersion,
           },
           input.signal,
           {

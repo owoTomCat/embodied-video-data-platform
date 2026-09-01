@@ -385,6 +385,16 @@ export function SubmissionDetail({
       {item.storageStatus === "deleted" && <div className="form-message error">该视频对象已删除：{item.storage?.deleteReason ?? "对象已删除"}</div>}
       {item.storageStatus === "delete_pending" && <div className="form-message warning">该视频对象正在删除，完成前不可预览或重新处理。</div>}
       {duplicateCandidate && <div className="form-message warning"><CopyCheck size={14} />该视频疑似与 {duplicateCandidate.candidateFileName ?? duplicateCandidate.candidateSubmissionId} 重复，相似度 {Math.round(duplicateCandidate.similarity * 100)}%，管理员确认前不会进入金额锁定。</div>}
+      {item.qualityResult?.status === "review_pending" &&
+        item.qualityResult.reviewReasons?.length ? (
+        <div className="form-message warning">
+          <CopyCheck size={14} />
+          该视频需要人工复核：
+          {item.qualityResult.reviewReasons.map((reason, index) => (
+            <span key={`qc-reason-${index}`}>{index > 0 ? "；" : ""}{reason}</span>
+          ))}
+        </div>
+      ) : null}
       <div className="detail-grid report-layout">
         <section className="video-preview">{preview ? <><video controls preload="metadata" poster={preview.thumbnail?.url} aria-label={`${preview.fileName} 预览`}>{preview.hls ? <source src={preview.hls.url} type={preview.hls.contentType} /> : null}<source src={preview.url} type={preview.contentType} /></video><span>{preview.hls ? `${preview.hls.qualities.map((quality) => quality.quality).join(" / ")}` : `${Math.floor(item.durationSeconds / 60)}:${String(item.durationSeconds % 60).padStart(2, "0")}`}</span></> : <div><FileVideo size={42} /><strong>{previewState === "loading" ? "正在生成预览地址" : "已保存原始视频"}</strong><small>{previewState === "unavailable" ? "预览暂时无法生成" : "视频已保存至平台对象存储"}</small></div>} {!preview ? <span>{Math.floor(item.durationSeconds / 60)}:{String(item.durationSeconds % 60).padStart(2, "0")}</span> : null}</section>
         <QualityReportCard

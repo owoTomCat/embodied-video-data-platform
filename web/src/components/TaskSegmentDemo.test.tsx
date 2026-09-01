@@ -184,9 +184,13 @@ describe("TaskSegmentDemo", () => {
     );
 
     expect(await screen.findByText("1.0s～2.5s 打开冰箱")).toBeInTheDocument();
-    expect(
-      screen.getByText(/对象：冰箱门、冰箱.*动作：抓取、打开、松开.*完成状态：completed/u),
-    ).toBeInTheDocument();
+    // 结构化字段：标签与值分开展示（多卡片时标签可能出现多次）
+    expect(screen.getAllByText("对象").length).toBeGreaterThan(0);
+    expect(screen.getByText("冰箱门、冰箱")).toBeInTheDocument();
+    expect(screen.getAllByText("动作").length).toBeGreaterThan(0);
+    expect(screen.getByText("抓取、打开、松开")).toBeInTheDocument();
+    expect(screen.getAllByText("完成状态").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("completed").length).toBeGreaterThan(0);
     expect(screen.getByText("切片就绪")).toBeInTheDocument();
     expect(screen.queryByText(/Run：/u)).not.toBeInTheDocument();
     expect(screen.queryByText(/Submission：/u)).not.toBeInTheDocument();

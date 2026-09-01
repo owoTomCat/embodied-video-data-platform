@@ -271,9 +271,11 @@ export function TaskSegmentDemo({
                 </legend>
                 <div className="issue-editor-heading">
                   {structured ? (
-                    <small>
-                      对象：{objects}　动作：{actions || "—"}　完成状态：{completion}
-                    </small>
+                    <div className="task-segment-meta">
+                      <span className="task-segment-meta-item"><em>对象</em>{objects}</span>
+                      <span className="task-segment-meta-item"><em>动作</em>{actions || "—"}</span>
+                      <span className="task-segment-meta-item"><em>完成状态</em>{completion}</span>
+                    </div>
                   ) : (
                     <span>{timestamp(asset.clipStartMs)} → {timestamp(asset.clipEndMs)}</span>
                   )}

@@ -240,8 +240,8 @@ export type VideoAnnotationLabelMapping = {
 
 export type VideoAnnotationCandidateSuccess = {
   status: "candidate" | "review_required";
-  schemaVersion: typeof VIDEO_ANNOTATION_SCHEMA_VERSION;
-  policyVersion: typeof VIDEO_ANNOTATION_POLICY_VERSION;
+  schemaVersion: string;
+  policyVersion: string;
   promptVersion: string;
   promptContentSha256: string;
   model: string;
@@ -273,8 +273,8 @@ export type VideoAnnotationCandidateSuccess = {
 
 export type VideoAnnotationCandidateFailure = {
   status: "system_failed";
-  schemaVersion: typeof VIDEO_ANNOTATION_SCHEMA_VERSION;
-  policyVersion: typeof VIDEO_ANNOTATION_POLICY_VERSION;
+  schemaVersion: string;
+  policyVersion: string;
   promptVersion: string;
   promptContentSha256: string;
   model: string;
@@ -513,6 +513,9 @@ export function normalizeVideoAnnotation(input: {
     totalTokens: number | null;
   };
   repairs?: AnnotationGateIssue[];
+  /** 重跑旧 Run 时按 Run 快照版本生成，保持与快照一致（默认当前常量）。 */
+  schemaVersionOverride?: string;
+  policyVersionOverride?: string;
   /** Kept for older callers; evidence gap no longer changes gate eligibility. */
   applySparseEvidencePolicy?: boolean;
   enabledLabels?: Array<{
@@ -799,8 +802,8 @@ export function normalizeVideoAnnotation(input: {
 
   const candidate: Omit<VideoAnnotationCandidateSuccess, "gate"> = {
     status: "candidate",
-    schemaVersion: VIDEO_ANNOTATION_SCHEMA_VERSION,
-    policyVersion: VIDEO_ANNOTATION_POLICY_VERSION,
+    schemaVersion: input.schemaVersionOverride ?? VIDEO_ANNOTATION_SCHEMA_VERSION,
+    policyVersion: input.policyVersionOverride ?? VIDEO_ANNOTATION_POLICY_VERSION,
     promptVersion: input.promptVersion,
     promptContentSha256: input.promptContentSha256,
     model: input.model,
