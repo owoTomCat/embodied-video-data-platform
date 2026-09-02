@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   CircleDollarSign,
   ClipboardList,
+  Map as MapIcon,
   PauseCircle,
   Search,
   ShieldCheck,
@@ -13,14 +14,26 @@ import { useEffect, useMemo, useState } from "react";
 import { StatusBadge } from "../../components/StatusBadge";
 import { TaskTypeBadge } from "../../components/TaskTypeBadge";
 import { useInteractions } from "../../interactions/InteractionContext";
+import { getSceneProgress } from "../../scene-system/client/sceneSystemApi";
+import type { SceneInventoryItem } from "../../scene-system/client/sceneSystemApi";
 import { listTasksForCollector } from "../../tasks/client/taskApi";
 import type { CollectionTaskForCollector } from "../../tasks/contracts";
 
 const SELECTED_TASK_STORAGE_KEY = "evdp:selectedTaskId";
 
+function formatMinutes(seconds: number): string {
+  if (seconds <= 0) return "0 分钟";
+  const minutes = Math.round((seconds / 60) * 10) / 10;
+  if (minutes < 60) return `${minutes} 分钟`;
+  const hours = Math.floor(minutes / 60);
+  const rest = Math.round(minutes % 60);
+  return rest > 0 ? `${hours} 小时 ${rest} 分` : `${hours} 小时`;
+}
+
 export function TaskHallPage({ navigate }: { navigate(path: string): void }) {
   const { notify } = useInteractions();
   const [tasks, setTasks] = useState<CollectionTaskForCollector[]>([]);
+  const [progress, setProgress] = useState<SceneInventoryItem[]>([]);
   const [mode, setMode] = useState<"loading" | "live" | "unavailable">(
     "loading",
   );
@@ -29,10 +42,11 @@ export function TaskHallPage({ navigate }: { navigate(path: string): void }) {
 
   useEffect(() => {
     let active = true;
-    listTasksForCollector()
-      .then((items) => {
+    Promise.all([listTasksForCollector(), getSceneProgress()])
+      .then(([items, sceneProgress]) => {
         if (!active) return;
         setTasks(items);
+        setProgress(sceneProgress ?? []);
         setMode("live");
       })
       .catch(() => {
@@ -63,8 +77,53 @@ export function TaskHallPage({ navigate }: { navigate(path: string): void }) {
     });
   }, [query, status, tasks]);
 
+  const progressByScene = useMemo(() => {
+    const map = new Map<string, SceneInventoryItem>();
+    for (const item of progress) map.set(item.sceneName, item);
+    return map;
+  }, [progress]);
+
+  // 场景型任务所属场景（用于进度面板，缺口大的在前）
+  const sceneTypeScenes = useMemo(() => {
+    const wanted = new Set<string>();
+    for (const task of tasks) {
+      if (task.taskType === "scene_type" && task.sceneName) {
+        wanted.add(task.sceneName);
+      }
+    }
+    const items = [...wanted]
+      .map((name) => progressByScene.get(name))
+      .filter((item): item is SceneInventoryItem => Boolean(item))
+      .sort((left, right) => right.shortfallSeconds - left.shortfallSeconds);
+    return items;
+  }, [progressByScene, tasks]);
+
   const availableCount = tasks.filter((task) => task.status === "published").length;
   const pausedCount = tasks.length - availableCount;
+
+  function renderSceneProgress(task: CollectionTaskForCollector) {
+    if (task.taskType !== "scene_type") return null;
+    const item = progressByScene.get(task.sceneName);
+    const target = item?.targetSeconds ?? task.targetDurationSeconds ?? 0;
+    const current = item?.currentSeconds ?? 0;
+    const shortfall = item?.shortfallSeconds ?? Math.max(0, target - current);
+    const pct = target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0;
+    return (
+      <div className="task-scene-progress">
+        <div className="task-scene-progress-head">
+          <span><MapIcon size={13} />本场景采集进度</span>
+          <em>{target > 0 ? "缺口 " + formatMinutes(shortfall) : "尚未设置目标"}</em>
+        </div>
+        <div className="scene-progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label={`${task.sceneName} 采集进度 ${pct}%`}>
+          <i style={{ width: `${pct}%` }} />
+        </div>
+        <div className="task-scene-progress-meta">
+          <span>已采 <strong>{formatMinutes(current)}</strong></span>
+          <span>目标 <strong>{target > 0 ? formatMinutes(target) : "—"}</strong></span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="page-stack">
@@ -83,7 +142,7 @@ export function TaskHallPage({ navigate }: { navigate(path: string): void }) {
               <span className="task-hall-summary-icon"><ClipboardList size={22} /></span>
               <div>
                 <strong>找到适合的任务，先读要求再拍摄</strong>
-                <p>进行中的任务可立即提交；暂停任务仍可查看，但暂不能上传。</p>
+                <p>进行中的任务可立即提交；场景型任务会显示各场景采集缺口，优先补量场景更容易被质检通过。</p>
               </div>
             </div>
             <div className="task-hall-stats">
@@ -117,6 +176,46 @@ export function TaskHallPage({ navigate }: { navigate(path: string): void }) {
             </div>
           </div>
         </>
+      )}
+
+      {/* 场景型任务：缺口优先面板 */}
+      {mode === "live" && sceneTypeScenes.length > 0 && (
+        <section className="content-card task-scene-layout" aria-label="场景采集缺口">
+          <div className="card-heading">
+            <div>
+              <h2>场景采集进度</h2>
+              <p>各场景当前合格存量 vs 目标时长，缺口大的场景优先采集可更快补齐</p>
+            </div>
+          </div>
+          <div className="task-scene-grid">
+            {sceneTypeScenes.map((item) => {
+              const pct =
+                item.targetSeconds > 0
+                  ? Math.min(100, Math.round((item.currentSeconds / item.targetSeconds) * 100))
+                  : 0;
+              return (
+                <div className="task-scene-cell" key={item.sceneName}>
+                  <div className="task-scene-cell-head">
+                    <strong>{item.sceneName}</strong>
+                    {item.shortfallSeconds > 0 ? (
+                      <StatusBadge label="需补量" tone="warning" />
+                    ) : (
+                      <StatusBadge label="达标" tone="success" />
+                    )}
+                  </div>
+                  <div className="scene-progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label={`${item.sceneName} 采集进度 ${pct}%`}>
+                    <i style={{ width: `${pct}%` }} />
+                  </div>
+                  <div className="task-scene-cell-meta">
+                    <span>已采 <strong>{formatMinutes(item.currentSeconds)}</strong></span>
+                    <span>目标 <strong>{item.targetSeconds > 0 ? formatMinutes(item.targetSeconds) : "—"}</strong></span>
+                    <span className={item.shortfallSeconds > 0 ? "gap" : "ok"}>缺口 <strong>{item.shortfallSeconds > 0 ? formatMinutes(item.shortfallSeconds) : "0"}</strong></span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
       )}
 
       {mode === "unavailable" ? (
@@ -155,7 +254,7 @@ export function TaskHallPage({ navigate }: { navigate(path: string): void }) {
                       </>
                     ) : (
                       <>
-                        <TaskTypeBadge type={task.taskType} label={task.taskType === "preset" ? "场景任务" : "自定义"} />
+                        <TaskTypeBadge type={task.taskType} label={task.taskType === "preset" ? "场景任务" : task.taskType === "scene_type" ? "场景型" : "自定义"} />
                         <span>场景：{task.sceneName}</span>
                       </>
                     )}
@@ -171,6 +270,7 @@ export function TaskHallPage({ navigate }: { navigate(path: string): void }) {
                 {task.normalizedRequirements?.scene_description ??
                   (task.description || "（任务未提供说明）")}
               </p>
+              {renderSceneProgress(task)}
               {task.normalizedRequirements?.requirements.length ? (
                 <div className="task-requirement-block">
                   <div className="task-requirement-heading">

@@ -348,4 +348,27 @@ describe("scene system API", () => {
       .send({ name: "违规场景", categoryKey: "family", subSceneIds: [] })
       .expect(403);
   });
+
+  it("exposes scene progress to collectors but keeps inventory admin-only", async () => {
+    const adminCookie = await login("scene-admin");
+    const collectorCookie = await login("scene-collector");
+
+    // 数采端进度接口：任意激活用户可读（P2 任务大厅场景型任务进度）
+    const progress = await request(app.getHttpServer())
+      .get("/api/v1/scene-system/progress")
+      .set("Cookie", collectorCookie)
+      .expect(200);
+    expect(Array.isArray(progress.body.items)).toBe(true);
+
+    // 管理端存量看板：仅管理员可读；数采读取返回空
+    await request(app.getHttpServer())
+      .get("/api/v1/scene-system/inventory")
+      .set("Cookie", adminCookie)
+      .expect(200);
+    const inventoryAsCollector = await request(app.getHttpServer())
+      .get("/api/v1/scene-system/inventory")
+      .set("Cookie", collectorCookie)
+      .expect(200);
+    expect(inventoryAsCollector.body.items).toEqual([]);
+  });
 });

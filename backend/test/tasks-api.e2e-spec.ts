@@ -322,6 +322,56 @@ describe("tasks API with task type dimension", () => {
       );
       expect(found?.taskType).toBe("custom");
     });
+
+    it("exposes targetDurationSeconds and scene_type for a collector's task list", async () => {
+      const adminCookie = await login("stat-admin");
+      const created = await request(app.getHttpServer())
+        .post("/api/v1/tasks")
+        .set("Origin", WEB_ORIGIN)
+        .set("Cookie", adminCookie)
+        .send({
+          title: "家庭厨房场景型任务",
+          description: "平台补量",
+          sceneName: "家庭-厨房",
+          taskType: "scene_type",
+          targetDurationSeconds: 3600,
+          rawRequirements: "必须第一人称拍摄。",
+        })
+        .expect(201);
+      const id = created.body.task.id as string;
+
+      await request(app.getHttpServer())
+        .post(`/api/v1/tasks/${id}/confirm-requirements`)
+        .set("Origin", WEB_ORIGIN)
+        .set("Cookie", adminCookie)
+        .send({
+          scene_description: "家庭厨房场景，第一人称双手操作。",
+          requirements: [
+            { type: "hard", content: "必须第一人称视角拍摄" },
+          ],
+          quality_notes: [],
+        })
+        .expect(201);
+
+      await request(app.getHttpServer())
+        .post(`/api/v1/tasks/${id}/publish`)
+        .set("Origin", WEB_ORIGIN)
+        .set("Cookie", adminCookie)
+        .expect(201);
+
+      const collectorCookie = await login("stat-collector");
+      const listed = await request(app.getHttpServer())
+        .get("/api/v1/tasks")
+        .set("Cookie", collectorCookie)
+        .expect(200);
+      const found = (listed.body.tasks as Array<{
+        id: string;
+        taskType: string;
+        targetDurationSeconds: number | null;
+      }>).find((task) => task.id === id);
+      expect(found?.taskType).toBe("scene_type");
+      expect(found?.targetDurationSeconds).toBe(3600);
+    });
   });
 
   describe("POST /tasks/:id/resume", () => {

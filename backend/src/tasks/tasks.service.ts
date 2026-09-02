@@ -61,6 +61,7 @@ export type PublicTaskForCollector = {
   sceneLabelId: string | null;
   sceneLibraryId: string | null;
   taskType: CollectionTaskType;
+  targetDurationSeconds: number | null;
   normalizedRequirements: NormalizedTaskRequirements | null;
   pricePointsPerMinute: number | null;
   status: CollectionTaskStatus;
@@ -104,6 +105,7 @@ export function publicTaskForCollector(
     sceneLabelId: task.sceneLabelId,
     sceneLibraryId: task.sceneLibraryId,
     taskType: task.taskType,
+    targetDurationSeconds: numericOrNull(task.targetDurationSeconds),
     normalizedRequirements: task.normalizedRequirements,
     pricePointsPerMinute: numericOrNull(task.pricePointsPerMinute),
     status: task.status,

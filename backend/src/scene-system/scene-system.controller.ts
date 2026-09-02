@@ -79,6 +79,13 @@ export class SceneSystemController {
     return await this.scenes.sceneInventory();
   }
 
+  /** 场景进度（各二级场景存量/目标/缺口）——数采端任务大厅：场景型任务可见，用于优先采集缺口大的场景 */
+  @Get("progress")
+  async progress(@CurrentUser() actor: PublicUser) {
+    if (actor.status !== "active") return { items: [] };
+    return await this.scenes.sceneInventory();
+  }
+
   // ---------- 场景分类表（二级场景） ----------
 
   @Get("classification")

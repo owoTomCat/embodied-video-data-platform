@@ -1425,6 +1425,104 @@ button:disabled { cursor: not-allowed; opacity: .56; }
   font-size: 9px;
 }
 
+/* 场景型任务：任务卡内的场景采集进度 + 缺口优先面板（P2 数采端任务大厅）。 */
+.task-scene-progress {
+  display: grid;
+  padding: 11px 12px;
+  gap: 8px;
+  background: #f7f9fd;
+  border: 1px solid #e8edf5;
+  border-radius: 10px;
+}
+.task-scene-progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.task-scene-progress-head > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #45546c;
+  font-size: 11px;
+  font-weight: 750;
+}
+.task-scene-progress-head em {
+  color: #8995a7;
+  font-size: 9px;
+  font-style: normal;
+}
+.scene-progress-track {
+  height: 6px;
+  overflow: hidden;
+  background: #e5eaf2;
+  border-radius: 999px;
+}
+.scene-progress-track i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #6f91e7, #42b982);
+  border-radius: inherit;
+  transition: width .4s ease;
+}
+.task-scene-progress-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #8a96a8;
+  font-size: 9px;
+  font-weight: 500;
+}
+.task-scene-progress-meta strong,
+.task-scene-cell-meta strong {
+  color: #45546c;
+  font-weight: 750;
+}
+.task-scene-layout {
+  padding: 18px 20px;
+}
+.task-scene-grid {
+  display: grid;
+  margin-top: 4px;
+  grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr));
+  gap: 12px;
+}
+.task-scene-cell {
+  display: grid;
+  padding: 13px 14px;
+  gap: 9px;
+  background: #fbfcff;
+  border: 1px solid #e8edf5;
+  border-radius: 11px;
+}
+.task-scene-cell-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.task-scene-cell-head strong {
+  font-size: 13px;
+}
+.task-scene-cell-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #8a96a8;
+  font-size: 9px;
+  font-weight: 500;
+}
+.task-scene-cell-meta .gap strong {
+  color: #c07a2c;
+}
+.task-scene-cell-meta .ok strong {
+  color: #4f9b75;
+}
+
+
 /* 数采提交页：三步式表单与可读的确认状态。 */
 .upload-progress-steps {
   display: grid;
