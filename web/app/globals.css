@@ -1522,6 +1522,151 @@ button:disabled { cursor: not-allowed; opacity: .56; }
   color: #4f9b75;
 }
 
+/* ---- P3 场景指导任务卡（数采拍照指导 + 管理端审核） ---- */
+.task-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.guide-photo-grid {
+  display: grid;
+  margin: 4px 0 14px;
+  grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr));
+  gap: 12px;
+}
+.guide-photo-tile {
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  background: #f0f3f8;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.guide-photo-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.guide-photo-remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: #fff;
+  background: rgb(0 0 0 / 55%);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.guide-photo-add {
+  display: flex;
+  aspect-ratio: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: #7a8aa0;
+  background: #fbfcff;
+  border: 1px dashed #c9d4e4;
+  border-radius: 12px;
+  cursor: pointer;
+}
+.guide-photo-add span { font-size: 12px; font-weight: 700; }
+.guide-photo-add em { color: #9aabbd; font-size: 10px; font-style: normal; }
+.guide-photo-actions,
+.guide-card-actions,
+.guide-review-actions {
+  display: flex;
+  margin-top: 4px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.guide-subtitle {
+  display: flex;
+  margin: 0 0 8px;
+  align-items: center;
+  gap: 6px;
+  color: #45546c;
+  font-size: 11px;
+  font-weight: 750;
+}
+.guide-env-object-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.guide-env-object {
+  display: inline-flex;
+  padding: 4px 10px;
+  align-items: center;
+  color: #3a4a63;
+  background: #eef3fb;
+  border: 1px solid #dbe6f5;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.guide-card-preview {
+  display: grid;
+  margin-top: 6px;
+  gap: 16px;
+}
+.guide-steps-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  gap: 8px;
+  list-style: none;
+}
+.guide-steps-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: #2f3d54;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.guide-steps-list li > span {
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: #5580e6;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 700;
+}
+.guide-end-condition {
+  margin: 0;
+  padding: 10px 12px;
+  color: #2f3d54;
+  background: #f7f9fd;
+  border: 1px solid #e8edf5;
+  border-radius: 10px;
+  font-size: 12px;
+}
+.guide-card-criteria {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+  gap: 12px;
+}
+.guide-crite-title-success { color: #4f9b75; }
+.guide-crite-title-fail { color: #c07a2c; }
+.guide-card-edit {
+  display: grid;
+  margin-top: 6px;
+  gap: 14px;
+}
+
 
 /* 数采提交页：三步式表单与可读的确认状态。 */
 .upload-progress-steps {

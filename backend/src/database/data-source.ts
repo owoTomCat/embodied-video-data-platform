@@ -9,6 +9,7 @@ import { AnnotationRunEntity } from "./entities/annotation-run.entity.js";
 import { AuditLogEntity } from "./entities/audit-log.entity.js";
 import { CollectionTaskEntity } from "./entities/collection-task.entity.js";
 import { DeliveryArchiveTaskEntity } from "./entities/delivery-archive-task.entity.js";
+import { GuideTaskEntity } from "./entities/guide-task.entity.js";
 import { DeliveryPackageEntity } from "./entities/delivery-package.entity.js";
 import { DeliveryPackageItemEntity } from "./entities/delivery-package-item.entity.js";
 import { JobOutboxEntity } from "./entities/job-outbox.entity.js";
@@ -80,6 +81,7 @@ import { SceneSystem2026090200001 } from "./migrations/202609020001-scene-system
 import { SceneLevel1Table2026090300001 } from "./migrations/202609030001-scene-level1.js";
 import { AddDedupIndexes2026090400001 } from "./migrations/202609040001-add-dedup-indexes.js";
 import { SceneTypeTask2026090500001 } from "./migrations/202609050001-scene-type-task.js";
+import { GuideTasks2026090600001 } from "./migrations/202609060001-guide-tasks.js";
 import { WalletAndSettlement2026083100001 } from "./migrations/202608310001-wallet-and-settlement.js";
 import { TaskSegmentAssets2026090300001 } from "./migrations/202609030001-task-segment-assets.js";
 import { TaskBoundaryRefinements2026090500001 } from "./migrations/202609050001-task-boundary-refinements.js";
@@ -125,6 +127,7 @@ export const identityEntities = [
   TaskSegmentAnnotationRevisionEntity,
   TaskSegmentAssetProjectionEntity,
   TaskBoundaryRefinementEntity,
+  GuideTaskEntity,
 ];
 
 export function createDataSource(
@@ -182,6 +185,7 @@ export function createDataSource(
       TaskBoundaryRefinements2026090500001,
       SceneTypeTask2026090500001,
       TaskSegmentAdaptiveCut2026090600001,
+      GuideTasks2026090600001,
       TaskSegmentAnnotationPublication2026091200001,
       TaskAssetProjection2026091300001,
     ],

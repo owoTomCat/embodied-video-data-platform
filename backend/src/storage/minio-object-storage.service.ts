@@ -18,6 +18,7 @@ import { pipeline } from "node:stream/promises";
 import type {
   ObjectStoragePort,
   PresignedDownload,
+  PresignedUpload,
   PresignedUploadPart,
 } from "./object-storage.port.js";
 
@@ -174,6 +175,46 @@ export class MinioObjectStorageService implements ObjectStoragePort {
       { expiresIn: input.expiresInSeconds },
     );
     return { url, expiresAt };
+  }
+
+  async presignUploadObject(input: {
+    objectKey: string;
+    contentType: string;
+    expiresInSeconds: number;
+  }): Promise<PresignedUpload> {
+    await this.ensureBucket();
+    const expiresAt = new Date(
+      Date.now() + input.expiresInSeconds * 1_000,
+    );
+    const url = await getSignedUrl(
+      this.presignClient,
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: input.objectKey,
+        ContentType: input.contentType,
+      }),
+      { expiresIn: input.expiresInSeconds },
+    );
+    return { objectKey: input.objectKey, url, expiresAt };
+  }
+
+  async getObjectBytes(input: {
+    objectKey: string;
+  }): Promise<Buffer> {
+    const result = await this.client.send(
+      new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: input.objectKey,
+      }),
+    );
+    if (!result.Body) {
+      throw new Error("MinIO object body is unavailable");
+    }
+    const chunks: Buffer[] = [];
+    for await (const chunk of result.Body as AsyncIterable<Uint8Array>) {
+      chunks.push(Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks);
   }
 
   async deleteObject(input: { objectKey: string }): Promise<void> {

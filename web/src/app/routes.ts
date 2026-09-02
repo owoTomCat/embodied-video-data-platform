@@ -10,6 +10,7 @@ const exactPathsByRole: Record<Role, ReadonlySet<string>> = {
     "/collector/wallet",
     "/collector/earnings",
     "/collector/guide",
+    "/collector/photo-guide",
   ]),
   leader: new Set([
     "/team",
@@ -35,6 +36,7 @@ const exactPathsByRole: Record<Role, ReadonlySet<string>> = {
     "/admin/settlements",
     "/admin/public",
     "/admin/audit",
+    "/admin/guide-tasks",
   ]),
 };
 
