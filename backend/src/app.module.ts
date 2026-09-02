@@ -18,6 +18,7 @@ import { TasksModule } from "./tasks/tasks.module.js";
 import { TaskSegmentModule } from "./task-segment/task-segment.module.js";
 import { VideoAnnotationModule } from "./video-annotation/video-annotation.module.js";
 import { WalletModule } from "./wallet/wallet.module.js";
+import { YunzhanghuModule } from "./yunzhanghu/yunzhanghu.module.js";
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { WalletModule } from "./wallet/wallet.module.js";
     TasksModule,
     TaskSegmentModule,
     VideoAnnotationModule,
+    YunzhanghuModule,
   ],
 })
 export class AppModule {}
