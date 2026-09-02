@@ -260,11 +260,15 @@ export class TasksService {
     return publicTaskForCollector(task);
   }
 
-  /** 管理员：创建任务（draft） */
+  /** 管理员：创建任务（draft）；创建成功后自动后台规范化，需人工核查 */
   async create(
     actor: PublicUser,
     input: CreateTaskDto,
-  ): Promise<PublicTask> {
+  ): Promise<{
+    task: PublicTask;
+    autoNormalized: boolean;
+    normalizationFailed: boolean;
+  }> {
     this.policy.requireManage(actor);
     // 场景库场景：任务从场景库选时，场景名取场景库名称，单价自动带出该场景类别的定价（元/小时）
     let sceneName = input.sceneName.trim();
@@ -331,7 +335,25 @@ export class TasksService {
       null,
       { id: task.id, title: task.title, sceneName, sceneLibraryId },
     );
-    return publicTask(task);
+    // 创建成功后自动在后台进行 AI 规范化，结果直接落库，管理员只需核查一遍
+    const normalized = await this.runAutoNormalize(task, actor);
+    const final = await this.tasks.save(task);
+    await this.audit.record(
+      this.dataSource.manager,
+      actor,
+      "task_auto_normalize",
+      { id: final.id, name: final.title },
+      normalized.autoNormalized
+        ? `创建后自动规范化提示词：${final.normalizedRequirements?.requirements.length ?? 0} 条要求（硬性 ${final.normalizedRequirements?.requirements.filter((item) => item.type === "hard").length ?? 0} 条）`
+        : "创建后自动规范化提示词失败（任务已创建，可手动重试）",
+      null,
+      {
+        id: final.id,
+        normalizationStatus: final.normalizationStatus,
+        ...normalized,
+      },
+    );
+    return { task: publicTask(final), ...normalized };
   }
 
   /**
@@ -480,6 +502,34 @@ export class TasksService {
       autoNormalized,
       normalizationFailed,
     };
+  }
+
+  /** 后台 AI 要求规范化：成功 → ready（结果落库），失败 → failed（不阻断，可重试） */
+  private async runAutoNormalize(
+    task: CollectionTaskEntity,
+    _actor: PublicUser,
+  ): Promise<{ autoNormalized: boolean; normalizationFailed: boolean }> {
+    let autoNormalized = false;
+    let normalizationFailed = false;
+    try {
+      const normalized = await this.normalizer.normalize({
+        sceneName: task.sceneName,
+        description: task.description,
+        rawRequirements: task.rawRequirements,
+      });
+      if (normalized.requirements.length > 0) {
+        task.normalizedRequirements = normalized;
+        task.normalizationStatus = "ready";
+        autoNormalized = true;
+      } else {
+        task.normalizationStatus = "failed";
+        normalizationFailed = true;
+      }
+    } catch {
+      task.normalizationStatus = "failed";
+      normalizationFailed = true;
+    }
+    return { autoNormalized, normalizationFailed };
   }
 
   /** 管理员：仅删除尚未发布的草稿，避免破坏任务与已提交数据的追溯关系。 */

@@ -112,13 +112,16 @@ export async function getTask(id: string): Promise<CollectionTask> {
   return requestJson<{ task: CollectionTask }>(`tasks/${id}`).then(taskFrom);
 }
 
+/** 创建任务结果：任务 + 自动规范化信息（创建后后台已自动规范化，需人工核查） */
+export type CreateTaskResult = UpdateTaskResult;
+
 export async function createTask(
   input: CreateTaskInput,
-): Promise<CollectionTask> {
-  return requestJson<{ task: CollectionTask }>("tasks", {
+): Promise<CreateTaskResult> {
+  return requestJson<CreateTaskResult>("tasks", {
     method: "POST",
     body: JSON.stringify(input),
-  }).then(taskFrom);
+  });
 }
 
 /** 编辑任务结果：任务 + 自动规范化信息（供前端同步提示词规范化状态） */

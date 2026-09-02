@@ -126,11 +126,25 @@ export function TasksPage() {
   }
 
   async function handleCreate(input: CreateTaskInput) {
-    const task = await createTask(input);
-    setTasks((current) => [task, ...current]);
+    const result = await createTask(input);
+    setTasks((current) => [result.task, ...current]);
     setTotal((current) => current + 1);
-    notify("success", "任务已创建，可进行 AI 要求规范化");
-    return task;
+    if (result.autoNormalized) {
+      const count =
+        result.task.normalizedRequirements?.requirements.length ?? 0;
+      notify(
+        "success",
+        `任务已创建，提示词已自动规范化（${count} 条要求），请核查后发布`,
+      );
+    } else if (result.normalizationFailed) {
+      notify(
+        "error",
+        "任务已创建，但提示词自动规范化失败，请手动点击「规范化」重试",
+      );
+    } else {
+      notify("success", "任务已创建");
+    }
+    return result.task;
   }
 
   async function handleUpdate(id: string, input: UpdateTaskInput) {

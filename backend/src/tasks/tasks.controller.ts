@@ -68,7 +68,8 @@ export class TasksController {
     @CurrentUser() actor: PublicUser,
     @Body() input: CreateTaskDto,
   ) {
-    return { task: await this.tasks.create(actor, input) };
+    // create 返回 { task, autoNormalized, normalizationFailed }，直接透传
+    return await this.tasks.create(actor, input);
   }
 
   @Patch(":id")
