@@ -5,6 +5,9 @@ import { AuditModule } from "../audit/audit.module.js";
 import { AuthModule } from "../auth/auth.module.js";
 import { CollectionTaskEntity } from "../database/entities/collection-task.entity.js";
 import { GuideTaskEntity } from "../database/entities/guide-task.entity.js";
+import { SceneClassificationEntity } from "../database/entities/scene-classification.entity.js";
+import { SceneLevel1Entity } from "../database/entities/scene-level1.entity.js";
+import { SceneLibraryEntity } from "../database/entities/scene-library.entity.js";
 import { AllowedOriginGuard } from "../http/allowed-origin.guard.js";
 import { StorageModule } from "../storage/storage.module.js";
 import { QwenSceneGuideProvider } from "./qwen-scene-guide.provider.js";
@@ -23,7 +26,13 @@ export { SCENE_GUIDE_PROVIDER };
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([GuideTaskEntity, CollectionTaskEntity]),
+    TypeOrmModule.forFeature([
+      GuideTaskEntity,
+      CollectionTaskEntity,
+      SceneLibraryEntity,
+      SceneClassificationEntity,
+      SceneLevel1Entity,
+    ]),
     StorageModule,
     AuditModule,
     AuthModule,

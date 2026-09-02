@@ -21,8 +21,10 @@ import { TasksPage } from "../features/admin/TasksPage";
 import { UsersTeamsPage } from "../features/admin/UsersTeamsPage";
 import { CollectorDashboard } from "../features/collector/CollectorDashboard";
 import { EarningsPage } from "../features/collector/EarningsPage";
+import { GuideCreatePage } from "../features/collector/GuideCreatePage";
 import { GuidePage } from "../features/collector/GuidePage";
-import { PhotoGuidePage } from "../features/collector/PhotoGuidePage";
+import { MyScenesPage } from "../features/collector/MyScenesPage";
+import { SceneLibraryDetailPage } from "../features/collector/SceneLibraryDetailPage";
 import { TaskHallPage } from "../features/collector/TaskHallPage";
 import { GuideTaskReviewPage } from "../features/admin/GuideTaskReviewPage";
 import { AccountProfilePage } from "../features/account/AccountProfilePage";
@@ -108,7 +110,14 @@ function AuthenticatedPlatformContent({
     else if (safePath === "/collector/quality") page = <SubmissionsPage qualityOnly navigate={navigate} />;
     else if (safePath === "/collector/wallet" || safePath === "/collector/earnings") page = <EarningsPage />;
     else if (safePath === "/collector/guide") page = <GuidePage />;
-    else if (safePath === "/collector/photo-guide") page = <PhotoGuidePage navigate={navigate} />;
+    else if (safePath === "/collector/scenes") page = <MyScenesPage navigate={navigate} />;
+    else if (safePath.startsWith("/collector/scenes/") && safePath.endsWith("/create")) {
+      const segments = safePath.split("/");
+      page = <GuideCreatePage libraryId={segments.at(-2) ?? ""} navigate={navigate} />;
+    }
+    else if (safePath.startsWith("/collector/scenes/")) {
+      page = <SceneLibraryDetailPage id={safePath.split("/").at(-1) ?? ""} navigate={navigate} />;
+    }
   } else if (currentAccount.role === "leader") {
     if (safePath === "/team/members") page = <MembersPage />;
     else if (safePath === "/team/submissions") page = <TeamSubmissionsPage />;

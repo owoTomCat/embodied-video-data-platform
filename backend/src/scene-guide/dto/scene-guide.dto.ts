@@ -35,11 +35,32 @@ export class PhotoRefDto {
   sizeBytes?: number;
 }
 
+/** 数采创建自己的场景库（从三层体系选一级大类 + 二级子场景） */
+export class CreateCollectorLibraryDto {
+  @IsString()
+  @MaxLength(120)
+  name!: string;
+
+  @IsString()
+  @MaxLength(64)
+  categoryKey!: string;
+
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsString({ each: true })
+  subSceneIds!: string[];
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2_000)
+  description?: string;
+}
+
 /** 拍照指导：用于生成任务卡的请求（环境照片已通过预签名上传到 MinIO） */
 export class GenerateGuideTaskDto {
   @IsString()
   @MaxLength(64)
-  sceneTypeTaskId!: string;
+  sceneLibraryId!: string;
 
   @IsArray()
   @ArrayMaxSize(MAX_PHOTOS)
@@ -50,6 +71,11 @@ export class GenerateGuideTaskDto {
 
 /** 与模型输出 / 数据库存储一致使用 snake_case 字段名。 */
 export class TaskCardDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  title?: string;
+
   @IsArray()
   @ArrayMaxSize(10)
   @ValidateNested({ each: true })

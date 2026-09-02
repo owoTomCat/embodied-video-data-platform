@@ -6,8 +6,11 @@ import { listActiveUploads } from "../../submissions/client/submissionApi";
 import type { ActiveUploadResult } from "../../submissions/contracts";
 import { resumeUploadVideo, uploadVideo } from "../../submissions/upload/multipartUploader";
 import { uploadSizeError } from "../../submissions/upload/uploadLimits";
+import { getGuideTask } from "../../scene-guide/client/sceneGuideApi";
+import type { GuideTask } from "../../scene-guide/contracts";
 import { listTasksForCollector } from "../../tasks/client/taskApi";
 import type { CollectionTaskForCollector } from "../../tasks/contracts";
+import { GuideCardView } from "./GuideCardView";
 
 const isSupported = (file: File) => /\.(mov|mp4)$/i.test(file.name);
 
@@ -27,6 +30,7 @@ export function UploadPage() {
   const [taskMode, setTaskMode] = useState<"loading" | "live" | "unavailable">("loading");
   const [taskReloadKey, setTaskReloadKey] = useState(0);
   const [selectedTaskId, setSelectedTaskId] = useState("");
+  const [guideTask, setGuideTask] = useState<GuideTask | null>(null);
   const [taskRequirementsConfirmed, setTaskRequirementsConfirmed] =
     useState(false);
   const [activeUploads, setActiveUploads] = useState<ActiveUploadResult[]>([]);
@@ -71,6 +75,26 @@ export function UploadPage() {
       active = false;
     };
   }, [taskReloadKey]);
+
+  useEffect(() => {
+    let active = true;
+    const guideTaskId = sessionStorage.getItem("evdp:selectedGuideTaskId");
+    if (!guideTaskId) {
+      setGuideTask(null);
+      return () => {
+        active = false;
+      };
+    }
+    sessionStorage.removeItem("evdp:selectedGuideTaskId");
+    getGuideTask(guideTaskId)
+      .then((task) => {
+        if (active) setGuideTask(task);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -278,6 +302,15 @@ export function UploadPage() {
           <div><strong>上传文件</strong><small>查看实时进度</small></div>
         </li>
       </ol>
+      {guideTask?.taskCard && (
+        <section className="content-card upload-flow-card upload-guide-prompt" aria-label="任务卡操作提示">
+          <div className="card-heading">
+            <div><h2>任务卡操作提示</h2><p>按以下任务卡完成本次第一人称操作视频采集</p></div>
+            <span className="task-card-tag">{guideTask.title ?? `任务卡 ${guideTask.taskIndex + 1}`}</span>
+          </div>
+          <GuideCardView card={guideTask.taskCard} />
+        </section>
+      )}
       <section className="upload-layout">
         <div className="content-card upload-main-card upload-flow-card">
           <input ref={inputRef} className="file-input" aria-label="选择视频文件" accept=".mov,.mp4,video/quicktime,video/mp4" multiple type="file" onChange={(event) => acceptFiles(Array.from(event.target.files ?? []))} />

@@ -10,7 +10,7 @@ const exactPathsByRole: Record<Role, ReadonlySet<string>> = {
     "/collector/wallet",
     "/collector/earnings",
     "/collector/guide",
-    "/collector/photo-guide",
+    "/collector/scenes",
   ]),
   leader: new Set([
     "/team",
@@ -65,7 +65,11 @@ export function isKnownAuthenticatedPath(path: string, role: Role): boolean {
   if (path === "/account/profile") return true;
   if (exactPathsByRole[role].has(path)) return true;
   if (role === "collector") {
-    return hasSingleDetailSegment(path, "/collector/submissions/");
+    return (
+      hasSingleDetailSegment(path, "/collector/submissions/") ||
+      hasSingleDetailSegment(path, "/collector/scenes/") ||
+      /^\/collector\/scenes\/[^/]+\/create$/u.test(path)
+    );
   }
   if (role === "admin") {
     return (

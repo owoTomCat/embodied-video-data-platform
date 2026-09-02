@@ -82,7 +82,7 @@ const stubStorage = new StubStorage();
 
 const stubProvider = {
   recognizeEnvObjects: vi.fn(),
-  generateTaskCard: vi.fn(),
+  generateTaskCards: vi.fn(),
 };
 
 function cookieFrom(response: request.Response): string {
@@ -162,6 +162,7 @@ describe("scene guide API", () => {
         quality_notes: [],
       },
     });
+    // 三级场景体系已由迁移 seed：scene_level1（L1-F01/family）+ scene_classification（SC-001 厨房 / SC-003 卧室）
 
     const moduleRef = await Test.createTestingModule({
       imports: [
@@ -215,7 +216,7 @@ describe("scene guide API", () => {
     expect(response.body.upload.url).toContain("stub");
   });
 
-  it("generates a guide task from photos, recognizing objects and building a card", async () => {
+  it("generates multiple guide task cards from photos, recognizing objects", async () => {
     stubStorage.stored.set(
       "scene-guide/U-SG-COLLECTOR/PHOTO-1/kitchen.jpg",
       Buffer.from("fake-image-bytes"),
@@ -224,27 +225,51 @@ describe("scene guide API", () => {
       objects: [
         { name: "冰箱", category: "appliance", confidence: 0.95 },
         { name: "灶台", category: "appliance", confidence: 0.9 },
-        { name: "抹布", category: "object", confidence: 0.8 },
+        { name: "罐头", category: "object", confidence: 0.85 },
+        { name: "锅铲", category: "object", confidence: 0.8 },
       ],
       scene_summary: "画面是一间家庭厨房。",
       model: "qwen-vl-max",
     });
-    stubProvider.generateTaskCard.mockResolvedValue({
-      target_objects: [{ name: "灶台", action: "烧水" }],
-      steps: ["进入厨房", "打开燃气", "烧水", "关火"],
-      end_condition: "完成烧水并关火",
-      success_criteria: ["全程第一人称", "灶台清晰可见"],
-      fail_criteria: ["画面遮挡", "镜头晃动"],
+    stubProvider.generateTaskCards.mockResolvedValue({
+      tasks: [
+        {
+          title: "把罐头放到锅里",
+          target_objects: [{ name: "灶台", action: "操作" }],
+          steps: ["取物", "开罐", "倒料", "归位"],
+          end_condition: "倒料归位",
+          success_criteria: ["第一人称", "清晰可见"],
+          fail_criteria: ["遮挡", "中断"],
+        },
+        {
+          title: "用锅铲炒菜",
+          target_objects: [{ name: "灶台", action: "操作" }],
+          steps: ["扶锅", "翻炒", "归位"],
+          end_condition: "翻炒归位",
+          success_criteria: ["第一人称"],
+          fail_criteria: ["遮挡"],
+        },
+      ],
+      scene_summary: "适合拆分多个任务。",
       model: "qwen3.7-plus",
     });
 
     const cookie = await login("guide-collector");
+    // 先建一个数采个人场景库
+    const lib = await request(app.getHttpServer())
+      .post("/api/v1/scene-guide/libraries")
+      .set("Origin", WEB_ORIGIN)
+      .set("Cookie", cookie)
+      .send({ name: "我的家厨房", categoryKey: "family", subSceneIds: ["SC-001"] })
+      .expect(201);
+    const libraryId = lib.body.library.id as string;
+
     const response = await request(app.getHttpServer())
       .post("/api/v1/scene-guide")
       .set("Origin", WEB_ORIGIN)
       .set("Cookie", cookie)
       .send({
-        sceneTypeTaskId: "TASK-SG-01",
+        sceneLibraryId: libraryId,
         photoRefs: [
           {
             objectKey: "scene-guide/U-SG-COLLECTOR/PHOTO-1/kitchen.jpg",
@@ -253,27 +278,59 @@ describe("scene guide API", () => {
         ],
       })
       .expect(201);
-    const task = response.body.task as {
+    const tasks = response.body.tasks as Array<{
       status: string;
+      title: string | null;
       envObjects: unknown[];
       taskCard: { steps: string[] } | null;
-      taskType?: string;
-    };
-    expect(task.status).toBe("ai_generated");
-    expect(task.envObjects.length).toBe(3);
-    expect(task.taskCard?.steps.length).toBe(4);
+    }>;
+    expect(tasks).toHaveLength(2);
+    expect(tasks[0]!.status).toBe("ai_generated");
+    expect(tasks[0]!.title).toBe("把罐头放到锅里");
+    expect(tasks[0]!.envObjects.length).toBe(4);
     expect(stubProvider.recognizeEnvObjects).toHaveBeenCalledTimes(1);
-    expect(stubProvider.generateTaskCard).toHaveBeenCalledTimes(1);
+    expect(stubProvider.generateTaskCards).toHaveBeenCalledTimes(1);
   });
 
-  it("lets the collector edit and submit the card for review", async () => {
+  it("lets the collector edit and submit a card for review", async () => {
     const cookie = await login("guide-collector");
+    const lib = await request(app.getHttpServer())
+      .post("/api/v1/scene-guide/libraries")
+      .set("Origin", WEB_ORIGIN)
+      .set("Cookie", cookie)
+      .send({ name: "我的家厨房", categoryKey: "family", subSceneIds: ["SC-001"] })
+      .expect(201);
+    const libraryId = lib.body.library.id as string;
+    stubStorage.stored.set(
+      "scene-guide/U-SG-COLLECTOR/PHOTO-1/kitchen.jpg",
+      Buffer.from("fake-image-bytes"),
+    );
+    stubProvider.recognizeEnvObjects.mockResolvedValue({
+      objects: [{ name: "灶台", category: "appliance", confidence: 0.9 }],
+      scene_summary: "家庭厨房。",
+      model: "qwen-vl-max",
+    });
+    stubProvider.generateTaskCards.mockResolvedValue({
+      tasks: [
+        {
+          title: "把罐头放到锅里",
+          target_objects: [{ name: "罐头", action: "倒料" }],
+          steps: ["取物", "开罐", "倒料"],
+          end_condition: "倒料归位",
+          success_criteria: ["第一人称"],
+          fail_criteria: ["遮挡"],
+        },
+      ],
+      scene_summary: "家庭厨房。",
+      model: "qwen3.7-plus",
+    });
+
     const generate = await request(app.getHttpServer())
       .post("/api/v1/scene-guide")
       .set("Origin", WEB_ORIGIN)
       .set("Cookie", cookie)
       .send({
-        sceneTypeTaskId: "TASK-SG-01",
+        sceneLibraryId: libraryId,
         photoRefs: [
           {
             objectKey: "scene-guide/U-SG-COLLECTOR/PHOTO-1/kitchen.jpg",
@@ -282,7 +339,7 @@ describe("scene guide API", () => {
         ],
       })
       .expect(201);
-    const id = generate.body.task.id as string;
+    const id = (generate.body.tasks as Array<{ id: string }>)[0]!.id;
 
     const submitted = await request(app.getHttpServer())
       .post(`/api/v1/scene-guide/${id}/submit-edited`)
@@ -291,17 +348,17 @@ describe("scene guide API", () => {
       .send({
         sceneName: "家庭厨房",
         card: {
-          target_objects: [{ name: "灶台", action: "烧水" }],
-          steps: ["进入厨房", "打开燃气", "烧水", "关火"],
-          end_condition: "完成烧水并关火",
-          success_criteria: ["全程第一人称"],
-          fail_criteria: ["画面遮挡"],
+          title: "把罐头放到锅里",
+          target_objects: [{ name: "罐头", action: "倒料" }],
+          steps: ["取物", "开罐", "倒料"],
+          end_condition: "倒料归位",
+          success_criteria: ["第一人称"],
+          fail_criteria: ["遮挡"],
         },
       })
       .expect(201);
     expect(submitted.body.task.status).toBe("in_review");
 
-    // 管理员审核通过
     const adminCookie = await login("guide-admin");
     const approved = await request(app.getHttpServer())
       .post(`/api/v1/scene-guide/${id}/review`)
@@ -314,12 +371,42 @@ describe("scene guide API", () => {
 
   it("blocks a collector from reviewing", async () => {
     const cookie = await login("guide-collector");
+    const lib = await request(app.getHttpServer())
+      .post("/api/v1/scene-guide/libraries")
+      .set("Origin", WEB_ORIGIN)
+      .set("Cookie", cookie)
+      .send({ name: "我的家厨房", categoryKey: "family", subSceneIds: ["SC-001"] })
+      .expect(201);
+    const libraryId = lib.body.library.id as string;
+    stubStorage.stored.set(
+      "scene-guide/U-SG-COLLECTOR/PHOTO-1/kitchen.jpg",
+      Buffer.from("fake-image-bytes"),
+    );
+    stubProvider.recognizeEnvObjects.mockResolvedValue({
+      objects: [{ name: "灶台", category: "appliance", confidence: 0.9 }],
+      scene_summary: "家庭厨房。",
+      model: "qwen-vl-max",
+    });
+    stubProvider.generateTaskCards.mockResolvedValue({
+      tasks: [
+        {
+          title: "把罐头放到锅里",
+          target_objects: [{ name: "灶台", action: "操作" }],
+          steps: ["取物"],
+          end_condition: "归位",
+          success_criteria: ["第一人称"],
+          fail_criteria: ["遮挡"],
+        },
+      ],
+      scene_summary: "家庭厨房。",
+      model: "qwen3.7-plus",
+    });
     const generate = await request(app.getHttpServer())
       .post("/api/v1/scene-guide")
       .set("Origin", WEB_ORIGIN)
       .set("Cookie", cookie)
       .send({
-        sceneTypeTaskId: "TASK-SG-01",
+        sceneLibraryId: libraryId,
         photoRefs: [
           {
             objectKey: "scene-guide/U-SG-COLLECTOR/PHOTO-1/kitchen.jpg",
@@ -328,7 +415,7 @@ describe("scene guide API", () => {
         ],
       })
       .expect(201);
-    const id = generate.body.task.id as string;
+    const id = (generate.body.tasks as Array<{ id: string }>)[0]!.id;
     await request(app.getHttpServer())
       .post(`/api/v1/scene-guide/${id}/review`)
       .set("Origin", WEB_ORIGIN)

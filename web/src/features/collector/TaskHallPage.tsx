@@ -73,8 +73,8 @@ export function TaskHallPage({ navigate }: { navigate(path: string): void }) {
       notify("error", "该任务当前已暂停，暂不可提交");
       return;
     }
-    sessionStorage.setItem(SELECTED_TASK_STORAGE_KEY, task.id);
-    navigate("/collector/photo-guide");
+    // 进入「我的场景库」，在场景库下拍照生成私有任务卡
+    navigate("/collector/scenes");
   }
 
   const filteredTasks = useMemo(() => {
@@ -319,7 +319,7 @@ export function TaskHallPage({ navigate }: { navigate(path: string): void }) {
                       disabled={task.status !== "published"}
                       onClick={() => goPhotoGuide(task)}
                     >
-                      <Camera size={14} />拍照指导
+                      <Camera size={14} />我的场景库
                     </button>
                     <button
                       type="button"

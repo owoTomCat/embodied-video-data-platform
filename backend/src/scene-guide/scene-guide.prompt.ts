@@ -4,7 +4,7 @@ import { dirname, join, resolve } from "node:path";
 
 import {
   envelopeEnvRecognitionSchema,
-  envelopeTaskCardSchema,
+  envelopeTaskCardsSchema,
   SCENE_GUIDE_SCHEMA_VERSION,
 } from "./scene-guide.schema.js";
 
@@ -102,7 +102,7 @@ export async function loadSceneGuidePrompt(
   if (!isRecord(cardExampleValue)) {
     throw new Error("场景指导任务卡示例必须是 JSON 对象");
   }
-  envelopeTaskCardSchema.parse(cardExampleValue);
+  envelopeTaskCardsSchema.parse(cardExampleValue);
 
   return {
     promptVersion,

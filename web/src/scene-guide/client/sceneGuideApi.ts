@@ -1,5 +1,8 @@
 import type {
+  CollectorLibrary,
+  CreateCollectorLibraryInput,
   GenerateGuideTaskInput,
+  GuideSceneClassification,
   GuideTask,
   PhotoUploadResult,
   ReviewGuideTaskInput,
@@ -53,7 +56,53 @@ async function requestJson<T>(
   return payload as T;
 }
 
-/** 取得环境照片的上传地址，然后直接把文件 PUT 到 url。 */
+// ---------- 数采个人场景库 ----------
+
+export async function listMyLibraries(): Promise<CollectorLibrary[]> {
+  const result = await requestJson<{ libraries: CollectorLibrary[] }>(
+    "scene-guide/libraries/mine",
+  );
+  return result.libraries;
+}
+
+export async function createCollectorLibrary(
+  input: CreateCollectorLibraryInput,
+): Promise<CollectorLibrary> {
+  const result = await requestJson<{ library: CollectorLibrary }>(
+    "scene-guide/libraries",
+    { method: "POST", body: JSON.stringify(input) },
+  );
+  return result.library;
+}
+
+export async function getCollectorLibrary(
+  id: string,
+): Promise<CollectorLibrary & { tasks: GuideTask[] }> {
+  const result = await requestJson<{
+    library: CollectorLibrary & { tasks: GuideTask[] };
+  }>(`scene-guide/libraries/${encodeURIComponent(id)}`);
+  return result.library;
+}
+
+export async function deleteCollectorLibrary(id: string): Promise<void> {
+  await requestJson<{ deleted: boolean }>(
+    `scene-guide/libraries/${encodeURIComponent(id)}`,
+    { method: "DELETE" },
+  );
+}
+
+/** 场景分类表（二级场景），用于建库选择 */
+export async function listSceneClassification(): Promise<
+  GuideSceneClassification[]
+> {
+  const result = await requestJson<{
+    classification: GuideSceneClassification[];
+  }>("scene-system/classification");
+  return result.classification;
+}
+
+// ---------- 任务卡 ----------
+
 export async function presignPhoto(input: {
   name: string;
   contentType: string;
@@ -66,14 +115,23 @@ export async function presignPhoto(input: {
   return result.upload;
 }
 
-export async function generateGuideTask(
+export async function generateGuideTasks(
   input: GenerateGuideTaskInput,
-): Promise<GuideTask> {
-  const result = await requestJson<{ task: GuideTask }>("scene-guide", {
+): Promise<GuideTask[]> {
+  const result = await requestJson<{ tasks: GuideTask[] }>("scene-guide", {
     method: "POST",
     body: JSON.stringify(input),
   });
-  return result.task;
+  return result.tasks;
+}
+
+export async function listLibraryTasks(
+  libraryId: string,
+): Promise<GuideTask[]> {
+  const result = await requestJson<{ tasks: GuideTask[] }>(
+    `scene-guide/library/${encodeURIComponent(libraryId)}/tasks`,
+  );
+  return result.tasks;
 }
 
 export async function submitEditedCard(
@@ -118,21 +176,17 @@ export async function backfillSubmission(
   return result.task;
 }
 
-export async function listMyGuideTasks(): Promise<GuideTask[]> {
-  const result = await requestJson<{ tasks: GuideTask[] }>("scene-guide/mine");
-  return result.tasks;
-}
-
-export async function listAllGuideTasks(): Promise<GuideTask[]> {
-  const result = await requestJson<{ tasks: GuideTask[] }>("scene-guide");
-  return result.tasks;
-}
-
 export async function getGuideTask(id: string): Promise<GuideTask> {
   const result = await requestJson<{ task: GuideTask }>(
     `scene-guide/${encodeURIComponent(id)}`,
   );
   return result.task;
+}
+
+/** 管理员：全部指导任务卡（审核用）。 */
+export async function listAllGuideTasks(): Promise<GuideTask[]> {
+  const result = await requestJson<{ tasks: GuideTask[] }>("scene-guide");
+  return result.tasks;
 }
 
 export function guideTaskErrorMessage(error: unknown): string {
