@@ -63,6 +63,19 @@ a { color: inherit; text-decoration: none; }
 .button-secondary { color: #d7e3ff; background: rgb(255 255 255 / 7%); border-color: rgb(255 255 255 / 14%); }
 .button-ghost { color: #e3eaff; background: transparent; border-color: rgb(255 255 255 / 19%); }
 .button-ghost:hover, .button-secondary:hover { background: rgb(255 255 255 / 11%); }
+/* 浅色表面的 secondary / ghost 按钮：深色主题默认样式在这里看不清，需覆盖为浅色变体 */
+.content-card .button-secondary {
+  color: #3a4a63;
+  background: #fff;
+  border-color: var(--line);
+}
+.content-card .button-secondary:hover { background: #f2f5fb; }
+.content-card .button-ghost {
+  color: #5a6478;
+  background: transparent;
+  border-color: var(--line);
+}
+.content-card .button-ghost:hover { background: #f2f5fb; }
 .icon-button { display: grid; width: 32px; height: 32px; padding: 0; place-items: center; color: #5a6478; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); }
 
 .brand-mark { display: inline-flex; align-items: center; gap: 11px; min-width: max-content; }
@@ -1519,7 +1532,6 @@ button:disabled { cursor: not-allowed; opacity: .56; }
 .guide-photo-add span { font-size: 12px; font-weight: 700; }
 .guide-photo-add em { color: #9aabbd; font-size: 10px; font-style: normal; }
 .guide-photo-actions,
-.guide-card-actions,
 .guide-review-actions {
   display: flex;
   margin-top: 4px;
@@ -1555,13 +1567,37 @@ button:disabled { cursor: not-allowed; opacity: .56; }
 .guide-card-preview {
   display: grid;
   margin-top: 6px;
-  gap: 16px;
+  gap: 12px;
+}
+/* 任务卡预览被拆成多个「面板」区块，每个有边框/底，避免平铺杂乱 */
+.guide-card-panel {
+  display: grid;
+  padding: 14px 16px;
+  gap: 10px;
+  background: #fbfcff;
+  border: 1px solid #e6ebf3;
+  border-radius: 12px;
+}
+.guide-panel-title {
+  display: flex;
+  margin: 0;
+  align-items: center;
+  gap: 7px;
+  color: #45546c;
+  font-size: 12px;
+  font-weight: 750;
+}
+.guide-panel-title .guide-panel-count {
+  margin-left: auto;
+  color: #95a1b3;
+  font-size: 10px;
+  font-weight: 600;
 }
 .guide-steps-list {
   display: grid;
   margin: 0;
   padding: 0;
-  gap: 8px;
+  gap: 9px;
   list-style: none;
 }
 .guide-steps-list li {
@@ -1569,38 +1605,104 @@ button:disabled { cursor: not-allowed; opacity: .56; }
   align-items: flex-start;
   gap: 10px;
   color: #2f3d54;
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: 13px;
+  line-height: 1.55;
 }
 .guide-steps-list li > span {
   display: inline-flex;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
   color: #fff;
   background: #5580e6;
   border-radius: 50%;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
+}
+.guide-target-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.guide-target-chip {
+  display: inline-flex;
+  padding: 7px 12px;
+  gap: 6px;
+  align-items: center;
+  color: #2f3d54;
+  background: #eef3fb;
+  border: 1px solid #d9e4f4;
+  border-radius: 10px;
+}
+.guide-target-chip strong {
+  font-size: 13px;
+}
+.guide-target-chip small {
+  color: #6b7a92;
+  font-size: 11px;
+  font-weight: 500;
 }
 .guide-end-condition {
   margin: 0;
-  padding: 10px 12px;
+  padding: 12px 14px;
   color: #2f3d54;
-  background: #f7f9fd;
-  border: 1px solid #e8edf5;
+  background: #f0f6f1;
+  border: 1px solid #dcebe1;
   border-radius: 10px;
-  font-size: 12px;
+  font-size: 13px;
+  line-height: 1.5;
 }
 .guide-card-criteria {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
   gap: 12px;
 }
-.guide-crite-title-success { color: #4f9b75; }
+.guide-criterion-panel {
+  display: grid;
+  padding: 14px 16px;
+  gap: 9px;
+  border-radius: 12px;
+  border: 1px solid #e6ebf3;
+}
+.guide-criterion-panel.guide-success {
+  background: #f4faf6;
+  border-color: #dcebe1;
+}
+.guide-criterion-panel.guide-fail {
+  background: #fdf6f1;
+  border-color: #f0e0d3;
+}
+.guide-crite-title-success { color: #3d8a63; }
 .guide-crite-title-fail { color: #c07a2c; }
+.guide-crite-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  gap: 7px;
+  list-style: none;
+}
+.guide-crite-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  color: #3a4a63;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.guide-crite-list li svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+.guide-card-actions {
+  display: flex;
+  margin-top: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
 .guide-card-edit {
   display: grid;
   margin-top: 6px;

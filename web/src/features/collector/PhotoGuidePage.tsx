@@ -381,40 +381,55 @@ export function PhotoGuidePage({ navigate }: { navigate(path: string): void }) {
 
           {!editing && taskCard ? (
             <div className="guide-card-preview">
-              <div className="guide-card-targets">
-                <p className="guide-subtitle"><Camera size={14} />目标物体</p>
-                <ul className="check-list compact">
+              <div className="guide-card-panel">
+                <p className="guide-panel-title">
+                  <Camera size={15} />目标物体
+                  <em className="guide-panel-count">{taskCard.target_objects.length} 个</em>
+                </p>
+                <div className="guide-target-list">
                   {taskCard.target_objects.map((object, index) => (
-                    <li key={`${object.name}-${index}`}>
+                    <span className="guide-target-chip" key={`${object.name}-${index}`}>
                       <ShieldCheck size={14} />
-                      <span><strong>{object.name}</strong>{object.action ? <small>{object.action}</small> : null}</span>
-                    </li>
+                      <strong>{object.name}</strong>
+                      {object.action ? <small>{object.action}</small> : null}
+                    </span>
                   ))}
-                </ul>
+                </div>
               </div>
-              <div className="guide-card-steps">
-                <p className="guide-subtitle"><RefreshCw size={14} />操作步骤</p>
+              <div className="guide-card-panel">
+                <p className="guide-panel-title">
+                  <RefreshCw size={15} />操作步骤
+                  <em className="guide-panel-count">{taskCard.steps.length} 步</em>
+                </p>
                 <ol className="guide-steps-list">
                   {taskCard.steps.map((stepText, index) => (
                     <li key={index}><span>{index + 1}</span>{stepText}</li>
                   ))}
                 </ol>
               </div>
-              <div className="guide-card-end">
-                <p className="guide-subtitle"><CheckCircle2 size={14} />结束条件</p>
+              <div className="guide-card-panel">
+                <p className="guide-panel-title"><CheckCircle2 size={15} />结束条件</p>
                 <p className="guide-end-condition">{taskCard.end_condition}</p>
               </div>
               <div className="guide-card-criteria">
-                <div>
-                  <p className="guide-subtitle guide-crite-title-success">成功判定</p>
-                  <ul className="check-list compact">
-                    {taskCard.success_criteria.map((item, index) => <li key={index}><ShieldCheck size={14} /><span>{item}</span></li>)}
+                <div className="guide-criterion-panel guide-success">
+                  <p className="guide-panel-title guide-crite-title-success">
+                    <CheckCircle2 size={15} />成功判定
+                  </p>
+                  <ul className="guide-crite-list">
+                    {taskCard.success_criteria.map((item, index) => (
+                      <li key={index}><CheckCircle2 size={14} /><span>{item}</span></li>
+                    ))}
                   </ul>
                 </div>
-                <div>
-                  <p className="guide-subtitle guide-crite-title-fail">失败判定</p>
-                  <ul className="check-list compact">
-                    {taskCard.fail_criteria.map((item, index) => <li key={index}><X size={14} /><span>{item}</span></li>)}
+                <div className="guide-criterion-panel guide-fail">
+                  <p className="guide-panel-title guide-crite-title-fail">
+                    <X size={15} />失败判定
+                  </p>
+                  <ul className="guide-crite-list">
+                    {taskCard.fail_criteria.map((item, index) => (
+                      <li key={index}><X size={14} /><span>{item}</span></li>
+                    ))}
                   </ul>
                 </div>
               </div>
@@ -505,15 +520,18 @@ export function PhotoGuidePage({ navigate }: { navigate(path: string): void }) {
           </div>
           {!editing && taskCard && (
             <div className="guide-card-preview">
-              <div className="guide-card-steps">
-                <p className="guide-subtitle"><RefreshCw size={14} />操作步骤</p>
+              <div className="guide-card-panel">
+                <p className="guide-panel-title"><RefreshCw size={15} />操作步骤</p>
                 <ol className="guide-steps-list">
                   {taskCard.steps.map((stepText, index) => (
                     <li key={index}><span>{index + 1}</span>{stepText}</li>
                   ))}
                 </ol>
               </div>
-              <p className="guide-end-condition">结束条件：{taskCard.end_condition}</p>
+              <div className="guide-card-panel">
+                <p className="guide-panel-title"><CheckCircle2 size={15} />结束条件</p>
+                <p className="guide-end-condition">{taskCard.end_condition}</p>
+              </div>
             </div>
           )}
           <div className="guide-card-actions">
