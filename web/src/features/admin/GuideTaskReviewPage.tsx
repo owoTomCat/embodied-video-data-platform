@@ -169,25 +169,31 @@ export function GuideTaskReviewPage() {
 
               {task.taskCard && (
                 <div className="guide-card-preview">
-                  <div className="guide-card-steps">
-                    <p className="guide-subtitle"><RefreshCw size={14} />操作步骤</p>
+                  <div className="guide-card-panel">
+                    <p className="guide-panel-title">
+                      <RefreshCw size={15} />操作步骤
+                      <em className="guide-panel-count">{task.taskCard.steps.length} 步</em>
+                    </p>
                     <ol className="guide-steps-list">
                       {task.taskCard.steps.map((stepText, index) => (
                         <li key={index}><span>{index + 1}</span>{stepText}</li>
                       ))}
                     </ol>
                   </div>
-                  <p className="guide-end-condition">结束条件：{task.taskCard.end_condition}</p>
+                  <div className="guide-card-panel">
+                    <p className="guide-panel-title"><CheckCircle2 size={15} />结束条件</p>
+                    <p className="guide-end-condition">{task.taskCard.end_condition}</p>
+                  </div>
                   <div className="guide-card-criteria">
-                    <div>
-                      <p className="guide-subtitle guide-crite-title-success">成功判定</p>
-                      <ul className="check-list compact">
-                        {task.taskCard.success_criteria.map((item, index) => <li key={index}><ShieldCheck size={14} /><span>{item}</span></li>)}
+                    <div className="guide-criterion-panel guide-success">
+                      <p className="guide-panel-title guide-crite-title-success"><ShieldCheck size={15} />成功判定</p>
+                      <ul className="guide-crite-list">
+                        {task.taskCard.success_criteria.map((item, index) => <li key={index}><CheckCircle2 size={14} /><span>{item}</span></li>)}
                       </ul>
                     </div>
-                    <div>
-                      <p className="guide-subtitle guide-crite-title-fail">失败判定</p>
-                      <ul className="check-list compact">
+                    <div className="guide-criterion-panel guide-fail">
+                      <p className="guide-panel-title guide-crite-title-fail"><X size={15} />失败判定</p>
+                      <ul className="guide-crite-list">
                         {task.taskCard.fail_criteria.map((item, index) => <li key={index}><X size={14} /><span>{item}</span></li>)}
                       </ul>
                     </div>

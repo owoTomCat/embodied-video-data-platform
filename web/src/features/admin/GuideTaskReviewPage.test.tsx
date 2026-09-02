@@ -62,7 +62,7 @@ describe("GuideTaskReviewPage", () => {
     expect(await screen.findByText("指导任务卡审核")).toBeInTheDocument();
     expect(screen.getAllByText("灶台").length).toBeGreaterThan(0);
     expect(screen.getAllByText("待审核").length).toBeGreaterThan(0);
-    expect(screen.getByText("结束条件：完成烧水并关火")).toBeInTheDocument();
+    expect(screen.getByText("完成烧水并关火")).toBeInTheDocument();
   });
 
   it("approves the guide task", async () => {
