@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { randomUUID } from "node:crypto";
-import { Repository } from "typeorm";
+import { In, Repository } from "typeorm";
 
 import type { PublicUser } from "../auth/auth.types.js";
 import { AuditService } from "../audit/audit.service.js";
@@ -12,6 +12,9 @@ import {
   type GuideTaskStatus,
   type GuidePhotoRef,
 } from "../database/entities/guide-task.entity.js";
+import { SceneClassificationEntity } from "../database/entities/scene-classification.entity.js";
+import { SceneLevel1Entity } from "../database/entities/scene-level1.entity.js";
+import { SceneLibraryEntity } from "../database/entities/scene-library.entity.js";
 import {
   OBJECT_STORAGE,
   type ObjectStoragePort,
@@ -27,6 +30,7 @@ import {
   envelopeTaskCardSchema,
   type EnvRecognitionRaw,
   type TaskCardRaw,
+  type TaskCardsRaw,
 } from "./scene-guide.schema.js";
 
 const PHOTO_EXPIRES_SECONDS = 600;
@@ -42,16 +46,6 @@ export type PhotoUploadResult = {
   expiresAt: number;
 };
 
-function toTaskCard(raw: TaskCardRaw): GuideTaskCard {
-  return {
-    target_objects: raw.target_objects,
-    steps: raw.steps,
-    end_condition: raw.end_condition,
-    success_criteria: raw.success_criteria,
-    fail_criteria: raw.fail_criteria,
-  };
-}
-
 function envObjectsFromRaw(
   raw: EnvRecognitionRaw,
 ): Array<{ name: string; category?: string; confidence?: number }> {
@@ -64,8 +58,11 @@ function envObjectsFromRaw(
 
 export type PublicGuideTask = {
   id: string;
-  sceneTypeTaskId: string;
+  sceneTypeTaskId: string | null;
+  sceneLibraryId: string | null;
   ownerAccountId: string;
+  title: string | null;
+  taskIndex: number;
   photoRefs: GuidePhotoRef[];
   envObjects: Array<{ name: string; category?: string; confidence?: number }>;
   taskCard: GuideTaskCard | null;
@@ -84,7 +81,10 @@ export function publicGuideTask(task: GuideTaskEntity): PublicGuideTask {
   return {
     id: task.id,
     sceneTypeTaskId: task.sceneTypeTaskId,
+    sceneLibraryId: task.sceneLibraryId,
     ownerAccountId: task.ownerAccountId,
+    title: task.title,
+    taskIndex: task.taskIndex,
     photoRefs: task.photoRefs,
     envObjects: task.envObjects,
     taskCard: task.taskCard,
@@ -100,6 +100,21 @@ export function publicGuideTask(task: GuideTaskEntity): PublicGuideTask {
   };
 }
 
+export type PublicLibrary = {
+  id: string;
+  name: string;
+  categoryKey: string;
+  categoryName: string;
+  subSceneIds: string[];
+  subScenes: Array<{ id: string; level2Name: string; level1Code: string }>;
+  description: string;
+  enabled: boolean;
+  ownerAccountId: string | null;
+  taskCount: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
 @Injectable()
 export class SceneGuideService {
   constructor(
@@ -107,12 +122,108 @@ export class SceneGuideService {
     private readonly tasks: Repository<GuideTaskEntity>,
     @InjectRepository(CollectionTaskEntity)
     private readonly collectionTasks: Repository<CollectionTaskEntity>,
+    @InjectRepository(SceneLibraryEntity)
+    private readonly libraries: Repository<SceneLibraryEntity>,
+    @InjectRepository(SceneClassificationEntity)
+    private readonly classification: Repository<SceneClassificationEntity>,
+    @InjectRepository(SceneLevel1Entity)
+    private readonly level1: Repository<SceneLevel1Entity>,
     @Inject(OBJECT_STORAGE)
     private readonly storage: ObjectStoragePort,
     @Inject(SCENE_GUIDE_PROVIDER)
     private readonly provider: QwenSceneGuideProvider,
     private readonly audit: AuditService,
   ) {}
+
+  // ---------- 数采个人场景库 ----------
+
+  /** 数采：我的场景库列表（含任务卡数量） */
+  async listMyLibraries(actor: PublicUser): Promise<PublicLibrary[]> {
+    sceneGuidePolicy.requireCollector(actor);
+    const rows = await this.libraries.find({
+      where: { ownerAccountId: actor.id },
+      order: { createdAt: "DESC", id: "DESC" },
+    });
+    const [classifications, level1Rows] = await Promise.all([
+      this.classification.find(),
+      this.level1.find(),
+    ]);
+    const byId = new Map(classifications.map((item) => [item.id, item]));
+    const level1ByKey = new Map(level1Rows.map((item) => [item.categoryKey, item]));
+    const taskCounts = await this.taskCountByLibrary(actor.id);
+    return rows.map((row) =>
+      this.toLibraryView(row, byId, level1ByKey, taskCounts),
+    );
+  }
+
+  /** 数采：创建自己的场景库（从三层体系选一级大类 + 二级子场景） */
+  async createLibrary(
+    actor: PublicUser,
+    input: {
+      name: string;
+      categoryKey: string;
+      subSceneIds: string[];
+      description?: string;
+    },
+  ): Promise<PublicLibrary> {
+    sceneGuidePolicy.requireCollector(actor);
+    if (!input.name?.trim()) {
+      throw new SceneGuideFailure("VALIDATION", "请填写场景库名称", 400);
+    }
+    const level1 = await this.getLevel1ByCategoryKey(input.categoryKey);
+    if (!level1) {
+      throw new SceneGuideFailure("VALIDATION", "场景类别不存在", 400);
+    }
+    const subScenes = await this.validateSubScenes(input.subSceneIds, level1.code);
+    const row = await this.libraries.save(
+      this.libraries.create({
+        id: `SL-${randomUUID().slice(0, 8).toUpperCase()}`,
+        name: input.name.trim(),
+        categoryKey: level1.categoryKey,
+        subSceneIds: subScenes.map((item) => item.id),
+        description: input.description?.trim() ?? "",
+        enabled: true,
+        createdByAccountId: actor.id,
+        createdByName: actor.displayName,
+        ownerAccountId: actor.id,
+      }),
+    );
+    await this.audit.record(
+      this.libraries.manager,
+      actor,
+      "collector_library_create",
+      { id: row.id, name: row.name },
+      `数采新建场景库「${row.name}」（类别：${level1.name}）`,
+      null,
+      { id: row.id, name: row.name, categoryKey: row.categoryKey, subSceneIds: row.subSceneIds },
+    );
+    return (await this.listMyLibraries(actor)).find((item) => item.id === row.id)!;
+  }
+
+  /** 数采：删除自己的场景库（其下任务卡级联删除） */
+  async deleteLibrary(actor: PublicUser, id: string): Promise<{ deleted: boolean }> {
+    sceneGuidePolicy.requireCollector(actor);
+    const row = await this.libraries.findOneBy({ id });
+    if (!row) {
+      throw new SceneGuideFailure("NOT_FOUND", "场景库不存在", 404);
+    }
+    if (row.ownerAccountId !== actor.id && actor.role !== "admin") {
+      throw new SceneGuideFailure("FORBIDDEN", "只能删除自己的场景库", 403);
+    }
+    await this.libraries.delete({ id });
+    await this.audit.record(
+      this.libraries.manager,
+      actor,
+      "collector_library_delete",
+      { id: row.id, name: row.name },
+      `数采删除场景库「${row.name}」`,
+      { id: row.id, name: row.name },
+      null,
+    );
+    return { deleted: true };
+  }
+
+  // ---------- 任务卡 ----------
 
   /** 预签名上传地址（数采上传环境照片）。 */
   async presignPhoto(
@@ -150,11 +261,11 @@ export class SceneGuideService {
     };
   }
 
-  /** 拍照指导：从 MinIO 读取照片 → Qwen-VL 识别环境物体 → LLM 生成任务卡 → 落库（ai_generated）。 */
+  /** 拍照指导：从 MinIO 读取照片 → Qwen-VL 识别环境物体 → LLM 生成 3-5 张任务卡 → 落库（ai_generated）。 */
   async generate(
     actor: PublicUser,
-    input: { sceneTypeTaskId: string; photoRefs: GuidePhotoRef[] },
-  ): Promise<PublicGuideTask> {
+    input: { sceneLibraryId: string; photoRefs: GuidePhotoRef[] },
+  ): Promise<PublicGuideTask[]> {
     sceneGuidePolicy.requireCollector(actor);
     if (input.photoRefs.length < 1 || input.photoRefs.length > 5) {
       throw new SceneGuideFailure(
@@ -163,15 +274,12 @@ export class SceneGuideService {
         400,
       );
     }
-    const task = await this.collectionTasks.findOneBy({
-      id: input.sceneTypeTaskId,
-    });
-    if (!task || task.taskType !== "scene_type" || task.status !== "published") {
-      throw new SceneGuideFailure(
-        "NOT_FOUND",
-        "场景型任务不存在或未发布",
-        404,
-      );
+    const library = await this.libraries.findOneBy({ id: input.sceneLibraryId });
+    if (!library) {
+      throw new SceneGuideFailure("NOT_FOUND", "场景库不存在", 404);
+    }
+    if (library.ownerAccountId !== actor.id && actor.role !== "admin") {
+      throw new SceneGuideFailure("FORBIDDEN", "只能在自己的场景库下生成任务卡", 403);
     }
     if (!this.storage.getObjectBytes) {
       throw new SceneGuideFailure(
@@ -181,7 +289,6 @@ export class SceneGuideService {
       );
     }
 
-    // 读取照片字节并转 dataUrl
     const dataUrls: string[] = [];
     for (const photo of input.photoRefs) {
       const bytes = await this.storage.getObjectBytes({
@@ -192,20 +299,32 @@ export class SceneGuideService {
     }
 
     let recognition: EnvRecognitionRaw & { model: string };
-    let card: TaskCardRaw & { model: string };
+    let cards: TaskCardsRaw & { model: string };
     try {
       recognition = await this.provider.recognizeEnvObjects(dataUrls);
-      card = await this.provider.generateTaskCard({
-        sceneName: task.sceneName,
-        taskDescription: task.description,
-        requirements: (task.normalizedRequirements?.requirements ?? []).map(
-          (item) => item.content,
-        ),
+      if (recognition.objects.length === 0) {
+        throw new SceneGuideFailure(
+          "NO_OBJECTS",
+          "未能从照片中识别出可操作的物体，请拍摄更清晰的、包含环境物体的照片后重试",
+          400,
+        );
+      }
+      cards = await this.provider.generateTaskCards({
+        sceneName: library.name,
+        taskDescription: library.description,
+        requirements: [],
         envObjects: envObjectsFromRaw(recognition),
-        sceneSummary: recognition.scene_summary,
+        sceneSummary: recognition.scene_summary ?? cardsSceneSummaryFallback(recognition),
       });
+      if (cards.tasks.length === 0) {
+        throw new SceneGuideFailure(
+          "NO_TASKS",
+          "未能根据环境物体生成任务卡，请重新拍摄或稍后重试",
+          502,
+        );
+      }
     } catch (error) {
-      // 生成失败：只记录错误，不落库（数采可重试）
+      if (error instanceof SceneGuideFailure) throw error;
       throw new SceneGuideFailure(
         "GENERATION_FAILED",
         error instanceof Error ? error.message : "AI 生成任务卡失败",
@@ -213,38 +332,64 @@ export class SceneGuideService {
       );
     }
 
-    const row = this.tasks.create({
-      id: guidId("GT"),
-      sceneTypeTaskId: task.id,
-      ownerAccountId: actor.id,
-      photoRefs: input.photoRefs,
-      envObjects: envObjectsFromRaw(recognition),
-      taskCard: toTaskCard(card),
-      visionModel: recognition.model ?? card.model,
-      cardPromptVersion: "scene_guide_v1",
-      status: "ai_generated" as GuideTaskStatus,
-      editedAt: null,
-      submissionId: null,
-      lastErrorCode: null,
-      lastErrorMessage: null,
-    } as Partial<GuideTaskEntity>);
-    const saved = await this.tasks.save(row);
+    const rows: GuideTaskEntity[] = [];
+    for (const [index, card] of cards.tasks.entries()) {
+      const parsed = envelopeTaskCardSchema.parse(card);
+      const row = this.tasks.create({
+        id: guidId("GT"),
+        sceneLibraryId: library.id,
+        sceneTypeTaskId: null,
+        ownerAccountId: actor.id,
+        title: parsed.title,
+        taskIndex: index,
+        photoRefs: input.photoRefs,
+        envObjects: envObjectsFromRaw(recognition),
+        taskCard: parsed,
+        visionModel: recognition.model ?? cards.model,
+        cardPromptVersion: "scene_guide_v1",
+        status: "ai_generated" as GuideTaskStatus,
+        editedAt: null,
+        submissionId: null,
+        lastErrorCode: null,
+        lastErrorMessage: null,
+      } as Partial<GuideTaskEntity>);
+      rows.push(row);
+    }
+    const saved = await this.tasks.save(rows);
     await this.audit.record(
       this.tasks.manager,
       actor,
       "guide_task_generate",
-      { id: saved.id, name: task.title },
-      `数采生成场景指导任务卡「${task.title}」：识别 ${saved.envObjects.length} 个物体，生成 ${saved.taskCard?.steps.length ?? 0} 步`,
+      { id: library.id, name: library.name },
+      `数采在场景库「${library.name}」生成 ${saved.length} 张任务卡：识别 ${saved[0]?.envObjects.length ?? 0} 个物体`,
       null,
       {
-        id: saved.id,
-        sceneTypeTaskId: saved.sceneTypeTaskId,
-        status: saved.status,
-        envObjectCount: saved.envObjects.length,
-        stepCount: saved.taskCard?.steps.length ?? 0,
+        libraryId: library.id,
+        taskCardCount: saved.length,
+        envObjectCount: saved[0]?.envObjects.length ?? 0,
       },
     );
-    return publicGuideTask(saved);
+    return saved.map(publicGuideTask);
+  }
+
+  /** 数采：某场景库下的任务卡列表。 */
+  async listByLibrary(
+    actor: PublicUser,
+    libraryId: string,
+  ): Promise<PublicGuideTask[]> {
+    sceneGuidePolicy.requireCollector(actor);
+    const library = await this.libraries.findOneBy({ id: libraryId });
+    if (!library) {
+      throw new SceneGuideFailure("NOT_FOUND", "场景库不存在", 404);
+    }
+    if (library.ownerAccountId !== actor.id && actor.role !== "admin") {
+      throw new SceneGuideFailure("FORBIDDEN", "无权查看该场景库任务卡", 403);
+    }
+    const rows = await this.tasks.find({
+      where: { sceneLibraryId: libraryId, ownerAccountId: actor.id },
+      order: { taskIndex: "ASC", createdAt: "DESC", id: "DESC" },
+    });
+    return rows.map(publicGuideTask);
   }
 
   /** 数采编辑并提交任务卡（→ in_review）。 */
@@ -253,7 +398,7 @@ export class SceneGuideService {
     id: string,
     input: {
       sceneName: string;
-      card: TaskCardRaw;
+      card: Omit<TaskCardRaw, "title"> & { title?: string | null };
     },
   ): Promise<PublicGuideTask> {
     sceneGuidePolicy.requireCollector(actor);
@@ -271,8 +416,14 @@ export class SceneGuideService {
         409,
       );
     }
-    const card = envelopeTaskCardSchema.parse(input.card);
-    task.taskCard = toTaskCard(card);
+    const fallbackTitle = task.title ?? input.sceneName ?? "采集任务";
+    const cardInput = {
+      ...input.card,
+      title: input.card.title?.trim() || fallbackTitle,
+    };
+    const card = envelopeTaskCardSchema.parse(cardInput);
+    task.taskCard = card;
+    task.title = card.title;
     task.editedAt = new Date();
     task.status = "in_review";
     const saved = await this.tasks.save(task);
@@ -280,7 +431,7 @@ export class SceneGuideService {
       this.tasks.manager,
       actor,
       "guide_task_submit_edited",
-      { id: saved.id, name: input.sceneName || saved.id },
+      { id: saved.id, name: saved.title ?? input.sceneName ?? saved.id },
       `数采编辑指导任务卡并提交审核（${saved.taskCard?.steps.length ?? 0} 步）`,
       { status: "ai_generated" },
       { status: saved.status },
@@ -292,10 +443,7 @@ export class SceneGuideService {
   async review(
     actor: PublicUser,
     id: string,
-    input: {
-      decision: "approved" | "rejected";
-      comment?: string;
-    },
+    input: { decision: "approved" | "rejected"; comment?: string },
   ): Promise<PublicGuideTask> {
     sceneGuidePolicy.requireAdmin(actor);
     const task = await this.tasks.findOneBy({ id });
@@ -315,7 +463,7 @@ export class SceneGuideService {
       this.tasks.manager,
       actor,
       "guide_task_review",
-      { id: saved.id, name: saved.id },
+      { id: saved.id, name: saved.title ?? saved.id },
       `管理员${input.decision === "approved" ? "通过" : "驳回"}指导任务卡${input.comment ? `：${input.comment}` : ""}`,
       { status: task.status },
       { status: saved.status, decision: input.decision, comment: input.comment ?? null },
@@ -339,21 +487,8 @@ export class SceneGuideService {
     return publicGuideTask(saved);
   }
 
-  /** 数采查看自己的指导任务卡列表。 */
-  async listMine(actor: PublicUser): Promise<PublicGuideTask[]> {
-    sceneGuidePolicy.requireCollector(actor);
-    const rows = await this.tasks.find({
-      where: { ownerAccountId: actor.id },
-      order: { updatedAt: "DESC", id: "DESC" },
-    });
-    return rows.map(publicGuideTask);
-  }
-
   /** 数采 / 管理员查看单个指导任务卡。 */
-  async get(
-    actor: PublicUser,
-    id: string,
-  ): Promise<PublicGuideTask> {
+  async get(actor: PublicUser, id: string): Promise<PublicGuideTask> {
     sceneGuidePolicy.requireCollector(actor);
     const task = await this.tasks.findOneBy({ id });
     if (!task) {
@@ -373,4 +508,114 @@ export class SceneGuideService {
     });
     return rows.map(publicGuideTask);
   }
+
+  /** 管理员：全部场景库（统一管理）。 */
+  async listAllLibraries(actor: PublicUser): Promise<PublicLibrary[]> {
+    sceneGuidePolicy.requireAdmin(actor);
+    const rows = await this.libraries.find({
+      order: { createdAt: "DESC", id: "DESC" },
+    });
+    const [classifications, level1Rows] = await Promise.all([
+      this.classification.find(),
+      this.level1.find(),
+    ]);
+    const byId = new Map(classifications.map((item) => [item.id, item]));
+    const level1ByKey = new Map(level1Rows.map((item) => [item.categoryKey, item]));
+    const taskCounts = await this.taskCountByLibrary(null);
+    return rows.map((row) =>
+      this.toLibraryView(row, byId, level1ByKey, taskCounts),
+    );
+  }
+
+  /** 数采：查看单个场景库（含任务卡）。 */
+  async getLibraryDetail(
+    actor: PublicUser,
+    id: string,
+  ): Promise<PublicLibrary & { tasks: PublicGuideTask[] }> {
+    sceneGuidePolicy.requireCollector(actor);
+    const library = (await this.listMyLibraries(actor)).find((item) => item.id === id);
+    if (!library) {
+      throw new SceneGuideFailure("NOT_FOUND", "场景库不存在", 404);
+    }
+    const tasks = await this.listByLibrary(actor, id);
+    return { ...library, tasks };
+  }
+
+  // ---------- helpers ----------
+
+  private async taskCountByLibrary(callerOwner: string | null) {
+    const rows = await this.tasks
+      .createQueryBuilder("task")
+      .select("task.sceneLibraryId", "libraryId")
+      .addSelect("COUNT(*)", "cnt")
+      .where(
+        callerOwner === null
+          ? "task.sceneLibraryId IS NOT NULL"
+          : "task.sceneLibraryId IS NOT NULL AND task.ownerAccountId = :owner",
+      )
+      .setParameters(callerOwner === null ? {} : { owner: callerOwner })
+      .groupBy("task.sceneLibraryId")
+      .getRawMany<{ libraryId: string; cnt: string }>();
+    return new Map(rows.map((row) => [row.libraryId, Number(row.cnt)]));
+  }
+
+  private toLibraryView(
+    row: SceneLibraryEntity,
+    classificationById: Map<string, SceneClassificationEntity>,
+    level1ByCategoryKey: Map<string, SceneLevel1Entity>,
+    taskCounts: Map<string, number>,
+  ): PublicLibrary {
+    const level1 = level1ByCategoryKey.get(row.categoryKey);
+    return {
+      id: row.id,
+      name: row.name,
+      categoryKey: row.categoryKey,
+      categoryName: level1?.name ?? row.categoryKey,
+      subSceneIds: row.subSceneIds,
+      subScenes: row.subSceneIds
+        .map((id) => classificationById.get(id))
+        .filter((item): item is SceneClassificationEntity => Boolean(item))
+        .map((item) => ({
+          id: item.id,
+          level2Name: item.level2Name,
+          level1Code: item.level1Code,
+        })),
+      description: row.description,
+      enabled: row.enabled,
+      ownerAccountId: row.ownerAccountId,
+      taskCount: taskCounts.get(row.id) ?? 0,
+      createdAt: row.createdAt.getTime(),
+      updatedAt: row.updatedAt.getTime(),
+    };
+  }
+
+  private async getLevel1ByCategoryKey(key: string): Promise<SceneLevel1Entity | null> {
+    return this.level1.findOneBy({ categoryKey: key });
+  }
+
+  private async validateSubScenes(
+    ids: string[],
+    level1Code: string,
+  ): Promise<SceneClassificationEntity[]> {
+    const uniqueIds = [...new Set(ids)];
+    const rows = await this.classification.findBy({ id: In(uniqueIds) });
+    if (rows.length !== uniqueIds.length) {
+      throw new SceneGuideFailure("VALIDATION", "包含不存在的二级场景", 400);
+    }
+    const wrongCategory = rows.find((row) => row.level1Code !== level1Code);
+    if (wrongCategory) {
+      throw new SceneGuideFailure(
+        "VALIDATION",
+        `二级场景「${wrongCategory.level2Name}」不属于所选场景类别`,
+        400,
+      );
+    }
+    return rows;
+  }
+}
+
+function cardsSceneSummaryFallback(
+  _recognition: EnvRecognitionRaw,
+): string {
+  return "";
 }

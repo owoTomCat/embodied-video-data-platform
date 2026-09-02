@@ -17,7 +17,9 @@ export type GuideEnvObject = {
   confidence?: number;
 };
 
+/** 单个结构化任务卡（子任务） */
 export type GuideTaskCard = {
+  title?: string;
   target_objects: Array<{ name: string; action?: string }>;
   steps: string[];
   end_condition: string;
@@ -27,8 +29,11 @@ export type GuideTaskCard = {
 
 export type GuideTask = {
   id: string;
-  sceneTypeTaskId: string;
+  sceneTypeTaskId: string | null;
+  sceneLibraryId: string | null;
   ownerAccountId: string;
+  title: string | null;
+  taskIndex: number;
   photoRefs: GuidePhotoRef[];
   envObjects: GuideEnvObject[];
   taskCard: GuideTaskCard | null;
@@ -41,6 +46,31 @@ export type GuideTask = {
   updatedAt: number;
 };
 
+export type CollectorLibrary = {
+  id: string;
+  name: string;
+  categoryKey: string;
+  categoryName: string;
+  subSceneIds: string[];
+  subScenes: Array<{ id: string; level2Name: string; level1Code: string }>;
+  description: string;
+  enabled: boolean;
+  ownerAccountId: string | null;
+  taskCount: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type GuideSceneClassification = {
+  id: string;
+  level1Code: string;
+  level1Name: string;
+  level2Name: string;
+  description: string;
+  enabled: boolean;
+  updatedAt: number;
+};
+
 export type PhotoUploadResult = {
   objectKey: string;
   url: string;
@@ -48,7 +78,7 @@ export type PhotoUploadResult = {
 };
 
 export type GenerateGuideTaskInput = {
-  sceneTypeTaskId: string;
+  sceneLibraryId: string;
   photoRefs: GuidePhotoRef[];
 };
 
@@ -60,4 +90,11 @@ export type SubmitEditedCardInput = {
 export type ReviewGuideTaskInput = {
   decision: "approved" | "rejected";
   comment?: string;
+};
+
+export type CreateCollectorLibraryInput = {
+  name: string;
+  categoryKey: string;
+  subSceneIds: string[];
+  description?: string;
 };

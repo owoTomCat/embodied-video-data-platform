@@ -3,9 +3,9 @@ import { ZodError } from "zod";
 import type { LoadedSceneGuidePrompt } from "./scene-guide.prompt.js";
 import {
   envelopeEnvRecognitionSchema,
-  envelopeTaskCardSchema,
+  envelopeTaskCardsSchema,
   type EnvRecognitionRaw,
-  type TaskCardRaw,
+  type TaskCardsRaw,
 } from "./scene-guide.schema.js";
 
 type Fetcher = typeof fetch;
@@ -187,8 +187,8 @@ export class QwenSceneGuideProvider {
     }
   }
 
-  /** LLM 生成结构化任务卡 */
-  async generateTaskCard(
+  /** LLM 一次生成 3-5 张结构化任务卡（按场景内可操作物体细分，任务可连续或独立） */
+  async generateTaskCards(
     input: {
       sceneName: string;
       taskDescription: string;
@@ -197,7 +197,7 @@ export class QwenSceneGuideProvider {
       sceneSummary?: string;
     },
     signal?: AbortSignal,
-  ): Promise<TaskCardRaw & { model: string }> {
+  ): Promise<TaskCardsRaw & { model: string }> {
     const messages: ChatMessage[] = [
       { role: "system", content: this.options.prompt.taskCardSystemPrompt },
       {
@@ -212,7 +212,10 @@ export class QwenSceneGuideProvider {
           output_requirements: [
             "只返回一个合法 JSON 对象，不要输出 Markdown 或解释文字。",
             "严格按示例结构输出，不得改名或遗漏字段。",
-            "target_objects 从 env_objects 中挑选，最多 3 个。",
+            "tasks 数组返回 3~5 张任务卡，必须基于 env_objects 中的可操作物体。",
+            "每张任务卡只聚焦一个可独立完成的操作；相关操作可拆成连续子任务，无关操作拆成独立任务。",
+            "每张卡的 title 用一句短语概括（如「把罐头放到锅里」）；target_objects 从 env_objects 挑选。",
+            "不得臆造 env_objects 中不存在的物体。",
           ],
         }),
       },
@@ -220,7 +223,7 @@ export class QwenSceneGuideProvider {
     const call = await this.call(messages, this.options.prompt.taskCardModel, signal);
     const raw = extractJson(call.content);
     try {
-      const parsed = envelopeTaskCardSchema.parse(raw);
+      const parsed = envelopeTaskCardsSchema.parse(raw);
       return { ...parsed, model: call.responseModel ?? this.options.prompt.taskCardModel };
     } catch (error) {
       throw new SceneGuideProviderError(

@@ -31,8 +31,9 @@ export type EnvRecognitionRaw = z.infer<
   typeof envelopeEnvRecognitionSchema
 >;
 
-/** LLM 结构化任务卡输出 */
+/** 单个结构化任务卡（子任务）：标题 / 目标物体 / 操作步骤 / 结束条件 / 成功·失败判定 */
 export const envelopeTaskCardSchema = z.object({
+  title: z.string().min(1).max(160),
   target_objects: z
     .array(
       z.object({
@@ -49,3 +50,11 @@ export const envelopeTaskCardSchema = z.object({
 });
 
 export type TaskCardRaw = z.infer<typeof envelopeTaskCardSchema>;
+
+/** LLM 一次产出 3-5 张任务卡（按场景内可操作物体细分，任务可连续或独立） */
+export const envelopeTaskCardsSchema = z.object({
+  tasks: z.array(envelopeTaskCardSchema).min(1).max(6),
+  scene_summary: z.string().min(1).max(2_000).optional(),
+});
+
+export type TaskCardsRaw = z.infer<typeof envelopeTaskCardsSchema>;

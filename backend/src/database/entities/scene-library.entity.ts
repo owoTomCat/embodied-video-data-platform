@@ -55,6 +55,15 @@ export class SceneLibraryEntity {
   @Column({ name: "created_by_name", type: "varchar", length: 120 })
   createdByName!: string;
 
+  /** 归属数采人员（场景库所有者）：数采个人场景库有值；管理员统一管理的场景库为 null */
+  @Index("idx_scene_library_owner", ["ownerAccountId"])
+  @Column({ name: "owner_account_id", type: "varchar", length: 64, nullable: true })
+  ownerAccountId: string | null = null;
+
+  @ManyToOne(() => UserEntity, { onDelete: "CASCADE" })
+  @JoinColumn({ name: "owner_account_id" })
+  owner?: Relation<UserEntity> | null;
+
   @CreateDateColumn({ name: "created_at", type: "timestamptz" })
   createdAt!: Date;
 

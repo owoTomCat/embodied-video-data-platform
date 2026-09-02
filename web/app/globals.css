@@ -1769,6 +1769,60 @@ button:disabled { cursor: not-allowed; opacity: .56; }
   gap: 14px;
 }
 
+/* ---- 数采个人场景库：新建/详情 + 任务卡展示 ---- */
+.guide-card-title {
+  margin: 0;
+  color: #2f3d54;
+  font-size: 15px;
+  font-weight: 750;
+  line-height: 1.4;
+}
+.guide-card-summary {
+  display: grid;
+  gap: 10px;
+}
+.guide-checkbox-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.guide-checkbox {
+  display: inline-flex;
+  padding: 8px 12px;
+  align-items: center;
+  gap: 8px;
+  color: #3a4a63;
+  background: #f7f9fd;
+  border: 1px solid #e8edf5;
+  border-radius: 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.guide-checkbox input {
+  width: 15px;
+  height: 15px;
+}
+.task-hall-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.upload-guide-prompt {
+  margin-bottom: 14px;
+}
+.task-card-tag {
+  display: inline-flex;
+  padding: 3px 9px;
+  align-items: center;
+  color: #5274c3;
+  background: #eef3fb;
+  border: 1px solid #dbe6f5;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 
 /* 数采提交页：三步式表单与可读的确认状态。 */
 .upload-progress-steps {

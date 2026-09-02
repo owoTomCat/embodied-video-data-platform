@@ -142,7 +142,7 @@ describe("TaskHallPage", () => {
     expect(screen.getAllByText("1 小时").length).toBeGreaterThan(0); // 目标 3600s
     expect(screen.getAllByText("20 分钟").length).toBeGreaterThan(0); // 已采 1200s
     expect(screen.getAllByText("40 分钟").length).toBeGreaterThan(0); // 缺口 2400s
-    // 场景型任务卡片提供「拍照指导」入口
-    expect(screen.getByRole("button", { name: /拍照指导/ })).toBeInTheDocument();
+    // 场景型任务卡片提供「我的场景库」入口
+    expect(screen.getByRole("button", { name: /我的场景库/ })).toBeInTheDocument();
   });
 });

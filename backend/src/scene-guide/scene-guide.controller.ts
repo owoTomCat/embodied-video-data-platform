@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Post,
@@ -14,6 +15,7 @@ import { CurrentUser } from "../auth/current-user.decorator.js";
 import { SessionGuard } from "../auth/session.guard.js";
 import { AllowedOriginGuard } from "../http/allowed-origin.guard.js";
 import {
+  CreateCollectorLibraryDto,
   GenerateGuideTaskDto,
   ReviewGuideTaskDto,
   SubmitEditedCardDto,
@@ -22,15 +24,67 @@ import { SceneGuideFailureFilter } from "./scene-guide.failure.filter.js";
 import { SceneGuideService } from "./scene-guide.service.js";
 
 /**
- * 场景指导任务卡（两层任务体系 P3）：
- * 数采选场景型任务 → 拍照（MinIO 预签名上传）→ Qwen-VL 识别环境物体 → LLM 生成任务卡
- * → (编辑→人工审核) → 按卡采集上传。
+ * 数采个人场景库 + 拍照生成任务卡：
+ * 数采自建「我的场景库」→ 在场景库下拍照生成 3-5 张任务卡（私有）→ 点任务卡进提交页（顶部显示操作提示）。
+ * 管理员可看到并统一管理所有数采的场景库。
  */
 @Controller("scene-guide")
 @UseGuards(SessionGuard)
 @UseFilters(SceneGuideFailureFilter)
 export class SceneGuideController {
   constructor(private readonly guide: SceneGuideService) {}
+
+  // ---------- 数采个人场景库 ----------
+
+  /** 数采：我的场景库列表。 */
+  @Get("libraries/mine")
+  async listMyLibraries(@CurrentUser() actor: PublicUser) {
+    return { libraries: await this.guide.listMyLibraries(actor) };
+  }
+
+  /** 数采：创建自己的场景库。 */
+  @Post("libraries")
+  @UseGuards(AllowedOriginGuard)
+  async createLibrary(
+    @CurrentUser() actor: PublicUser,
+    @Body() input: CreateCollectorLibraryDto,
+  ) {
+    return {
+      library: await this.guide.createLibrary(actor, {
+        name: input.name,
+        categoryKey: input.categoryKey,
+        subSceneIds: input.subSceneIds,
+        description: input.description,
+      }),
+    };
+  }
+
+  /** 数采：查看单个场景库（含任务卡）。 */
+  @Get("libraries/:id")
+  async getLibrary(
+    @CurrentUser() actor: PublicUser,
+    @Param("id") id: string,
+  ) {
+    return { library: await this.guide.getLibraryDetail(actor, id) };
+  }
+
+  /** 数采 / 管理员：删除场景库。 */
+  @Delete("libraries/:id")
+  @UseGuards(AllowedOriginGuard)
+  async deleteLibrary(
+    @CurrentUser() actor: PublicUser,
+    @Param("id") id: string,
+  ) {
+    return await this.guide.deleteLibrary(actor, id);
+  }
+
+  /** 管理员：全部场景库（统一管理）。 */
+  @Get("libraries")
+  async listAllLibraries(@CurrentUser() actor: PublicUser) {
+    return { libraries: await this.guide.listAllLibraries(actor) };
+  }
+
+  // ---------- 任务卡 ----------
 
   /** 预签名上传地址（数采上传环境照片）。 */
   @Post("photo/upload")
@@ -42,7 +96,7 @@ export class SceneGuideController {
     return { upload: await this.guide.presignPhoto(actor, input) };
   }
 
-  /** 拍照指导：识别环境物体 + 生成任务卡（ai_generated）。 */
+  /** 拍照指导：识别环境物体 + 生成 3-5 张任务卡（ai_generated）。 */
   @Post()
   @UseGuards(AllowedOriginGuard)
   async generate(
@@ -50,11 +104,20 @@ export class SceneGuideController {
     @Body() input: GenerateGuideTaskDto,
   ) {
     return {
-      task: await this.guide.generate(actor, {
-        sceneTypeTaskId: input.sceneTypeTaskId,
+      tasks: await this.guide.generate(actor, {
+        sceneLibraryId: input.sceneLibraryId,
         photoRefs: input.photoRefs,
       }),
     };
+  }
+
+  /** 某场景库下的任务卡列表。 */
+  @Get("library/:libraryId/tasks")
+  async listByLibrary(
+    @CurrentUser() actor: PublicUser,
+    @Param("libraryId") libraryId: string,
+  ) {
+    return { tasks: await this.guide.listByLibrary(actor, libraryId) };
   }
 
   /** 数采编辑并提交任务卡（→ in_review）。 */
@@ -100,12 +163,6 @@ export class SceneGuideController {
     return {
       task: await this.guide.backfillSubmission(actor, id, input.submissionId),
     };
-  }
-
-  /** 数采查看自己的指导任务卡列表。 */
-  @Get("mine")
-  async listMine(@CurrentUser() actor: PublicUser) {
-    return { tasks: await this.guide.listMine(actor) };
   }
 
   /** 管理员：全部指导任务卡（审核）。 */

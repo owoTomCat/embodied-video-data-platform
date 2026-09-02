@@ -10,6 +10,7 @@ import {
 } from "typeorm";
 
 import { CollectionTaskEntity } from "./collection-task.entity.js";
+import { SceneLibraryEntity } from "./scene-library.entity.js";
 import { SubmissionEntity } from "./submission.entity.js";
 import { UserEntity } from "./user.entity.js";
 
@@ -37,6 +38,7 @@ export type GuideEnvObject = {
 
 /** 结构化任务卡：目标物体 / 操作步骤 / 结束条件 / 成功·失败判定 */
 export type GuideTaskCard = {
+  title?: string;
   target_objects: Array<{ name: string; action?: string }>;
   steps: string[];
   end_condition: string;
@@ -47,25 +49,42 @@ export type GuideTaskCard = {
 @Entity({ name: "guide_tasks" })
 @Index("idx_guide_tasks_task_owner", ["sceneTypeTaskId", "ownerAccountId"])
 @Index("idx_guide_tasks_status_updated", ["status", "updatedAt", "id"])
+@Index("idx_guide_tasks_library", ["sceneLibraryId", "ownerAccountId"])
 export class GuideTaskEntity {
   @PrimaryColumn({ type: "varchar", length: 64 })
   id!: string;
 
-  /** 关联的场景型任务（taskType = scene_type） */
-  @Column({ name: "scene_type_task_id", type: "varchar", length: 64 })
-  sceneTypeTaskId!: string;
+  /** 关联的场景型任务（taskType = scene_type）；旧数据保留，新流程以场景库为准 */
+  @Column({ name: "scene_type_task_id", type: "varchar", length: 64, nullable: true })
+  sceneTypeTaskId: string | null = null;
 
   @ManyToOne(() => CollectionTaskEntity, { onDelete: "CASCADE" })
   @JoinColumn({ name: "scene_type_task_id" })
-  sceneTypeTask?: CollectionTaskEntity;
+  sceneTypeTask?: CollectionTaskEntity | null;
 
-  /** 数采人员（指导任务卡所有者） */
+  /** 所属数采个人场景库（新的任务卡归属单元） */
+  @Column({ name: "scene_library_id", type: "varchar", length: 64, nullable: true })
+  sceneLibraryId: string | null = null;
+
+  @ManyToOne(() => SceneLibraryEntity, { onDelete: "CASCADE" })
+  @JoinColumn({ name: "scene_library_id" })
+  sceneLibrary?: SceneLibraryEntity | null;
+
+  /** 数采人员（任务卡所有者） */
   @Column({ name: "owner_account_id", type: "varchar", length: 64 })
   ownerAccountId!: string;
 
   @ManyToOne(() => UserEntity, { onDelete: "CASCADE" })
   @JoinColumn({ name: "owner_account_id" })
   owner?: UserEntity;
+
+  /** 任务卡短标题（如「把罐头放到锅里」） */
+  @Column({ type: "varchar", length: 160, nullable: true })
+  title: string | null = null;
+
+  /** 同一批拍照生成的多张任务卡的序号（0~4），用于区分连续/独立子任务 */
+  @Column({ name: "task_index", type: "integer", default: 0 })
+  taskIndex = 0;
 
   /** 环境照片引用列表（MinIO 对象） */
   @Column({ name: "photo_refs", type: "jsonb", default: () => "'[]'::jsonb" })
