@@ -13,6 +13,7 @@ import { PointsModule } from "./points/points.module.js";
 import { PublicSiteModule } from "./public-site/public-site.module.js";
 import { ScenePricingModule } from "./scene-pricing/scene-pricing.module.js";
 import { SceneSystemModule } from "./scene-system/scene-system.module.js";
+import { SceneGuideModule } from "./scene-guide/scene-guide.module.js";
 import { SubmissionsModule } from "./submissions/submissions.module.js";
 import { TasksModule } from "./tasks/tasks.module.js";
 import { TaskSegmentModule } from "./task-segment/task-segment.module.js";
@@ -35,6 +36,7 @@ import { WalletModule } from "./wallet/wallet.module.js";
     PublicSiteModule,
     ScenePricingModule,
     SceneSystemModule,
+    SceneGuideModule,
     HealthModule,
     TasksModule,
     TaskSegmentModule,

@@ -2,6 +2,7 @@
 
 import {
   ArrowRight,
+  Camera,
   CheckCircle2,
   CircleDollarSign,
   ClipboardList,
@@ -65,6 +66,15 @@ export function TaskHallPage({ navigate }: { navigate(path: string): void }) {
     }
     sessionStorage.setItem(SELECTED_TASK_STORAGE_KEY, task.id);
     navigate("/collector/upload");
+  }
+
+  function goPhotoGuide(task: CollectionTaskForCollector) {
+    if (task.status !== "published") {
+      notify("error", "该任务当前已暂停，暂不可提交");
+      return;
+    }
+    sessionStorage.setItem(SELECTED_TASK_STORAGE_KEY, task.id);
+    navigate("/collector/photo-guide");
   }
 
   const filteredTasks = useMemo(() => {
@@ -301,24 +311,55 @@ export function TaskHallPage({ navigate }: { navigate(path: string): void }) {
                   <CircleDollarSign size={16} />
                   <span><strong>{task.pricePointsPerMinute !== null ? `${task.pricePointsPerMinute} 元/小时` : "按全局规则计费"}</strong><small>通过质检后计入金额</small></span>
                 </div>
-                <button
-                  type="button"
-                  className="button button-primary button-small"
-                  disabled={task.status !== "published"}
-                  onClick={() => goCollect(task)}
-                >
-                  {task.status === "paused" ? (
-                    <>
-                      <PauseCircle size={14} />
-                      已暂停
-                    </>
-                  ) : (
-                    <>
-                      去采集
-                      <ArrowRight size={14} />
-                    </>
-                  )}
-                </button>
+                {task.taskType === "scene_type" ? (
+                  <div className="task-card-actions">
+                    <button
+                      type="button"
+                      className="button button-secondary button-small"
+                      disabled={task.status !== "published"}
+                      onClick={() => goPhotoGuide(task)}
+                    >
+                      <Camera size={14} />拍照指导
+                    </button>
+                    <button
+                      type="button"
+                      className="button button-primary button-small"
+                      disabled={task.status !== "published"}
+                      onClick={() => goCollect(task)}
+                    >
+                      {task.status === "paused" ? (
+                        <>
+                          <PauseCircle size={14} />
+                          已暂停
+                        </>
+                      ) : (
+                        <>
+                          去采集
+                          <ArrowRight size={14} />
+                        </>
+                      )}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="button button-primary button-small"
+                    disabled={task.status !== "published"}
+                    onClick={() => goCollect(task)}
+                  >
+                    {task.status === "paused" ? (
+                      <>
+                        <PauseCircle size={14} />
+                        已暂停
+                      </>
+                    ) : (
+                      <>
+                        去采集
+                        <ArrowRight size={14} />
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
               {task.status === "published" && (
                 <span className="task-card-ready"><CheckCircle2 size={13} />当前可提交</span>

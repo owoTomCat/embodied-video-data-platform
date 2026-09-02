@@ -2,6 +2,7 @@ import {
   Archive,
   BadgeCheck,
   BarChart3,
+  Camera,
   CircleDollarSign,
   ClipboardCheck,
   ClipboardList,
@@ -49,6 +50,7 @@ export const navigationByRole: Record<Role, NavigationGroup[]> = {
       label: "任务",
       items: [
         { label: "任务大厅", path: "/collector/tasks", icon: ClipboardList },
+        { label: "拍照指导", path: "/collector/photo-guide", icon: Camera },
         { label: "上传视频", path: "/collector/upload", icon: Upload },
       ],
     },
@@ -112,6 +114,7 @@ export const navigationByRole: Record<Role, NavigationGroup[]> = {
       label: "任务",
       items: [
         { label: "任务管理", path: "/admin/tasks", icon: ClipboardList },
+        { label: "指导任务卡", path: "/admin/guide-tasks", icon: Camera },
       ],
     },
     {

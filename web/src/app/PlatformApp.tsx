@@ -22,7 +22,9 @@ import { UsersTeamsPage } from "../features/admin/UsersTeamsPage";
 import { CollectorDashboard } from "../features/collector/CollectorDashboard";
 import { EarningsPage } from "../features/collector/EarningsPage";
 import { GuidePage } from "../features/collector/GuidePage";
+import { PhotoGuidePage } from "../features/collector/PhotoGuidePage";
 import { TaskHallPage } from "../features/collector/TaskHallPage";
+import { GuideTaskReviewPage } from "../features/admin/GuideTaskReviewPage";
 import { AccountProfilePage } from "../features/account/AccountProfilePage";
 import { SubmissionDetail } from "../features/collector/SubmissionDetail";
 import { SubmissionsPage } from "../features/collector/SubmissionsPage";
@@ -106,6 +108,7 @@ function AuthenticatedPlatformContent({
     else if (safePath === "/collector/quality") page = <SubmissionsPage qualityOnly navigate={navigate} />;
     else if (safePath === "/collector/wallet" || safePath === "/collector/earnings") page = <EarningsPage />;
     else if (safePath === "/collector/guide") page = <GuidePage />;
+    else if (safePath === "/collector/photo-guide") page = <PhotoGuidePage navigate={navigate} />;
   } else if (currentAccount.role === "leader") {
     if (safePath === "/team/members") page = <MembersPage />;
     else if (safePath === "/team/submissions") page = <TeamSubmissionsPage />;
@@ -145,6 +148,7 @@ function AuthenticatedPlatformContent({
     else if (safePath === "/admin/people") page = <UsersTeamsPage />;
     else if (safePath === "/admin/labels") page = <LabelSetPage />;
     else if (safePath === "/admin/scenes") page = <SceneSystemPage />;
+    else if (safePath === "/admin/guide-tasks") page = <GuideTaskReviewPage />;
     else if (safePath === "/admin/rules") page = <RulesPage />;
     else if (safePath === "/admin/settlements") page = <SettlementPage />;
     else if (safePath === "/admin/public") page = <PublicConfigPage />;
