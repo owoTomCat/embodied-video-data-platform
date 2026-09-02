@@ -3112,3 +3112,25 @@ button:disabled { cursor: not-allowed; opacity: .56; }
   color: #9a6a12;
   background: #fdf1d8;
 }
+
+/* ===== AI 规范化：长规则自动换行（不再左右滑动） ===== */
+.normalize-item .normalize-item-text {
+  width: 100%;
+  min-width: 0;
+  padding: 9px 11px;
+  color: #354156;
+  background: #f9fafd;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  outline: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  resize: vertical;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+.normalize-item .normalize-item-text:focus {
+  border-color: #8eaaed;
+  box-shadow: 0 0 0 3px rgb(52 104 245 / 10%);
+}

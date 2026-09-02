@@ -192,7 +192,11 @@ describe("TasksPage", () => {
 
   it("opens the create form and creates a task", async () => {
     const user = userEvent.setup();
-    taskApi.create.mockResolvedValue({ ...draftTask, title: "新任务" });
+    taskApi.create.mockResolvedValue({
+      task: { ...draftTask, title: "新任务" },
+      autoNormalized: false,
+      normalizationFailed: false,
+    });
     renderAdmin();
     await screen.findByText("厨房数据采集");
 
