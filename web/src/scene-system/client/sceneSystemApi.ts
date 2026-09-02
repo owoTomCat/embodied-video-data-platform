@@ -109,6 +109,14 @@ export async function getSceneInventory(): Promise<SceneInventoryItem[]> {
   return result.items;
 }
 
+/** 场景进度（各二级场景存量/目标/缺口）——数采端任务大厅可见，用于场景型任务优先采集缺口大的场景 */
+export async function getSceneProgress(): Promise<SceneInventoryItem[]> {
+  const result = await requestJson<{ items: SceneInventoryItem[] }>(
+    "/scene-system/progress",
+  );
+  return result.items;
+}
+
 export async function listSceneClassification(): Promise<
   SceneClassification[]
 > {
