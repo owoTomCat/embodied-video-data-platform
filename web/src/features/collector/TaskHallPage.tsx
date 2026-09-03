@@ -20,8 +20,8 @@ import {
   getGuidePhotoUrl,
   guideTaskErrorMessage,
   listLibrariesByCategory,
-  listSceneClassification,
-  listSceneLevel1,
+  listSceneCategories,
+  listScenes,
 } from "../../scene-guide/client/sceneGuideApi";
 import {
   isSupportedPhoto,
@@ -30,13 +30,13 @@ import {
 } from "../../scene-guide/client/photoUpload";
 import type {
   CollectorLibrary,
-  GuideSceneClassification,
-  Level1Scene,
+  GuideScene,
+  SceneCategory,
 } from "../../scene-guide/contracts";
 
 export function TaskHallPage({ navigate }: { navigate(path: string): void }) {
   const { notify } = useInteractions();
-  const [level1, setLevel1] = useState<Level1Scene[]>([]);
+  const [categories, setCategories] = useState<SceneCategory[]>([]);
   const [activeCategory, setActiveCategory] = useState<string>("");
   const [libraries, setLibraries] = useState<CollectorLibrary[]>([]);
   const [mode, setMode] = useState<"loading" | "live" | "unavailable">("loading");
@@ -53,10 +53,10 @@ export function TaskHallPage({ navigate }: { navigate(path: string): void }) {
   // 加载一级大场景
   useEffect(() => {
     let active = true;
-    listSceneLevel1()
+    listSceneCategories()
       .then((items) => {
         if (!active) return;
-        setLevel1(items);
+        setCategories(items);
         if (items.length > 0) setActiveCategory(items[0]!.categoryKey);
       })
       .catch(() => {
@@ -87,12 +87,12 @@ export function TaskHallPage({ navigate }: { navigate(path: string): void }) {
     };
   }, [activeCategory, reloadKey]);
 
-  const [classification, setClassification] = useState<GuideSceneClassification[]>([]);
+  const [scenes, setScenes] = useState<GuideScene[]>([]);
   useEffect(() => {
     let active = true;
-    listSceneClassification()
+    listScenes()
       .then((items) => {
-        if (active) setClassification(items);
+        if (active) setScenes(items);
       })
       .catch(() => undefined);
     return () => {
@@ -100,10 +100,10 @@ export function TaskHallPage({ navigate }: { navigate(path: string): void }) {
     };
   }, []);
 
-  const activeLevel1 = level1.find((item) => item.categoryKey === activeCategory) ?? null;
+  const activeCategoryItem = categories.find((item) => item.categoryKey === activeCategory) ?? null;
   const subScenes = useMemo(
-    () => classification.filter((item) => item.enabled && item.level1Name === activeLevel1?.name),
-    [classification, activeLevel1],
+    () => scenes.filter((item) => item.enabled && item.categoryKey === activeCategory),
+    [scenes, activeCategory],
   );
 
   function toggleSubScene(id: string) {
@@ -228,7 +228,7 @@ export function TaskHallPage({ navigate }: { navigate(path: string): void }) {
         <>
           {/* 一级大场景分栏 */}
           <section className="task-hall-scene-levels" aria-label="大场景分类">
-            {level1.map((scene) => (
+            {categories.map((scene) => (
               <button
                 type="button"
                 key={scene.categoryKey}
@@ -245,7 +245,7 @@ export function TaskHallPage({ navigate }: { navigate(path: string): void }) {
           {/* 该大类下的场景库 + 新建入口 */}
           <div className="task-hall-toolbar">
             <div className="task-hall-toolbar-title">
-              <strong>{activeLevel1?.name}</strong>
+              <strong>{activeCategoryItem?.name}</strong>
               <span>{libraries.length} 个场景库</span>
             </div>
             <button type="button" className="button button-primary button-small" onClick={() => setCreateOpen(true)}>
@@ -280,7 +280,7 @@ export function TaskHallPage({ navigate }: { navigate(path: string): void }) {
                     <span className="task-card-tag">{library.taskCount} 张任务卡</span>
                   </div>
                   <p className="task-desc">
-                    {library.description || `包含 ${library.subScenes.map((s) => s.level2Name).join("、")}`}
+                    {library.description || `包含 ${library.subScenes.map((s) => s.name).join("、")}`}
                   </p>
                   <div className="task-card-foot">
                     <div className="task-card-actions">
@@ -331,7 +331,7 @@ export function TaskHallPage({ navigate }: { navigate(path: string): void }) {
                         checked={selectedSubScenes.includes(scene.id)}
                         onChange={() => toggleSubScene(scene.id)}
                       />
-                      <span>{scene.level2Name}</span>
+                      <span>{scene.name}</span>
                     </label>
                   ))}
                   {subScenes.length === 0 && <span className="form-message">当前分类暂无二级场景</span>}

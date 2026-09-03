@@ -7,9 +7,9 @@ import { IdentityProvider } from "../../auth/client/IdentityContext";
 import { accountForRole, demoAccounts } from "../../test/accountFixtures";
 
 const sceneGuideApi = vi.hoisted(() => ({
-  listSceneLevel1: vi.fn(),
+  listSceneCategories: vi.fn(),
   listLibrariesByCategory: vi.fn(),
-  listSceneClassification: vi.fn(),
+  listScenes: vi.fn(),
   createCollectorLibrary: vi.fn(),
   deleteCollectorLibrary: vi.fn(),
   getGuidePhotoUrl: vi.fn(),
@@ -19,9 +19,9 @@ const sceneGuideApi = vi.hoisted(() => ({
 }));
 
 vi.mock("../../scene-guide/client/sceneGuideApi", () => ({
-  listSceneLevel1: sceneGuideApi.listSceneLevel1,
+  listSceneCategories: sceneGuideApi.listSceneCategories,
   listLibrariesByCategory: sceneGuideApi.listLibrariesByCategory,
-  listSceneClassification: sceneGuideApi.listSceneClassification,
+  listScenes: sceneGuideApi.listScenes,
   createCollectorLibrary: sceneGuideApi.createCollectorLibrary,
   deleteCollectorLibrary: sceneGuideApi.deleteCollectorLibrary,
   getGuidePhotoUrl: sceneGuideApi.getGuidePhotoUrl,
@@ -29,9 +29,9 @@ vi.mock("../../scene-guide/client/sceneGuideApi", () => ({
   guideTaskErrorMessage: sceneGuideApi.guideTaskErrorMessage,
 }));
 
-const level1 = [
-  { code: "F01", name: "家庭", categoryKey: "family" },
-  { code: "O01", name: "办公室", categoryKey: "office" },
+const categories = [
+  { categoryKey: "family", name: "家庭" },
+  { categoryKey: "office", name: "办公室" },
 ];
 
 const kitchenLibrary = {
@@ -40,7 +40,7 @@ const kitchenLibrary = {
   categoryKey: "family",
   categoryName: "家庭",
   subSceneIds: ["SC-001"],
-  subScenes: [{ id: "SC-001", level2Name: "厨房", level1Code: "F01" }],
+  subScenes: [{ id: "SC-001", name: "厨房", categoryKey: "family" }],
   photoRefs: [],
   coverObjectKey: null,
   description: "",
@@ -64,16 +64,16 @@ function renderHall() {
 describe("TaskHallPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    sceneGuideApi.listSceneLevel1.mockResolvedValue(level1);
+    sceneGuideApi.listSceneCategories.mockResolvedValue(categories);
     sceneGuideApi.listLibrariesByCategory.mockResolvedValue([kitchenLibrary]);
-    sceneGuideApi.listSceneClassification.mockResolvedValue([
-      { id: "SC-001", level1Code: "F01", level1Name: "家庭", level2Name: "厨房", description: "", enabled: true, updatedAt: 0 },
+    sceneGuideApi.listScenes.mockResolvedValue([
+      { id: "SC-001", name: "厨房", categoryKey: "family", description: "", enabled: true, updatedAt: 0 },
     ]);
     sceneGuideApi.getGuidePhotoUrl.mockResolvedValue({ url: "http://minio.local/cover", expiresAt: 0 });
     sceneGuideApi.getCollectorLibrary.mockResolvedValue({ ...kitchenLibrary, tasks: [] });
   });
 
-  it("renders scene levels and the active category's libraries", async () => {
+  it("renders scene categories and the active category's libraries", async () => {
     renderHall();
     expect((await screen.findAllByText("家庭")).length).toBeGreaterThan(0);
     expect(screen.getByText("办公室")).toBeInTheDocument();
@@ -85,7 +85,6 @@ describe("TaskHallPage", () => {
     const user = userEvent.setup();
     renderHall();
     await screen.findByText("我家厨房");
-    // 切换到大类后返回空库
     sceneGuideApi.listLibrariesByCategory.mockResolvedValue([]);
     await user.click(screen.getByRole("button", { name: /办公室/ }));
     expect(await screen.findByText("该分类下还没有场景库")).toBeInTheDocument();

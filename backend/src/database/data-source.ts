@@ -25,9 +25,8 @@ import { PublicSiteSnapshotEntity } from "./entities/public-site-snapshot.entity
 import { ScarcityConfigEntity } from "./entities/scarcity-config.entity.js";
 import { QualityRuleVersionEntity } from "./entities/quality-rule-version.entity.js";
 import { SceneCategoryPricingEntity } from "./entities/scene-category-pricing.entity.js";
-import { SceneClassificationEntity } from "./entities/scene-classification.entity.js";
+import { SceneEntity } from "./entities/scene.entity.js";
 import { SceneLibraryEntity } from "./entities/scene-library.entity.js";
-import { SceneLevel1Entity } from "./entities/scene-level1.entity.js";
 import { SessionEntity } from "./entities/session.entity.js";
 import { SubmissionDuplicateCandidateEntity } from "./entities/submission-duplicate-candidate.entity.js";
 import { SubmissionEntity } from "./entities/submission.entity.js";
@@ -90,6 +89,7 @@ import { TaskSegmentAssets2026090300001 } from "./migrations/202609030001-task-s
 import { TaskBoundaryRefinements2026090500001 } from "./migrations/202609050001-task-boundary-refinements.js";
 import { TaskSegmentAdaptiveCut2026090600001 } from "./migrations/202609060001-task-segment-adaptive-cut.js";
 import { TaskSegmentAnnotationPublication2026091200001 } from "./migrations/202609120001-task-segment-annotation-publication.js";
+import { SceneSingleLayer2026091500001 } from "./migrations/202609150001-scene-single-layer.js";
 
 export const identityEntities = [
   TeamEntity,
@@ -123,9 +123,8 @@ export const identityEntities = [
   WalletBalanceEntity,
   WalletTransactionEntity,
   SceneCategoryPricingEntity,
-  SceneClassificationEntity,
+  SceneEntity,
   SceneLibraryEntity,
-  SceneLevel1Entity,
   TaskSegmentAssetEntity,
   TaskSegmentAnnotationRevisionEntity,
   TaskSegmentAssetProjectionEntity,
@@ -194,6 +193,7 @@ export function createDataSource(
       GuideTaskSceneLibrary2026091000002,
       UnifiedSceneManagement2026091100001,
       TaskAssetProjection2026091300001,
+      SceneSingleLayer2026091500001,
     ],
     synchronize: false,
     logging: false,

@@ -142,7 +142,7 @@ describe("TasksPage", () => {
         name: "采集员A家",
         categoryKey: "family",
         categoryName: "家庭",
-        subScenes: [{ id: "SC-001", level2Name: "厨房", level1Code: "F01" }],
+        subScenes: [{ id: "SC-001", name: "厨房", categoryKey: "family" }],
         subSceneIds: ["SC-001"],
         description: "",
         enabled: true,

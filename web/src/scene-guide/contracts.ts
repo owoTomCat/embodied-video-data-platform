@@ -52,7 +52,7 @@ export type CollectorLibrary = {
   categoryKey: string;
   categoryName: string;
   subSceneIds: string[];
-  subScenes: Array<{ id: string; level2Name: string; level1Code: string }>;
+  subScenes: Array<{ id: string; name: string; categoryKey: string }>;
   photoRefs: GuidePhotoRef[];
   coverObjectKey: string | null;
   description: string;
@@ -63,17 +63,17 @@ export type CollectorLibrary = {
   updatedAt: number;
 };
 
-export type Level1Scene = {
-  code: string;
-  name: string;
+/** 计费大类（任务大厅分栏） */
+export type SceneCategory = {
   categoryKey: string;
+  name: string;
 };
 
-export type GuideSceneClassification = {
+/** 场景（单层），用于建库选择 */
+export type GuideScene = {
   id: string;
-  level1Code: string;
-  level1Name: string;
-  level2Name: string;
+  name: string;
+  categoryKey: string;
   description: string;
   enabled: boolean;
   updatedAt: number;

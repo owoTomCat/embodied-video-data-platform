@@ -98,7 +98,7 @@ export function SceneLibraryDetailPage({
           <h1>{library?.name ?? "场景库"}</h1>
           <span>
             {library?.categoryName}
-            {library?.subScenes.length ? ` · ${library.subScenes.map((s) => s.level2Name).join("、")}` : ""} · 共 {tasks.length} 张任务卡
+            {library?.subScenes.length ? ` · ${library.subScenes.map((s) => s.name).join("、")}` : ""} · 共 {tasks.length} 张任务卡
           </span>
         </div>
         <div className="task-hall-toolbar-actions">

@@ -12,8 +12,8 @@ import {
   type GuideTaskStatus,
   type GuidePhotoRef,
 } from "../database/entities/guide-task.entity.js";
-import { SceneClassificationEntity } from "../database/entities/scene-classification.entity.js";
-import { SceneLevel1Entity } from "../database/entities/scene-level1.entity.js";
+import { SceneCategoryPricingEntity } from "../database/entities/scene-category-pricing.entity.js";
+import { SceneEntity } from "../database/entities/scene.entity.js";
 import { SceneLibraryEntity } from "../database/entities/scene-library.entity.js";
 import {
   OBJECT_STORAGE,
@@ -106,7 +106,7 @@ export type PublicLibrary = {
   categoryKey: string;
   categoryName: string;
   subSceneIds: string[];
-  subScenes: Array<{ id: string; level2Name: string; level1Code: string }>;
+  subScenes: Array<{ id: string; name: string; categoryKey: string }>;
   photoRefs: Array<{ objectKey: string; contentType?: string; name?: string }>;
   coverObjectKey: string | null;
   description: string;
@@ -126,10 +126,10 @@ export class SceneGuideService {
     private readonly collectionTasks: Repository<CollectionTaskEntity>,
     @InjectRepository(SceneLibraryEntity)
     private readonly libraries: Repository<SceneLibraryEntity>,
-    @InjectRepository(SceneClassificationEntity)
-    private readonly classification: Repository<SceneClassificationEntity>,
-    @InjectRepository(SceneLevel1Entity)
-    private readonly level1: Repository<SceneLevel1Entity>,
+    @InjectRepository(SceneEntity)
+    private readonly scenes: Repository<SceneEntity>,
+    @InjectRepository(SceneCategoryPricingEntity)
+    private readonly pricing: Repository<SceneCategoryPricingEntity>,
     @Inject(OBJECT_STORAGE)
     private readonly storage: ObjectStoragePort,
     @Inject(SCENE_GUIDE_PROVIDER)
@@ -146,26 +146,25 @@ export class SceneGuideService {
       where: { ownerAccountId: actor.id },
       order: { createdAt: "DESC", id: "DESC" },
     });
-    const [classifications, level1Rows] = await Promise.all([
-      this.classification.find(),
-      this.level1.find(),
+    const [scenes, pricingRows] = await Promise.all([
+      this.scenes.find(),
+      this.pricing.find(),
     ]);
-    const byId = new Map(classifications.map((item) => [item.id, item]));
-    const level1ByKey = new Map(level1Rows.map((item) => [item.categoryKey, item]));
+    const byId = new Map(scenes.map((item) => [item.id, item]));
+    const pricingByKey = new Map(pricingRows.map((item) => [item.categoryKey, item]));
     const taskCounts = await this.taskCountByLibrary(actor.id);
     return rows.map((row) =>
-      this.toLibraryView(row, byId, level1ByKey, taskCounts),
+      this.toLibraryView(row, byId, pricingByKey, taskCounts),
     );
   }
 
-  /** 数采：一级大场景分类（任务大厅分栏）。 */
-  async listLevel1(actor: PublicUser): Promise<Array<{ code: string; name: string; categoryKey: string }>> {
+  /** 数采：计费大类分类（任务大厅分栏）。 */
+  async listCategories(actor: PublicUser): Promise<Array<{ categoryKey: string; name: string }>> {
     sceneGuidePolicy.requireCollector(actor);
-    const rows = await this.level1.find({
-      where: { enabled: true },
-      order: { sortOrder: "ASC", code: "ASC" },
+    const rows = await this.pricing.find({
+      order: { categoryKey: "ASC" },
     });
-    return rows.map((row) => ({ code: row.code, name: row.name, categoryKey: row.categoryKey }));
+    return rows.map((row) => ({ categoryKey: row.categoryKey, name: row.name }));
   }
 
   /** 数采：某个一级大场景分类下的个人场景库列表（任务大厅进入某大场景后展示）。 */
@@ -178,15 +177,15 @@ export class SceneGuideService {
       where: { ownerAccountId: actor.id, categoryKey },
       order: { createdAt: "DESC", id: "DESC" },
     });
-    const [classifications, level1Rows] = await Promise.all([
-      this.classification.find(),
-      this.level1.find(),
+    const [scenes, pricingRows] = await Promise.all([
+      this.scenes.find(),
+      this.pricing.find(),
     ]);
-    const byId = new Map(classifications.map((item) => [item.id, item]));
-    const level1ByKey = new Map(level1Rows.map((item) => [item.categoryKey, item]));
+    const byId = new Map(scenes.map((item) => [item.id, item]));
+    const pricingByKey = new Map(pricingRows.map((item) => [item.categoryKey, item]));
     const taskCounts = await this.taskCountByLibrary(actor.id);
     return rows.map((row) =>
-      this.toLibraryView(row, byId, level1ByKey, taskCounts),
+      this.toLibraryView(row, byId, pricingByKey, taskCounts),
     );
   }
 
@@ -205,17 +204,17 @@ export class SceneGuideService {
     if (!input.name?.trim()) {
       throw new SceneGuideFailure("VALIDATION", "请填写场景库名称", 400);
     }
-    const level1 = await this.getLevel1ByCategoryKey(input.categoryKey);
-    if (!level1) {
+    const category = await this.pricing.findOneBy({ categoryKey: input.categoryKey });
+    if (!category) {
       throw new SceneGuideFailure("VALIDATION", "场景类别不存在", 400);
     }
-    const subScenes = await this.validateSubScenes(input.subSceneIds, level1.code);
+    const subScenes = await this.validateSubScenes(input.subSceneIds, input.categoryKey);
     const photoRefs = input.photoRefs ?? [];
     const row = await this.libraries.save(
       this.libraries.create({
         id: `SL-${randomUUID().slice(0, 8).toUpperCase()}`,
         name: input.name.trim(),
-        categoryKey: level1.categoryKey,
+        categoryKey: input.categoryKey,
         subSceneIds: subScenes.map((item) => item.id),
         photoRefs,
         coverObjectKey: photoRefs[0]?.objectKey ?? null,
@@ -231,7 +230,7 @@ export class SceneGuideService {
       actor,
       "collector_library_create",
       { id: row.id, name: row.name },
-      `数采新建场景库「${row.name}」（类别：${level1.name}）`,
+      `数采新建场景库「${row.name}」（类别：${category.name}）`,
       null,
       { id: row.id, name: row.name, categoryKey: row.categoryKey, subSceneIds: row.subSceneIds, photoRefs: row.photoRefs },
     );
@@ -553,15 +552,15 @@ export class SceneGuideService {
     const rows = await this.libraries.find({
       order: { createdAt: "DESC", id: "DESC" },
     });
-    const [classifications, level1Rows] = await Promise.all([
-      this.classification.find(),
-      this.level1.find(),
+    const [scenes, pricingRows] = await Promise.all([
+      this.scenes.find(),
+      this.pricing.find(),
     ]);
-    const byId = new Map(classifications.map((item) => [item.id, item]));
-    const level1ByKey = new Map(level1Rows.map((item) => [item.categoryKey, item]));
+    const byId = new Map(scenes.map((item) => [item.id, item]));
+    const pricingByKey = new Map(pricingRows.map((item) => [item.categoryKey, item]));
     const taskCounts = await this.taskCountByLibrary(null);
     return rows.map((row) =>
-      this.toLibraryView(row, byId, level1ByKey, taskCounts),
+      this.toLibraryView(row, byId, pricingByKey, taskCounts),
     );
   }
 
@@ -612,24 +611,25 @@ export class SceneGuideService {
 
   private toLibraryView(
     row: SceneLibraryEntity,
-    classificationById: Map<string, SceneClassificationEntity>,
-    level1ByCategoryKey: Map<string, SceneLevel1Entity>,
+    sceneById: Map<string, SceneEntity>,
+    pricingByCategoryKey: Map<string, SceneCategoryPricingEntity>,
     taskCounts: Map<string, number>,
   ): PublicLibrary {
-    const level1 = level1ByCategoryKey.get(row.categoryKey);
+    const categoryName =
+      pricingByCategoryKey.get(row.categoryKey)?.name ?? row.categoryKey;
     return {
       id: row.id,
       name: row.name,
       categoryKey: row.categoryKey,
-      categoryName: level1?.name ?? row.categoryKey,
+      categoryName,
       subSceneIds: row.subSceneIds,
       subScenes: row.subSceneIds
-        .map((id) => classificationById.get(id))
-        .filter((item): item is SceneClassificationEntity => Boolean(item))
+        .map((id) => sceneById.get(id))
+        .filter((item): item is SceneEntity => Boolean(item))
         .map((item) => ({
           id: item.id,
-          level2Name: item.level2Name,
-          level1Code: item.level1Code,
+          name: item.name,
+          categoryKey: item.categoryKey,
         })),
       photoRefs: row.photoRefs,
       coverObjectKey: row.coverObjectKey,
@@ -642,24 +642,20 @@ export class SceneGuideService {
     };
   }
 
-  private async getLevel1ByCategoryKey(key: string): Promise<SceneLevel1Entity | null> {
-    return this.level1.findOneBy({ categoryKey: key });
-  }
-
   private async validateSubScenes(
     ids: string[],
-    level1Code: string,
-  ): Promise<SceneClassificationEntity[]> {
+    categoryKey: string,
+  ): Promise<SceneEntity[]> {
     const uniqueIds = [...new Set(ids)];
-    const rows = await this.classification.findBy({ id: In(uniqueIds) });
+    const rows = await this.scenes.findBy({ id: In(uniqueIds) });
     if (rows.length !== uniqueIds.length) {
-      throw new SceneGuideFailure("VALIDATION", "包含不存在的二级场景", 400);
+      throw new SceneGuideFailure("VALIDATION", "包含不存在的场景", 400);
     }
-    const wrongCategory = rows.find((row) => row.level1Code !== level1Code);
+    const wrongCategory = rows.find((row) => row.categoryKey !== categoryKey);
     if (wrongCategory) {
       throw new SceneGuideFailure(
         "VALIDATION",
-        `二级场景「${wrongCategory.level2Name}」不属于所选场景类别`,
+        `场景「${wrongCategory.name}」不属于所选场景类别`,
         400,
       );
     }

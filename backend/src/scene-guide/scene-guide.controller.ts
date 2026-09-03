@@ -38,10 +38,10 @@ export class SceneGuideController {
 
   // ---------- 数采个人场景库 ----------
 
-  /** 数采：一级大场景分类（任务大厅分栏）。 */
-  @Get("level1")
-  async listLevel1(@CurrentUser() actor: PublicUser) {
-    return { level1: await this.guide.listLevel1(actor) };
+  /** 数采：计费大类分类（任务大厅分栏）。 */
+  @Get("categories")
+  async listCategories(@CurrentUser() actor: PublicUser) {
+    return { categories: await this.guide.listCategories(actor) };
   }
 
   /** 数采：某个一级大场景分类下的个人场景库列表。 */

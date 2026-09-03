@@ -2,11 +2,11 @@ import type {
   CollectorLibrary,
   CreateCollectorLibraryInput,
   GenerateGuideTaskInput,
-  GuideSceneClassification,
+  GuideScene,
   GuideTask,
-  Level1Scene,
   PhotoUploadResult,
   ReviewGuideTaskInput,
+  SceneCategory,
   SubmitEditedCardInput,
 } from "../contracts";
 
@@ -66,10 +66,12 @@ export async function listMyLibraries(): Promise<CollectorLibrary[]> {
   return result.libraries;
 }
 
-/** 一级大场景分类（任务大厅分栏）。 */
-export async function listSceneLevel1(): Promise<Level1Scene[]> {
-  const result = await requestJson<{ level1: Level1Scene[] }>("scene-guide/level1");
-  return result.level1;
+/** 计费大类分类（任务大厅分栏）。 */
+export async function listSceneCategories(): Promise<SceneCategory[]> {
+  const result = await requestJson<{ categories: SceneCategory[] }>(
+    "scene-guide/categories",
+  );
+  return result.categories;
 }
 
 /** 某个一级大场景分类下的数采个人场景库列表（任务大厅进入某大场景后展示）。 */
@@ -115,14 +117,12 @@ export async function getGuidePhotoUrl(objectKey: string): Promise<{ url: string
   );
 }
 
-/** 场景分类表（二级场景），用于建库选择 */
-export async function listSceneClassification(): Promise<
-  GuideSceneClassification[]
-> {
-  const result = await requestJson<{
-    classification: GuideSceneClassification[];
-  }>("scene-system/classification");
-  return result.classification;
+/** 场景（单层），用于建库选择 */
+export async function listScenes(): Promise<GuideScene[]> {
+  const result = await requestJson<{ scenes: GuideScene[] }>(
+    "scene-system/scenes",
+  );
+  return result.scenes;
 }
 
 // ---------- 任务卡 ----------

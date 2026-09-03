@@ -86,7 +86,7 @@ describe("SceneLibraryDetailPage", () => {
       categoryKey: "family",
       categoryName: "家庭",
       subSceneIds: ["SC-001"],
-      subScenes: [{ id: "SC-001", level2Name: "厨房", level1Code: "F01" }],
+      subScenes: [{ id: "SC-001", name: "厨房", categoryKey: "family" }],
       description: "",
       enabled: true,
       ownerAccountId: "U-COL-01",

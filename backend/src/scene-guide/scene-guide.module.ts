@@ -5,8 +5,7 @@ import { AuditModule } from "../audit/audit.module.js";
 import { AuthModule } from "../auth/auth.module.js";
 import { CollectionTaskEntity } from "../database/entities/collection-task.entity.js";
 import { GuideTaskEntity } from "../database/entities/guide-task.entity.js";
-import { SceneClassificationEntity } from "../database/entities/scene-classification.entity.js";
-import { SceneLevel1Entity } from "../database/entities/scene-level1.entity.js";
+import { SceneEntity } from "../database/entities/scene.entity.js";
 import { SceneLibraryEntity } from "../database/entities/scene-library.entity.js";
 import { AllowedOriginGuard } from "../http/allowed-origin.guard.js";
 import { StorageModule } from "../storage/storage.module.js";
@@ -30,8 +29,7 @@ export { SCENE_GUIDE_PROVIDER };
       GuideTaskEntity,
       CollectionTaskEntity,
       SceneLibraryEntity,
-      SceneClassificationEntity,
-      SceneLevel1Entity,
+      SceneEntity,
     ]),
     StorageModule,
     AuditModule,

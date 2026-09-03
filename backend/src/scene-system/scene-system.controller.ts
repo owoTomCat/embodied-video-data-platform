@@ -16,19 +16,16 @@ import { SessionGuard } from "../auth/session.guard.js";
 import { AllowedOriginGuard } from "../http/allowed-origin.guard.js";
 import { SensitiveActionRateLimitGuard } from "../security/sensitive-action-rate-limit.guard.js";
 import {
-  CreateSceneClassificationDto,
-  CreateSceneLevel1Dto,
-  CreateSceneLibraryDto,
-  UpdateSceneClassificationDto,
-  UpdateSceneLevel1Dto,
-  UpdateSceneLibraryDto,
+  CreateSceneDto,
+  UpdateSceneDto,
 } from "./dto/scene-system.dto.js";
 import { SceneSystemFailureFilter } from "./scene-system-failure.filter.js";
 import { SceneSystemService } from "./scene-system.service.js";
 
 /**
- * 场景体系：一级场景 + 场景分类表 + 场景库。
+ * 场景体系：单层「场景」 + 场景库（只读）。
  * 读取：登录用户可读（任务创建/展示使用）；修改：仅管理员。
+ * 场景库写操作已废弃（统一由 scene-guide 数采自建）。
  */
 @Controller("scene-system")
 @UseGuards(SessionGuard)
@@ -36,133 +33,65 @@ import { SceneSystemService } from "./scene-system.service.js";
 export class SceneSystemController {
   constructor(private readonly scenes: SceneSystemService) {}
 
-  /** 一级场景（编码/名称/计费大类 key） */
-  @Get("meta")
-  async meta(@CurrentUser() actor: PublicUser) {
-    return { level1: await this.scenes.listLevel1() };
-  }
-
-  // ---------- 一级场景 ----------
-
-  @Post("level1")
-  @UseGuards(AllowedOriginGuard, SensitiveActionRateLimitGuard)
-  async createLevel1(
-    @CurrentUser() actor: PublicUser,
-    @Body() input: CreateSceneLevel1Dto,
-  ) {
-    return { item: await this.scenes.createLevel1(actor, input) };
-  }
-
-  @Put("level1/:id")
-  @UseGuards(AllowedOriginGuard, SensitiveActionRateLimitGuard)
-  async updateLevel1(
-    @CurrentUser() actor: PublicUser,
-    @Param("id") id: string,
-    @Body() input: UpdateSceneLevel1Dto,
-  ) {
-    return { item: await this.scenes.updateLevel1(actor, id, input) };
-  }
-
-  @Delete("level1/:id")
-  @UseGuards(AllowedOriginGuard, SensitiveActionRateLimitGuard)
-  async deleteLevel1(
-    @CurrentUser() actor: PublicUser,
-    @Param("id") id: string,
-  ) {
-    return this.scenes.deleteLevel1(actor, id);
-  }
-
-  /** 场景存量/目标/缺口（各二级场景，管理员）——两层任务体系第一层看板 */
+  /** 场景存量/目标/缺口（各场景，管理员）——场景存量看板 */
   @Get("inventory")
   async inventory(@CurrentUser() actor: PublicUser) {
     if (actor.role !== "admin") return { items: [] };
     return await this.scenes.sceneInventory();
   }
 
-  /** 场景进度（各二级场景存量/目标/缺口）——数采端任务大厅：场景型任务可见，用于优先采集缺口大的场景 */
+  /** 场景进度（各场景存量/目标/缺口）——数采端任务大厅可见 */
   @Get("progress")
   async progress(@CurrentUser() actor: PublicUser) {
     if (actor.status !== "active") return { items: [] };
     return await this.scenes.sceneInventory();
   }
 
-  // ---------- 场景分类表（二级场景） ----------
+  // ---------- 场景（单层） ----------
 
-  @Get("classification")
-  async listClassification(@CurrentUser() actor: PublicUser) {
+  @Get("scenes")
+  async listScenes(@CurrentUser() actor: PublicUser) {
     return {
-      classification: await this.scenes.listClassification(),
+      scenes: await this.scenes.listScenes(),
     };
   }
 
-  @Post("classification")
+  @Post("scenes")
   @UseGuards(AllowedOriginGuard, SensitiveActionRateLimitGuard)
-  async createClassification(
+  async createScene(
     @CurrentUser() actor: PublicUser,
-    @Body() input: CreateSceneClassificationDto,
+    @Body() input: CreateSceneDto,
   ) {
     return {
-      item: await this.scenes.createClassification(actor, input),
+      item: await this.scenes.createScene(actor, input),
     };
   }
 
-  @Put("classification/:id")
+  @Put("scenes/:id")
   @UseGuards(AllowedOriginGuard, SensitiveActionRateLimitGuard)
-  async updateClassification(
-    @CurrentUser() actor: PublicUser,
-    @Param("id") id: string,
-    @Body() input: UpdateSceneClassificationDto,
-  ) {
-    return {
-      item: await this.scenes.updateClassification(actor, id, input),
-    };
-  }
-
-  @Delete("classification/:id")
-  @UseGuards(AllowedOriginGuard, SensitiveActionRateLimitGuard)
-  async deleteClassification(
+  async updateScene(
     @CurrentUser() actor: PublicUser,
     @Param("id") id: string,
+    @Body() input: UpdateSceneDto,
   ) {
-    return this.scenes.deleteClassification(actor, id);
+    return {
+      item: await this.scenes.updateScene(actor, id, input),
+    };
   }
 
-  // ---------- 场景库 ----------
+  @Delete("scenes/:id")
+  @UseGuards(AllowedOriginGuard, SensitiveActionRateLimitGuard)
+  async deleteScene(
+    @CurrentUser() actor: PublicUser,
+    @Param("id") id: string,
+  ) {
+    return this.scenes.deleteScene(actor, id);
+  }
+
+  // ---------- 场景库（只读） ----------
 
   @Get("library")
   async listLibrary(@CurrentUser() actor: PublicUser) {
     return { library: await this.scenes.listLibrary() };
-  }
-
-  @Post("library")
-  @UseGuards(AllowedOriginGuard, SensitiveActionRateLimitGuard)
-  async createLibrary(
-    @CurrentUser() actor: PublicUser,
-    @Body() input: CreateSceneLibraryDto,
-  ) {
-    return {
-      item: await this.scenes.createLibrary(actor, input),
-    };
-  }
-
-  @Put("library/:id")
-  @UseGuards(AllowedOriginGuard, SensitiveActionRateLimitGuard)
-  async updateLibrary(
-    @CurrentUser() actor: PublicUser,
-    @Param("id") id: string,
-    @Body() input: UpdateSceneLibraryDto,
-  ) {
-    return {
-      item: await this.scenes.updateLibrary(actor, id, input),
-    };
-  }
-
-  @Delete("library/:id")
-  @UseGuards(AllowedOriginGuard, SensitiveActionRateLimitGuard)
-  async deleteLibrary(
-    @CurrentUser() actor: PublicUser,
-    @Param("id") id: string,
-  ) {
-    return this.scenes.deleteLibrary(actor, id);
   }
 }
