@@ -46,12 +46,13 @@ export function UploadPage() {
   }>>([]);
   const selectedTask =
     tasks.find((task) => task.id === selectedTaskId) ?? null;
+  // 可从「任务卡」进入提交（sceneLibraryId + guideTaskId），此时无需选采集任务
+  const fromGuideTask = Boolean(guideTask?.id && guideTask.sceneLibraryId);
   const authorizationComplete =
     authorization.dataUsageAuthorized &&
     authorization.privacyConfirmed &&
     authorization.sensitiveContentConfirmed &&
-    selectedTask !== null &&
-    taskRequirementsConfirmed;
+    ((selectedTask !== null && taskRequirementsConfirmed) || fromGuideTask);
 
   useEffect(() => {
     let active = true;
@@ -127,10 +128,14 @@ export function UploadPage() {
       await uploadVideo(file, {
         signal: controller.signal,
         authorization,
-        task: {
-          id: selectedTaskId,
-          requirementsConfirmed: taskRequirementsConfirmed,
-        },
+        task: selectedTaskId && !guideTask
+          ? {
+              id: selectedTaskId,
+              requirementsConfirmed: taskRequirementsConfirmed,
+            }
+          : undefined,
+        guideTaskId: guideTask?.id ?? undefined,
+        sceneLibraryId: guideTask?.sceneLibraryId ?? undefined,
         onProgress: (progress) =>
           updateUpload(key, { progress, status: "uploading" }),
       });

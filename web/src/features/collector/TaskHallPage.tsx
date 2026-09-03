@@ -3,52 +3,61 @@
 import {
   ArrowRight,
   Camera,
-  CheckCircle2,
-  CircleDollarSign,
-  ClipboardList,
+  Library,
+  Loader2,
   Map as MapIcon,
-  PauseCircle,
-  Search,
-  ShieldCheck,
+  Plus,
+  Trash2,
+  Upload,
+  X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { StatusBadge } from "../../components/StatusBadge";
-import { TaskTypeBadge } from "../../components/TaskTypeBadge";
+
 import { useInteractions } from "../../interactions/InteractionContext";
-import { getSceneProgress } from "../../scene-system/client/sceneSystemApi";
-import type { SceneInventoryItem } from "../../scene-system/client/sceneSystemApi";
-import { listTasksForCollector } from "../../tasks/client/taskApi";
-import type { CollectionTaskForCollector } from "../../tasks/contracts";
-
-const SELECTED_TASK_STORAGE_KEY = "evdp:selectedTaskId";
-
-function formatMinutes(seconds: number): string {
-  if (seconds <= 0) return "0 分钟";
-  const minutes = Math.round((seconds / 60) * 10) / 10;
-  if (minutes < 60) return `${minutes} 分钟`;
-  const hours = Math.floor(minutes / 60);
-  const rest = Math.round(minutes % 60);
-  return rest > 0 ? `${hours} 小时 ${rest} 分` : `${hours} 小时`;
-}
+import {
+  createCollectorLibrary,
+  deleteCollectorLibrary,
+  getGuidePhotoUrl,
+  guideTaskErrorMessage,
+  listLibrariesByCategory,
+  listSceneClassification,
+  listSceneLevel1,
+} from "../../scene-guide/client/sceneGuideApi";
+import {
+  isSupportedPhoto,
+  photoSizeError,
+  uploadGuidePhoto,
+} from "../../scene-guide/client/photoUpload";
+import type {
+  CollectorLibrary,
+  GuideSceneClassification,
+  Level1Scene,
+} from "../../scene-guide/contracts";
 
 export function TaskHallPage({ navigate }: { navigate(path: string): void }) {
   const { notify } = useInteractions();
-  const [tasks, setTasks] = useState<CollectionTaskForCollector[]>([]);
-  const [progress, setProgress] = useState<SceneInventoryItem[]>([]);
-  const [mode, setMode] = useState<"loading" | "live" | "unavailable">(
-    "loading",
-  );
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState<"all" | "published" | "paused">("all");
+  const [level1, setLevel1] = useState<Level1Scene[]>([]);
+  const [activeCategory, setActiveCategory] = useState<string>("");
+  const [libraries, setLibraries] = useState<CollectorLibrary[]>([]);
+  const [mode, setMode] = useState<"loading" | "live" | "unavailable">("loading");
+  const [reloadKey, setReloadKey] = useState(0);
 
+  const [createOpen, setCreateOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [formName, setFormName] = useState("");
+  const [selectedSubScenes, setSelectedSubScenes] = useState<string[]>([]);
+  const [formDescription, setFormDescription] = useState("");
+  const [photos, setPhotos] = useState<Array<{ file: File; url: string }>>([]);
+
+  // 加载一级大场景
   useEffect(() => {
     let active = true;
-    Promise.all([listTasksForCollector(), getSceneProgress()])
-      .then(([items, sceneProgress]) => {
+    listSceneLevel1()
+      .then((items) => {
         if (!active) return;
-        setTasks(items);
-        setProgress(sceneProgress ?? []);
-        setMode("live");
+        setLevel1(items);
+        if (items.length > 0) setActiveCategory(items[0]!.categoryKey);
       })
       .catch(() => {
         if (!active) return;
@@ -59,80 +68,144 @@ export function TaskHallPage({ navigate }: { navigate(path: string): void }) {
     };
   }, []);
 
-  function goCollect(task: CollectionTaskForCollector) {
-    if (task.status !== "published") {
-      notify("error", "该任务当前已暂停，暂不可提交");
-      return;
-    }
-    sessionStorage.setItem(SELECTED_TASK_STORAGE_KEY, task.id);
-    navigate("/collector/upload");
-  }
+  // 加载当前大类下的场景库
+  useEffect(() => {
+    if (!activeCategory) return;
+    let active = true;
+    listLibrariesByCategory(activeCategory)
+      .then((items) => {
+        if (!active) return;
+        setLibraries(items);
+        setMode("live");
+      })
+      .catch(() => {
+        if (!active) return;
+        setMode("unavailable");
+      });
+    return () => {
+      active = false;
+    };
+  }, [activeCategory, reloadKey]);
 
-  function goPhotoGuide(task: CollectionTaskForCollector) {
-    if (task.status !== "published") {
-      notify("error", "该任务当前已暂停，暂不可提交");
-      return;
-    }
-    // 进入「我的场景库」，在场景库下拍照生成私有任务卡
-    navigate("/collector/scenes");
-  }
+  const [classification, setClassification] = useState<GuideSceneClassification[]>([]);
+  useEffect(() => {
+    let active = true;
+    listSceneClassification()
+      .then((items) => {
+        if (active) setClassification(items);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
 
-  const filteredTasks = useMemo(() => {
-    const term = query.trim().toLowerCase();
-    return tasks.filter((task) => {
-      if (status !== "all" && task.status !== status) return false;
-      if (!term) return true;
-      const content = `${task.title} ${task.sceneName} ${task.description} ${task.normalizedRequirements?.scene_description ?? ""}`.toLowerCase();
-      return content.includes(term);
-    });
-  }, [query, status, tasks]);
+  const activeLevel1 = level1.find((item) => item.categoryKey === activeCategory) ?? null;
+  const subScenes = useMemo(
+    () => classification.filter((item) => item.enabled && item.level1Name === activeLevel1?.name),
+    [classification, activeLevel1],
+  );
 
-  const progressByScene = useMemo(() => {
-    const map = new Map<string, SceneInventoryItem>();
-    for (const item of progress) map.set(item.sceneName, item);
-    return map;
-  }, [progress]);
-
-  // 场景型任务所属场景（用于进度面板，缺口大的在前）
-  const sceneTypeScenes = useMemo(() => {
-    const wanted = new Set<string>();
-    for (const task of tasks) {
-      if (task.taskType === "scene_type" && task.sceneName) {
-        wanted.add(task.sceneName);
-      }
-    }
-    const items = [...wanted]
-      .map((name) => progressByScene.get(name))
-      .filter((item): item is SceneInventoryItem => Boolean(item))
-      .sort((left, right) => right.shortfallSeconds - left.shortfallSeconds);
-    return items;
-  }, [progressByScene, tasks]);
-
-  const availableCount = tasks.filter((task) => task.status === "published").length;
-  const pausedCount = tasks.length - availableCount;
-
-  function renderSceneProgress(task: CollectionTaskForCollector) {
-    if (task.taskType !== "scene_type") return null;
-    const item = progressByScene.get(task.sceneName);
-    const target = item?.targetSeconds ?? task.targetDurationSeconds ?? 0;
-    const current = item?.currentSeconds ?? 0;
-    const shortfall = item?.shortfallSeconds ?? Math.max(0, target - current);
-    const pct = target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0;
-    return (
-      <div className="task-scene-progress">
-        <div className="task-scene-progress-head">
-          <span><MapIcon size={13} />本场景采集进度</span>
-          <em>{target > 0 ? "缺口 " + formatMinutes(shortfall) : "尚未设置目标"}</em>
-        </div>
-        <div className="scene-progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label={`${task.sceneName} 采集进度 ${pct}%`}>
-          <i style={{ width: `${pct}%` }} />
-        </div>
-        <div className="task-scene-progress-meta">
-          <span>已采 <strong>{formatMinutes(current)}</strong></span>
-          <span>目标 <strong>{target > 0 ? formatMinutes(target) : "—"}</strong></span>
-        </div>
-      </div>
+  function toggleSubScene(id: string) {
+    setSelectedSubScenes((current) =>
+      current.includes(id)
+        ? current.filter((item) => item !== id)
+        : [...current, id],
     );
+  }
+
+  function resetForm() {
+    setFormName("");
+    setSelectedSubScenes([]);
+    setFormDescription("");
+    setPhotos((current) => {
+      current.forEach((photo) => URL.revokeObjectURL(photo.url));
+      return [];
+    });
+  }
+
+  async function handleAddPhoto(files: File[]) {
+    const supported = files.filter(isSupportedPhoto);
+    const errored = files
+      .map(photoSizeError)
+      .find((message): message is string => Boolean(message));
+    if (errored) {
+      notify("error", errored);
+      return;
+    }
+    setPhotos((current) => {
+      const room = 5 - current.length;
+      const next = supported.slice(0, room).map((file) => ({
+        file,
+        url: URL.createObjectURL(file),
+      }));
+      return [...current, ...next];
+    });
+  }
+
+  function removePhoto(index: number) {
+    setPhotos((current) => {
+      const next = [...current];
+      const [removed] = next.splice(index, 1);
+      if (removed) URL.revokeObjectURL(removed.url);
+      return next;
+    });
+  }
+
+  async function handleCreate() {
+    if (!activeCategory) return;
+    if (!formName.trim()) {
+      notify("error", "请填写场景库名称");
+      return;
+    }
+    if (selectedSubScenes.length === 0) {
+      notify("error", "请至少选择一个二级场景");
+      return;
+    }
+    setSaving(true);
+    try {
+      const photoRefs = [];
+      for (const photo of photos) {
+        const objectKey = await uploadGuidePhoto(photo.file);
+        photoRefs.push({
+          objectKey,
+          contentType: photo.file.type || "image/jpeg",
+          name: photo.file.name,
+        });
+      }
+      const created = await createCollectorLibrary({
+        name: formName.trim(),
+        categoryKey: activeCategory,
+        subSceneIds: selectedSubScenes,
+        description: formDescription.trim() || undefined,
+        ...(photoRefs.length ? { photoRefs } : {}),
+      });
+      setCreateOpen(false);
+      resetForm();
+      setReloadKey((current) => current + 1);
+      notify("success", "场景库已创建");
+      navigate(`/collector/scenes/${created.id}`);
+    } catch (error) {
+      notify("error", guideTaskErrorMessage(error));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(library: CollectorLibrary) {
+    if (!window.confirm(`确定删除场景库「${library.name}」？其下所有任务卡将一并删除。`)) {
+      return;
+    }
+    setDeletingId(library.id);
+    try {
+      await deleteCollectorLibrary(library.id);
+      setLibraries((current) => current.filter((item) => item.id !== library.id));
+      notify("success", "场景库已删除");
+    } catch (error) {
+      notify("error", guideTaskErrorMessage(error));
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   return (
@@ -141,233 +214,191 @@ export function TaskHallPage({ navigate }: { navigate(path: string): void }) {
         <div>
           <p className="page-kicker">众包采集入口</p>
           <h1>任务大厅</h1>
-          <span>选择正在进行的采集任务，按任务要求拍摄并提交视频</span>
+          <span>先选一个大场景分类，再进入你的场景库拍照生成任务卡并采集</span>
         </div>
       </div>
 
-      {mode === "live" && tasks.length > 0 && (
+      {mode === "unavailable" ? (
+        <div className="empty-state">
+          <Library size={28} />
+          <strong>场景服务暂不可用</strong>
+          <span>请稍后重试</span>
+        </div>
+      ) : (
         <>
-          <section className="task-hall-summary" aria-label="任务概览">
-            <div className="task-hall-summary-copy">
-              <span className="task-hall-summary-icon"><ClipboardList size={22} /></span>
-              <div>
-                <strong>找到适合的任务，先读要求再拍摄</strong>
-                <p>进行中的任务可立即提交；场景型任务会显示各场景采集缺口，优先补量场景更容易被质检通过。</p>
-              </div>
-            </div>
-            <div className="task-hall-stats">
-              <span><strong>{availableCount}</strong><small>可提交</small></span>
-              <span><strong>{pausedCount}</strong><small>已暂停</small></span>
-              <span><strong>{tasks.length}</strong><small>全部任务</small></span>
-            </div>
+          {/* 一级大场景分栏 */}
+          <section className="task-hall-scene-levels" aria-label="大场景分类">
+            {level1.map((scene) => (
+              <button
+                type="button"
+                key={scene.categoryKey}
+                className={`task-hall-level${activeCategory === scene.categoryKey ? " active" : ""}`}
+                aria-pressed={activeCategory === scene.categoryKey}
+                onClick={() => setActiveCategory(scene.categoryKey)}
+              >
+                <span className="task-hall-level-icon"><MapIcon size={18} /></span>
+                <strong>{scene.name}</strong>
+              </button>
+            ))}
           </section>
+
+          {/* 该大类下的场景库 + 新建入口 */}
           <div className="task-hall-toolbar">
-            <label className="search-field task-hall-search">
-              <Search size={16} />
-              <input
-                aria-label="搜索任务"
-                value={query}
-                placeholder="搜索任务名称或场景"
-                onChange={(event) => setQuery(event.target.value)}
-              />
-            </label>
-            <div className="segmented-control" role="group" aria-label="任务状态筛选">
-              {(["all", "published", "paused"] as const).map((value) => (
-                <button
-                  type="button"
-                  key={value}
-                  className={status === value ? "active" : ""}
-                  aria-pressed={status === value}
-                  onClick={() => setStatus(value)}
-                >
-                  {value === "all" ? "全部" : value === "published" ? "可提交" : "暂停中"}
-                </button>
+            <div className="task-hall-toolbar-title">
+              <strong>{activeLevel1?.name}</strong>
+              <span>{libraries.length} 个场景库</span>
+            </div>
+            <button type="button" className="button button-primary button-small" onClick={() => setCreateOpen(true)}>
+              <Plus size={14} />拍照新建场景库
+            </button>
+          </div>
+
+          {mode === "loading" ? (
+            <div className="empty-state"><span>正在读取场景库…</span></div>
+          ) : libraries.length === 0 ? (
+            <div className="empty-state">
+              <Camera size={28} />
+              <strong>该分类下还没有场景库</strong>
+              <span>点击「拍照新建场景库」，拍摄环境照片生成你的私有场景</span>
+            </div>
+          ) : (
+            <div className="task-hall-grid">
+              {libraries.map((library) => (
+                <article className="content-card task-card" key={library.id}>
+                  {library.coverObjectKey ? (
+                    <SceneCoverPhoto objectKey={library.coverObjectKey} />
+                  ) : (
+                    <div className="scene-library-cover scene-library-cover-empty">
+                      <Camera size={22} />
+                    </div>
+                  )}
+                  <div className="task-card-head">
+                    <div>
+                      <p className="task-card-eyebrow"><span>{library.categoryName}</span></p>
+                      <h2>{library.name}</h2>
+                    </div>
+                    <span className="task-card-tag">{library.taskCount} 张任务卡</span>
+                  </div>
+                  <p className="task-desc">
+                    {library.description || `包含 ${library.subScenes.map((s) => s.level2Name).join("、")}`}
+                  </p>
+                  <div className="task-card-foot">
+                    <div className="task-card-actions">
+                      <button
+                        type="button"
+                        className="button button-ghost button-small"
+                        disabled={deletingId === library.id}
+                        onClick={() => void handleDelete(library)}
+                        aria-label={`删除场景库 ${library.name}`}
+                      >
+                        <Trash2 size={14} />删除
+                      </button>
+                      <button
+                        type="button"
+                        className="button button-primary button-small"
+                        onClick={() => navigate(`/collector/scenes/${library.id}`)}
+                      >
+                        进入场景库<ArrowRight size={14} />
+                      </button>
+                    </div>
+                  </div>
+                </article>
               ))}
             </div>
-          </div>
+          )}
         </>
       )}
 
-      {/* 场景型任务：缺口优先面板 */}
-      {mode === "live" && sceneTypeScenes.length > 0 && (
-        <section className="content-card task-scene-layout" aria-label="场景采集缺口">
-          <div className="card-heading">
-            <div>
-              <h2>场景采集进度</h2>
-              <p>各场景当前合格存量 vs 目标时长，缺口大的场景优先采集可更快补齐</p>
+      {createOpen && (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal-card" role="dialog" aria-modal="true" aria-label="拍照新建场景库">
+            <div className="modal-body">
+              <div className="card-heading">
+                <div><h2>拍照新建场景库</h2><p>拍摄该场景的环境照片，首张作为场景库卡片封面</p></div>
+                <button type="button" className="icon-button" aria-label="关闭" onClick={() => { setCreateOpen(false); resetForm(); }}>×</button>
+              </div>
+
+              <label className="form-label"><span>场景库名称</span>
+                <input value={formName} onChange={(event) => setFormName(event.target.value)} placeholder="如：我家厨房" />
+              </label>
+
+              <label className="form-label"><span>二级场景（可多选）</span>
+                <div className="guide-checkbox-grid">
+                  {subScenes.map((scene) => (
+                    <label key={scene.id} className="guide-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={selectedSubScenes.includes(scene.id)}
+                        onChange={() => toggleSubScene(scene.id)}
+                      />
+                      <span>{scene.level2Name}</span>
+                    </label>
+                  ))}
+                  {subScenes.length === 0 && <span className="form-message">当前分类暂无二级场景</span>}
+                </div>
+              </label>
+
+              <label className="form-label"><span>环境照片（首张做封面）</span>
+                <div className="guide-photo-grid">
+                  {photos.map((photo, index) => (
+                    <div className="guide-photo-tile" key={`${photo.file.name}-${index}`}>
+                      <img src={photo.url} alt={`环境照片 ${index + 1}`} />
+                      <button type="button" className="guide-photo-remove" aria-label={`移除照片 ${index + 1}`} onClick={() => removePhoto(index)}>
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                  {photos.length < 5 && (
+                    <label className="guide-photo-add" role="button" aria-label="添加环境照片">
+                      <Upload size={22} />
+                      <span>添加照片</span>
+                      <em>{photos.length}/5</em>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        className="file-input"
+                        onChange={(event) => void handleAddPhoto(Array.from(event.target.files ?? []))}
+                      />
+                    </label>
+                  )}
+                </div>
+              </label>
+
+              <label className="form-label"><span>描述（可选）</span>
+                <textarea rows={2} value={formDescription} onChange={(event) => setFormDescription(event.target.value)} />
+              </label>
+
+              <div className="modal-actions">
+                <button type="button" className="button button-secondary" onClick={() => { setCreateOpen(false); resetForm(); }}>取消</button>
+                <button type="button" className="button button-primary" disabled={saving} onClick={() => void handleCreate()}>
+                  {saving ? <><Loader2 className="spin" size={14} />创建中…</> : "创建场景库"}
+                </button>
+              </div>
             </div>
           </div>
-          <div className="task-scene-grid">
-            {sceneTypeScenes.map((item) => {
-              const pct =
-                item.targetSeconds > 0
-                  ? Math.min(100, Math.round((item.currentSeconds / item.targetSeconds) * 100))
-                  : 0;
-              return (
-                <div className="task-scene-cell" key={item.sceneName}>
-                  <div className="task-scene-cell-head">
-                    <strong>{item.sceneName}</strong>
-                    {item.shortfallSeconds > 0 ? (
-                      <StatusBadge label="需补量" tone="warning" />
-                    ) : (
-                      <StatusBadge label="达标" tone="success" />
-                    )}
-                  </div>
-                  <div className="scene-progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label={`${item.sceneName} 采集进度 ${pct}%`}>
-                    <i style={{ width: `${pct}%` }} />
-                  </div>
-                  <div className="task-scene-cell-meta">
-                    <span>已采 <strong>{formatMinutes(item.currentSeconds)}</strong></span>
-                    <span>目标 <strong>{item.targetSeconds > 0 ? formatMinutes(item.targetSeconds) : "—"}</strong></span>
-                    <span className={item.shortfallSeconds > 0 ? "gap" : "ok"}>缺口 <strong>{item.shortfallSeconds > 0 ? formatMinutes(item.shortfallSeconds) : "0"}</strong></span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
-      {mode === "unavailable" ? (
-        <div className="empty-state">
-          <ClipboardList size={28} />
-          <strong>任务服务暂不可用</strong>
-          <span>请稍后重试</span>
-        </div>
-      ) : mode === "loading" ? (
-        <div className="empty-state">
-          <span>正在读取任务…</span>
-        </div>
-      ) : tasks.length === 0 ? (
-        <div className="empty-state">
-          <ClipboardList size={28} />
-          <strong>暂无进行中的任务</strong>
-          <span>管理员发布任务后即可在此查看并提交</span>
-        </div>
-      ) : filteredTasks.length === 0 ? (
-        <div className="empty-state">
-          <Search size={26} />
-          <strong>没有匹配的任务</strong>
-          <span>换个关键词或状态再试</span>
-        </div>
-      ) : (
-        <div className="task-hall-grid">
-          {filteredTasks.map((task) => (
-            <article className="content-card task-card" key={task.id}>
-              <div className="task-card-head">
-                <div>
-                  <p className="task-card-eyebrow">
-                    {task.taskType === "generic" ? (
-                      <>
-                        <TaskTypeBadge type="generic" />
-                        <span>不限具体场景</span>
-                      </>
-                    ) : (
-                      <>
-                        <TaskTypeBadge type={task.taskType} label={task.taskType === "preset" ? "场景任务" : task.taskType === "scene_type" ? "场景型" : "自定义"} />
-                        <span>场景：{task.sceneName}</span>
-                      </>
-                    )}
-                  </p>
-                  <h2>{task.title}</h2>
-                </div>
-                <StatusBadge
-                  label={task.status === "paused" ? "已暂停" : "进行中"}
-                  tone={task.status === "paused" ? "warning" : "success"}
-                />
-              </div>
-              <p className="task-desc">
-                {task.normalizedRequirements?.scene_description ??
-                  (task.description || "（任务未提供说明）")}
-              </p>
-              {renderSceneProgress(task)}
-              {task.normalizedRequirements?.requirements.length ? (
-                <div className="task-requirement-block">
-                  <div className="task-requirement-heading">
-                    <span><ShieldCheck size={14} />拍摄要求</span>
-                    <em>共 {task.normalizedRequirements.requirements.length} 条</em>
-                  </div>
-                  <ul className="task-req-list">
-                    {task.normalizedRequirements.requirements
-                      .slice(0, 4)
-                      .map((item, index) => (
-                        <li key={`${item.type}-${index}`}>
-                          <span className={`req-badge ${item.type}`}>
-                            {item.type === "hard" ? "硬性" : "一般"}
-                          </span>
-                          <span>{item.content}</span>
-                        </li>
-                      ))}
-                    {task.normalizedRequirements.requirements.length > 4 && (
-                      <li className="req-more">
-                        进入提交页可查看全部要求
-                      </li>
-                    )}
-                  </ul>
-                </div>
-              ) : null}
-              <div className="task-card-foot">
-                <div className="task-price">
-                  <CircleDollarSign size={16} />
-                  <span><strong>{task.pricePointsPerMinute !== null ? `${task.pricePointsPerMinute} 元/小时` : "按全局规则计费"}</strong><small>通过质检后计入金额</small></span>
-                </div>
-                {task.taskType === "scene_type" ? (
-                  <div className="task-card-actions">
-                    <button
-                      type="button"
-                      className="button button-secondary button-small"
-                      disabled={task.status !== "published"}
-                      onClick={() => goPhotoGuide(task)}
-                    >
-                      <Camera size={14} />我的场景库
-                    </button>
-                    <button
-                      type="button"
-                      className="button button-primary button-small"
-                      disabled={task.status !== "published"}
-                      onClick={() => goCollect(task)}
-                    >
-                      {task.status === "paused" ? (
-                        <>
-                          <PauseCircle size={14} />
-                          已暂停
-                        </>
-                      ) : (
-                        <>
-                          去采集
-                          <ArrowRight size={14} />
-                        </>
-                      )}
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    className="button button-primary button-small"
-                    disabled={task.status !== "published"}
-                    onClick={() => goCollect(task)}
-                  >
-                    {task.status === "paused" ? (
-                      <>
-                        <PauseCircle size={14} />
-                        已暂停
-                      </>
-                    ) : (
-                      <>
-                        去采集
-                        <ArrowRight size={14} />
-                      </>
-                    )}
-                  </button>
-                )}
-              </div>
-              {task.status === "published" && (
-                <span className="task-card-ready"><CheckCircle2 size={13} />当前可提交</span>
-              )}
-            </article>
-          ))}
         </div>
       )}
     </div>
   );
+}
+
+// 场景库封面图：从 MinIO 取预签名 URL 展示
+function SceneCoverPhoto({ objectKey }: { objectKey: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    getGuidePhotoUrl(objectKey)
+      .then((result) => {
+        if (active) setUrl(result.url);
+      })
+      .catch(() => {
+        if (active) setUrl(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [objectKey]);
+  if (!url) return <div className="scene-library-cover scene-library-cover-empty"><Camera size={22} /></div>;
+  return <div className="scene-library-cover"><img src={url} alt="场景库封面" /></div>;
 }

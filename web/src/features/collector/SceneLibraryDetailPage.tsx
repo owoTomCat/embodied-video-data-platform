@@ -68,10 +68,10 @@ export function SceneLibraryDetailPage({
   }
 
   function goCollect(task: GuideTask) {
-    // 将任务卡 id + 场景库名写入会话，提交页顶部显示该任务卡的操作提示
+    // 从任务卡进入提交：写入任务卡 id + 场景库 id，提交页顶部显示任务卡提示，提交挂场景大类+任务卡id
     sessionStorage.setItem("evdp:selectedGuideTaskId", task.id);
-    sessionStorage.setItem("evdp:selectedGuideLibrary", library?.name ?? "");
-    sessionStorage.setItem("evdp:selectedTaskId", task.sceneLibraryId ?? "");
+    sessionStorage.setItem("evdp:selectedGuideLibraryId", task.sceneLibraryId ?? "");
+    sessionStorage.removeItem("evdp:selectedTaskId");
     navigate("/collector/upload");
   }
 
@@ -102,8 +102,8 @@ export function SceneLibraryDetailPage({
           </span>
         </div>
         <div className="task-hall-toolbar-actions">
-          <button type="button" className="button button-secondary" onClick={() => navigate("/collector/scenes")}>
-            <ArrowLeft size={14} />返回
+          <button type="button" className="button button-secondary" onClick={() => navigate("/collector/tasks")}>
+            <ArrowLeft size={14} />返回任务大厅
           </button>
           <button type="button" className="button button-primary" onClick={goCreate}>
             <Sparkles size={14} />拍照创建任务

@@ -617,8 +617,10 @@ export interface SubmissionUploadApi {
     dataUsageAuthorized: boolean;
     privacyConfirmed: boolean;
     sensitiveContentConfirmed: boolean;
-    taskId: string;
+    taskId?: string;
     taskRequirementsConfirmed: boolean;
+    guideTaskId?: string;
+    sceneLibraryId?: string;
   }): Promise<CreateUploadResult>;
   presignParts(id: string, partNumbers: number[]): Promise<PresignedPart[]>;
   verifyResumeUpload(

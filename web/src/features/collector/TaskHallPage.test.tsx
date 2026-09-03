@@ -6,61 +6,56 @@ import { PlatformApp } from "../../app/PlatformApp";
 import { IdentityProvider } from "../../auth/client/IdentityContext";
 import { accountForRole, demoAccounts } from "../../test/accountFixtures";
 
-const taskApi = vi.hoisted(() => ({
-  listTasksForCollector: vi.fn(),
-}));
-
-const sceneApi = vi.hoisted(() => ({
-  getSceneProgress: vi.fn(),
-}));
-
-vi.mock("../../tasks/client/taskApi", () => ({
-  listTasksForCollector: taskApi.listTasksForCollector,
-  taskErrorMessage: (error: unknown) =>
+const sceneGuideApi = vi.hoisted(() => ({
+  listSceneLevel1: vi.fn(),
+  listLibrariesByCategory: vi.fn(),
+  listSceneClassification: vi.fn(),
+  createCollectorLibrary: vi.fn(),
+  deleteCollectorLibrary: vi.fn(),
+  getGuidePhotoUrl: vi.fn(),
+  getCollectorLibrary: vi.fn(),
+  guideTaskErrorMessage: (error: unknown) =>
     error instanceof Error ? error.message : "操作失败，请重试",
 }));
 
-vi.mock("../../scene-system/client/sceneSystemApi", () => ({
-  getSceneProgress: sceneApi.getSceneProgress,
+vi.mock("../../scene-guide/client/sceneGuideApi", () => ({
+  listSceneLevel1: sceneGuideApi.listSceneLevel1,
+  listLibrariesByCategory: sceneGuideApi.listLibrariesByCategory,
+  listSceneClassification: sceneGuideApi.listSceneClassification,
+  createCollectorLibrary: sceneGuideApi.createCollectorLibrary,
+  deleteCollectorLibrary: sceneGuideApi.deleteCollectorLibrary,
+  getGuidePhotoUrl: sceneGuideApi.getGuidePhotoUrl,
+  getCollectorLibrary: sceneGuideApi.getCollectorLibrary,
+  guideTaskErrorMessage: sceneGuideApi.guideTaskErrorMessage,
 }));
 
-const publishedTask = {
-  id: "TASK-1",
-  title: "厨房数据采集",
-  description: "拍摄厨房场景操作视频",
-  sceneName: "家庭厨房",
-  sceneLabelId: "SCENE-001",
-  normalizedRequirements: {
-    scene_description: "家庭厨房场景，第一人称双手操作。",
-    requirements: [
-      { type: "hard", content: "必须全程第一人称视角拍摄" },
-      { type: "soft", content: "光线充足画面清晰" },
-    ],
-    quality_notes: [],
-  },
-  pricePointsPerMinute: 15.5,
-  status: "published",
-  revision: 1,
-  publishedAt: Date.now(),
-};
+const level1 = [
+  { code: "F01", name: "家庭", categoryKey: "family" },
+  { code: "O01", name: "办公室", categoryKey: "office" },
+];
 
-const pausedTask = {
-  ...publishedTask,
-  id: "TASK-2",
-  title: "户外街道数据采集",
-  sceneName: "户外街道",
-  status: "paused",
+const kitchenLibrary = {
+  id: "SL-1",
+  name: "我家厨房",
+  categoryKey: "family",
+  categoryName: "家庭",
+  subSceneIds: ["SC-001"],
+  subScenes: [{ id: "SC-001", level2Name: "厨房", level1Code: "F01" }],
+  photoRefs: [],
+  coverObjectKey: null,
+  description: "",
+  enabled: true,
+  ownerAccountId: "U-COL-01",
+  taskCount: 3,
+  createdAt: Date.now(),
+  updatedAt: Date.now(),
 };
 
 function renderHall() {
   window.history.replaceState({}, "", "/collector/tasks");
   const collector = accountForRole("collector");
   return render(
-    <IdentityProvider
-      currentAccount={collector}
-      accounts={demoAccounts}
-      teams={[]}
-    >
+    <IdentityProvider currentAccount={collector} accounts={demoAccounts} teams={[]}>
       <PlatformApp initialPath="/collector/tasks" />
     </IdentityProvider>,
   );
@@ -69,80 +64,56 @@ function renderHall() {
 describe("TaskHallPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    taskApi.listTasksForCollector.mockResolvedValue([publishedTask, pausedTask]);
-    sceneApi.getSceneProgress.mockResolvedValue([]);
+    sceneGuideApi.listSceneLevel1.mockResolvedValue(level1);
+    sceneGuideApi.listLibrariesByCategory.mockResolvedValue([kitchenLibrary]);
+    sceneGuideApi.listSceneClassification.mockResolvedValue([
+      { id: "SC-001", level1Code: "F01", level1Name: "家庭", level2Name: "厨房", description: "", enabled: true, updatedAt: 0 },
+    ]);
+    sceneGuideApi.getGuidePhotoUrl.mockResolvedValue({ url: "http://minio.local/cover", expiresAt: 0 });
+    sceneGuideApi.getCollectorLibrary.mockResolvedValue({ ...kitchenLibrary, tasks: [] });
   });
 
-  it("renders published and paused tasks with requirements", async () => {
+  it("renders scene levels and the active category's libraries", async () => {
     renderHall();
-    expect(await screen.findByText("厨房数据采集")).toBeInTheDocument();
-    expect(screen.getByText("户外街道数据采集")).toBeInTheDocument();
-    expect(screen.getByText("场景：家庭厨房")).toBeInTheDocument();
-    expect(screen.getAllByText("15.5 元/小时").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("必须全程第一人称视角拍摄").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("已暂停").length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("家庭")).length).toBeGreaterThan(0);
+    expect(screen.getByText("办公室")).toBeInTheDocument();
+    expect(await screen.findByText("我家厨房")).toBeInTheDocument();
+    expect(screen.getByText("3 张任务卡")).toBeInTheDocument();
   });
 
-  it("navigates to the upload page with the selected task for a published task", async () => {
+  it("switches to another category and reloads its libraries", async () => {
     const user = userEvent.setup();
     renderHall();
-    await screen.findByText("厨房数据采集");
-
-    const goButtons = screen.getAllByRole("button", { name: "去采集" });
-    expect(goButtons).toHaveLength(1);
-    await user.click(goButtons[0]!);
-
-    expect(window.location.pathname).toBe("/collector/upload");
+    await screen.findByText("我家厨房");
+    // 切换到大类后返回空库
+    sceneGuideApi.listLibrariesByCategory.mockResolvedValue([]);
+    await user.click(screen.getByRole("button", { name: /办公室/ }));
+    expect(await screen.findByText("该分类下还没有场景库")).toBeInTheDocument();
   });
 
-  it("disables collection for paused tasks", async () => {
+  it("opens the create modal and creates a library", async () => {
+    sceneGuideApi.createCollectorLibrary.mockResolvedValue({
+      ...kitchenLibrary,
+      id: "SL-NEW",
+      name: "我家卧室",
+    });
+    const user = userEvent.setup();
     renderHall();
-    await screen.findByText("厨房数据采集");
-
-    const pausedButton = screen.getByRole("button", { name: /已暂停/ });
-    expect(pausedButton).toBeDisabled();
+    await screen.findByText("我家厨房");
+    await user.click(screen.getByRole("button", { name: /拍照新建场景库/ }));
+    await user.type(await screen.findByLabelText("场景库名称"), "我家卧室");
+    await user.click(screen.getByLabelText("厨房"));
+    await user.click(screen.getByRole("button", { name: /创建场景库/ }));
+    expect(sceneGuideApi.createCollectorLibrary).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "我家卧室", categoryKey: "family" }),
+    );
   });
 
-  it("shows an empty state when no tasks are available", async () => {
-    taskApi.listTasksForCollector.mockResolvedValue([]);
+  it("navigates to a library's detail page", async () => {
+    const user = userEvent.setup();
     renderHall();
-    expect(
-      await screen.findByText("暂无进行中的任务"),
-    ).toBeInTheDocument();
-  });
-
-  it("shows scene progress for scene_type tasks and a gap panel", async () => {
-    const sceneTask = {
-      ...publishedTask,
-      id: "TASK-SCENE",
-      title: "家庭厨房场景采集",
-      sceneName: "家庭厨房",
-      taskType: "scene_type",
-      targetDurationSeconds: 3600,
-    };
-    taskApi.listTasksForCollector.mockResolvedValue([sceneTask]);
-    sceneApi.getSceneProgress.mockResolvedValue([
-      {
-        sceneName: "家庭厨房",
-        type: "scene_type",
-        currentSeconds: 1200,
-        targetSeconds: 3600,
-        shortfallSeconds: 2400,
-        taskCount: 1,
-      },
-    ]);
-
-    renderHall();
-    expect(await screen.findByText("家庭厨房场景采集")).toBeInTheDocument();
-    // 缺口优先面板
-    expect(await screen.findByText("场景采集进度")).toBeInTheDocument();
-    expect(screen.getByText("需补量")).toBeInTheDocument();
-    // 任务卡内的场景进度块
-    expect(screen.getByText("本场景采集进度")).toBeInTheDocument();
-    expect(screen.getAllByText("1 小时").length).toBeGreaterThan(0); // 目标 3600s
-    expect(screen.getAllByText("20 分钟").length).toBeGreaterThan(0); // 已采 1200s
-    expect(screen.getAllByText("40 分钟").length).toBeGreaterThan(0); // 缺口 2400s
-    // 场景型任务卡片提供「我的场景库」入口
-    expect(screen.getByRole("button", { name: /我的场景库/ })).toBeInTheDocument();
+    await screen.findByText("我家厨房");
+    await user.click(screen.getByRole("button", { name: /进入场景库/ }));
+    expect(window.location.pathname).toBe("/collector/scenes/SL-1");
   });
 });

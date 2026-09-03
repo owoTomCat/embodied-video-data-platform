@@ -579,6 +579,19 @@ export class SceneGuideService {
     return { ...library, tasks };
   }
 
+  /** 数采：获取场景库/任务卡照片的预签名下载 URL（用于场景库卡片封面展示）。 */
+  async resolvePhotoUrl(actor: PublicUser, objectKey: string): Promise<{ url: string; expiresAt: number }> {
+    sceneGuidePolicy.requireCollector(actor);
+    if (!this.storage.presignDownloadObject) {
+      throw new SceneGuideFailure("UNSUPPORTED", "对象存储不支持预签名下载", 501);
+    }
+    const download = await this.storage.presignDownloadObject({
+      objectKey,
+      expiresInSeconds: 900,
+    });
+    return { url: download.url, expiresAt: download.expiresAt.getTime() };
+  }
+
   // ---------- helpers ----------
 
   private async taskCountByLibrary(callerOwner: string | null) {
