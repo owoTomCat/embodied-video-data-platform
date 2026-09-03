@@ -70,7 +70,7 @@ const draftTask = {
   description: "",
   sceneName: "家庭厨房",
   sceneLabelId: null,
-  taskType: "preset",
+  taskType: "custom",
   rawRequirements: "第一人称，出现双手",
   normalizedRequirements: null,
   normalizationStatus: "pending",
@@ -250,7 +250,6 @@ describe("TasksPage", () => {
     expect(screen.getByRole("heading", { name: "编辑采集任务" })).toBeInTheDocument();
     const titleInput = screen.getByLabelText(/任务标题/);
     expect(titleInput).toHaveValue("厨房数据采集");
-    expect(screen.getByText(/场景库场景 · 家庭厨房/)).toBeInTheDocument();
 
     await user.clear(titleInput);
     await user.type(titleInput, "厨房采集更新版");

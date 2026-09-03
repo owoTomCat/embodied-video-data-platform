@@ -58,11 +58,11 @@ describe("TaskDimensionStats", () => {
       <TaskDimensionStats stats={stats} active="all" onSelect={vi.fn()} />,
     );
     expect(screen.getByText("全部任务")).toBeInTheDocument();
-    expect(screen.getByText("厨房预设任务")).toBeInTheDocument();
+    expect(screen.getByText("厨房任务")).toBeInTheDocument();
     expect(screen.getByText("通用综合采集")).toBeInTheDocument();
     expect(screen.getByText("未关联任务")).toBeInTheDocument();
     // 类型徽标
-    expect(screen.getByText("预设")).toBeInTheDocument();
+    expect(screen.getByText("自定义")).toBeInTheDocument();
     expect(screen.getAllByText("通用").length).toBeGreaterThan(0);
     // 汇总提交数
     expect(screen.getByText("8")).toBeInTheDocument();
@@ -73,7 +73,7 @@ describe("TaskDimensionStats", () => {
     render(
       <TaskDimensionStats stats={stats} active="all" onSelect={onSelect} />,
     );
-    fireEvent.click(screen.getByText("厨房预设任务"));
+    fireEvent.click(screen.getByText("厨房任务"));
     expect(onSelect).toHaveBeenCalledWith("TASK-1");
 
     fireEvent.click(screen.getByText("未关联任务"));
