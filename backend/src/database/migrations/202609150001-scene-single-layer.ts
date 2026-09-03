@@ -60,6 +60,11 @@ export class SceneSingleLayer2026091500001 implements MigrationInterface {
       ALTER TABLE "scene_classification" RENAME TO "scene"
     `);
 
+    // 6.5 列名 level2_name → name（与 SceneEntity.name 对齐）
+    await queryRunner.query(`
+      ALTER TABLE "scene" RENAME COLUMN "level2_name" TO "name"
+    `);
+
     // 7. 重建唯一索引（(level1_code, level2_name) → (category_key, name)）
     await queryRunner.query(`
       DROP INDEX IF EXISTS "uq_scene_classification_level2"
@@ -103,6 +108,11 @@ export class SceneSingleLayer2026091500001 implements MigrationInterface {
     // 2. 表名改回
     await queryRunner.query(`
       ALTER TABLE "scene" RENAME TO "scene_classification"
+    `);
+
+    // 2.5 列名 name → level2_name（与 up 步骤 6.5 反转）
+    await queryRunner.query(`
+      ALTER TABLE "scene_classification" RENAME COLUMN "name" TO "level2_name"
     `);
 
     // 3. 恢复 level1_code / level1_name（由 category_key 反查）
