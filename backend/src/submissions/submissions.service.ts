@@ -71,7 +71,7 @@ export type SubmissionTaskStat = {
   taskId: string | null;
   title: string;
   sceneName: string;
-  taskType: "generic" | "preset" | "custom" | "none";
+  taskType: "generic" | "scene_type" | "custom" | "none";
   total: number;
   reviewed: number;
   passed: number;
