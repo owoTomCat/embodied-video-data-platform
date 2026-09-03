@@ -17,8 +17,6 @@ import {
 import { getLabelSet } from "../../ai-quality/client/aiQualityApi";
 import { Modal } from "../../components/Modal";
 import { listSceneCategoryPricing } from "../../scene-pricing/client/scenePricingApi";
-import { listSceneLibrary } from "../../scene-system/client/sceneSystemApi";
-import type { SceneLibraryItem } from "../../scene-system/contracts";
 import { listTaskTypeCatalog } from "../../tasks/client/taskApi";
 import type {
   CollectionTask,
@@ -70,10 +68,6 @@ export function TaskFormModal({
       ? String(task.pricePointsPerMinute)
       : "",
   );
-  const [libraryScenes, setLibraryScenes] = useState<SceneLibraryItem[]>([]);
-  const [sceneLibraryId, setSceneLibraryId] = useState(
-    task?.sceneLibraryId ?? null,
-  );
   const [targetMinutes, setTargetMinutes] = useState(
     task && task.targetDurationSeconds != null
       ? String(task.targetDurationSeconds / 60)
@@ -104,12 +98,10 @@ export function TaskFormModal({
       listTaskTypeCatalog(),
       getLabelSet(),
       listSceneCategoryPricing(),
-      listSceneLibrary(),
     ])
-      .then(([catalog, labelSet, categories, library]) => {
+      .then(([catalog, labelSet, categories]) => {
         if (!active) return;
         setGenericTemplate(catalog.generic);
-        setLibraryScenes(library);
         const byKey = Object.fromEntries(
           categories.map((item) => [item.categoryKey, item.pricePerHour]),
         );
@@ -132,15 +124,6 @@ export function TaskFormModal({
   }, [open]);
 
   /** 选中场景库场景：场景名取场景库名称，单价带出该场景类别的定价（元/小时） */
-  function applyLibraryScene(item: SceneLibraryItem, priceMap?: Record<string, number>) {
-    setSceneLibraryId(item.id);
-    setSceneName(item.name);
-    const defaultPrice = (priceMap ?? priceByCategory)[item.categoryKey];
-    if (defaultPrice !== undefined && defaultPrice > 0) {
-      setPrice(String(defaultPrice));
-    }
-  }
-
   function applyTemplate(
     kind: "generic",
     template?: { defaultTitle: string; description: string; requirements: string[] },
@@ -152,7 +135,6 @@ export function TaskFormModal({
     setDescription(source.description);
     setRawRequirements(source.requirements.join("\n"));
     setSceneName(GENERIC_SCENE_NAME);
-    setSceneLibraryId(null);
     // 通用任务按「通用」大类默认价带出
     const defaultPrice = (priceMap ?? priceByCategory).generic;
     if (defaultPrice !== undefined && defaultPrice > 0) {
@@ -168,10 +150,9 @@ export function TaskFormModal({
       applyTemplate("generic");
     } else if (next === "custom" || next === "scene_type") {
       // 自定义/场景型：清空自动带出的场景名与默认价，由管理员填写场景名（场景型=二级场景）与各自参数
-      if (sceneName === GENERIC_SCENE_NAME || sceneLibraryId) {
+      if (sceneName === GENERIC_SCENE_NAME) {
         setSceneName("");
       }
-      setSceneLibraryId(null);
       setPrice("");
     }
   }
@@ -211,7 +192,7 @@ export function TaskFormModal({
       description: description.trim(),
       sceneName: trimmedScene,
       taskType,
-      sceneLibraryId: taskType === "preset" ? sceneLibraryId : null,
+      sceneLibraryId: null,
       ...(taskType === "scene_type" && parsedTargetMinutes !== null
         ? { targetDurationSeconds: Math.max(1, Math.round(parsedTargetMinutes * 60)) }
         : {}),
@@ -240,8 +221,6 @@ export function TaskFormModal({
   const filteredSceneOptions = sceneOptions.filter((name) =>
     name.toLowerCase().includes(sceneName.trim().toLowerCase()),
   );
-  const selectedLibraryScene =
-    libraryScenes.find((item) => item.id === sceneLibraryId) ?? null;
 
   return (
     <Modal
@@ -291,41 +270,6 @@ export function TaskFormModal({
             </span>
             <span className="task-type-option-check">{taskType === "scene_type" ? "✓" : ""}</span>
           </button>
-
-          <div className="task-type-group-heading">场景库场景</div>
-          <div className="task-library-picker" role="group" aria-label="场景库场景">
-            {libraryScenes.length > 0 ? (
-              <ul className="task-library-list">
-                {libraryScenes.map((item) => {
-                  const selected = taskType === "preset" && sceneLibraryId === item.id;
-                  return (
-                    <li key={item.id}>
-                      <button
-                        type="button"
-                        className={`task-library-option${selected ? " active" : ""}`}
-                        onClick={() => {
-                          setTaskType("preset");
-                          setError("");
-                          applyLibraryScene(item);
-                        }}
-                        aria-pressed={selected}
-                        disabled={!item.enabled}
-                      >
-                        <span className="task-type-preset-icon"><Map size={16} /></span>
-                        <span className="task-library-copy">
-                          <strong>{item.name}</strong>
-                          <small>{item.categoryName} · {item.subScenes.map((sub) => sub.level2Name).join(" / ") || "未设置子场景"}{!item.enabled ? " · 已停用" : ""}</small>
-                        </span>
-                        <span className="task-type-option-check">{selected ? "✓" : ""}</span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : (
-              <p className="form-message">场景库暂无场景，请先在「配置 → 场景体系」中创建。</p>
-            )}
-          </div>
 
           <button
             type="button"
@@ -381,11 +325,6 @@ export function TaskFormModal({
           {taskType === "generic" && (
             <p className="task-type-note">
               通用任务场景固定为「通用」：AI 质检不校验特定场景，重点判定任务真实性与完整度。
-            </p>
-          )}
-          {taskType === "preset" && selectedLibraryScene && (
-            <p className="task-type-note">
-              已选择场景库场景「{selectedLibraryScene.name}」（类别：{selectedLibraryScene.categoryName}），任务场景名与计费单价已自动带出，可继续调整。
             </p>
           )}
         </section>
@@ -470,11 +409,6 @@ export function TaskFormModal({
               <span>元 / 小时</span>
             </div>
           </label>
-          {taskType === "preset" && selectedLibraryScene && priceByCategory[selectedLibraryScene.categoryKey] !== undefined && (
-            <p className="task-type-note">
-              已按「{selectedLibraryScene.categoryName}」大类默认价 {priceByCategory[selectedLibraryScene.categoryKey].toFixed(2)} 元/小时带出，可修改。
-            </p>
-          )}
           {taskType === "scene_type" && (
             <label className="form-label task-price-field">
               <span>目标时长（分钟）</span>

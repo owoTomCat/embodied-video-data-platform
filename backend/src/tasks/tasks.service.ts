@@ -286,9 +286,7 @@ export class TasksService {
     const price =
       explicitPrice ??
       categoryPrice ??
-      (input.taskType === "preset"
-        ? await this.scenePricing.pricePerHourForSceneName(sceneName)
-        : null);
+      null;
     const task = await this.tasks.save(
       this.tasks.create({
         id: `TASK-${randomUUID().slice(0, 8)}`,

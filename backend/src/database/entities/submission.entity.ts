@@ -121,6 +121,16 @@ export class SubmissionEntity {
   })
   taskPricePointsPerMinute: string | null = null;
 
+  /** 关联的 AI 指导任务卡（guide_tasks）；从任务卡进入提交时写入，追溯场景库→任务卡→提交链路 */
+  @Index("idx_submissions_guide_task")
+  @Column({ name: "guide_task_id", type: "varchar", length: 64, nullable: true })
+  guideTaskId: string | null = null;
+
+  /** 关联的数采个人场景库；提交归属单元（场景大类计费通过 scene_library.categoryKey 决定） */
+  @Index("idx_submissions_scene_library")
+  @Column({ name: "scene_library_id", type: "varchar", length: 64, nullable: true })
+  sceneLibraryId: string | null = null;
+
   @Column({ name: "asset_status", type: "varchar", length: 24, default: "active" })
   assetStatus: SubmissionAssetStatus = "active";
 

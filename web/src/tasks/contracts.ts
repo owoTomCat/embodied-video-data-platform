@@ -1,5 +1,6 @@
 export type CollectionTaskStatus = "draft" | "published" | "paused" | "closed";
 export type TaskNormalizationStatus = "pending" | "ready" | "failed";
+// preset（场景库场景任务）已废弃：不再新建，但保留类型以兼容历史数据读取。
 export type CollectionTaskType = "generic" | "scene_type" | "preset" | "custom";
 
 export type PresetScene = {

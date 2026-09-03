@@ -80,6 +80,7 @@ import { SceneTypeTask2026090500001 } from "./migrations/202609050001-scene-type
 import { GuideTasks2026090600001 } from "./migrations/202609060001-guide-tasks.js";
 import { SceneLibraryOwner2026091000001 } from "./migrations/202609100001-scene-library-owner.js";
 import { GuideTaskSceneLibrary2026091000002 } from "./migrations/202609100002-guide-task-scene-library.js";
+import { UnifiedSceneManagement2026091100001 } from "./migrations/202609110001-unified-scene-management.js";
 import { WalletAndSettlement2026083100001 } from "./migrations/202608310001-wallet-and-settlement.js";
 import { TaskSegmentAssets2026090300001 } from "./migrations/202609030001-task-segment-assets.js";
 
@@ -178,6 +179,7 @@ export function createDataSource(
       GuideTasks2026090600001,
       SceneLibraryOwner2026091000001,
       GuideTaskSceneLibrary2026091000002,
+      UnifiedSceneManagement2026091100001,
     ],
     synchronize: false,
     logging: false,

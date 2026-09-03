@@ -39,6 +39,14 @@ export class SceneLibraryEntity {
   })
   subSceneIds: string[] = [];
 
+  /** 建库时拍摄的环境照片（MinIO 对象），首张用作场景库卡片封面 + 供 AI 识别生成任务卡 */
+  @Column({ name: "photo_refs", type: "jsonb", default: () => "'[]'::jsonb" })
+  photoRefs: Array<{ objectKey: string; contentType?: string; name?: string }> = [];
+
+  /** 场景库卡片封面对象 key（= 首张照片），便于数采快速分辨 */
+  @Column({ name: "cover_object_key", type: "varchar", length: 512, nullable: true })
+  coverObjectKey: string | null = null;
+
   @Column({ type: "text", default: "" })
   description = "";
 

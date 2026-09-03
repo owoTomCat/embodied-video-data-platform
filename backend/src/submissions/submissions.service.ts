@@ -19,6 +19,9 @@ import type { PublicUser } from "../auth/auth.types.js";
 import { AuditLogEntity } from "../database/entities/audit-log.entity.js";
 import { AnnotationRunEntity } from "../database/entities/annotation-run.entity.js";
 import { CollectionTaskEntity } from "../database/entities/collection-task.entity.js";
+import { GuideTaskEntity } from "../database/entities/guide-task.entity.js";
+import { SceneCategoryPricingEntity } from "../database/entities/scene-category-pricing.entity.js";
+import { SceneLibraryEntity } from "../database/entities/scene-library.entity.js";
 import { csvDocument } from "../csv/csv.js";
 import { JobOutboxEntity } from "../database/entities/job-outbox.entity.js";
 import { DeliveryPackageItemEntity } from "../database/entities/delivery-package-item.entity.js";
@@ -397,8 +400,12 @@ function publicSubmission(submission: SubmissionEntity) {
             submission.taskPricePointsPerMinute === undefined
               ? null
               : Number(submission.taskPricePointsPerMinute),
+          guideTaskId: submission.guideTaskId,
+          sceneLibraryId: submission.sceneLibraryId,
         }
       : null,
+    guideTaskId: submission.guideTaskId,
+    sceneLibraryId: submission.sceneLibraryId,
     settlementStatus: pointCycleItems.length > 0 ? "settled" : "unsettled",
     duplicateCandidates: duplicateCandidates
       .filter((candidate) => candidate.status === "candidate")
@@ -615,25 +622,56 @@ export class SubmissionsService {
         400,
       );
     }
-    const task = await this.tasks.findOneBy({ id: input.taskId });
-    if (!task) {
+    const task = input.taskId
+      ? await this.tasks.findOneBy({ id: input.taskId })
+      : null;
+    if (input.taskId && task === null) {
       throw new SubmissionFailure("TASK_NOT_FOUND", "采集任务不存在", 404);
     }
-    if (task.status !== "published") {
+    if (task && task.status !== "published") {
       throw new SubmissionFailure(
         "TASK_NOT_ACCEPTING",
         "该采集任务当前不接受提交",
         409,
       );
     }
-    if (task.normalizationStatus !== "ready" || !task.normalizedRequirements) {
+    if (task && (task.normalizationStatus !== "ready" || !task.normalizedRequirements)) {
       throw new SubmissionFailure(
         "TASK_REQUIREMENTS_NOT_READY",
         "采集任务要求尚未就绪",
         409,
       );
     }
-    const taskRequirements = task.normalizedRequirements;
+    const taskRequirements = task?.normalizedRequirements ?? null;
+    // 从 AI 任务卡 / 场景库进入的提交路径：无平台采集任务，转为「场景大类计费 + 连任务卡」
+    let guideTaskId: string | null = input.guideTaskId ?? null;
+    let sceneLibraryId: string | null = input.sceneLibraryId ?? null;
+    let sceneLibraryName: string | null = null;
+    let sceneCategoryKey: string | null = null;
+    let scenePricePerHour: string | null = null;
+    let guideSnapshot: unknown = null;
+    if (guideTaskId || sceneLibraryId) {
+      const guideTask = guideTaskId
+        ? await this.dataSource
+            .getRepository(GuideTaskEntity)
+            .findOneBy({ id: guideTaskId })
+        : null;
+      const libraryId = sceneLibraryId ?? guideTask?.sceneLibraryId ?? null;
+      const library = libraryId
+        ? await this.dataSource
+            .getRepository(SceneLibraryEntity)
+            .findOneBy({ id: libraryId })
+        : null;
+      guideTaskId = guideTask?.id ?? null;
+      sceneLibraryId = library?.id ?? libraryId;
+      sceneLibraryName = library?.name ?? guideTask?.title ?? null;
+      sceneCategoryKey = library?.categoryKey ?? null;
+      if (sceneCategoryKey) {
+        const pricing = await this.sceneCategoryPricing(sceneCategoryKey);
+        scenePricePerHour = pricing?.pricePerHour ?? null;
+      }
+      guideSnapshot = guideTask?.taskCard ?? null;
+    }
     const extension = extname(input.fileName).toLocaleLowerCase("en-US");
     const expectedExtension =
       input.contentType === "video/mp4" ? ".mp4" : ".mov";
@@ -697,16 +735,26 @@ export class SubmissionsService {
           isTestData: false,
           // 任务关联与快照：锁定任务版本、场景名、规范化要求与单价，
           // 后续任务修改不影响本提交的 AI 质检与结算。
-          taskId: task.id,
-          taskRevision: task.revision,
-          taskSceneName: task.sceneName,
-          taskRequirementsSnapshot: {
-            scene_name: task.sceneName,
-            scene_description: taskRequirements.scene_description,
-            requirements: taskRequirements.requirements,
-            quality_notes: taskRequirements.quality_notes ?? [],
-          },
-          taskPricePointsPerMinute: task.pricePointsPerMinute,
+          taskId: task?.id ?? null,
+          taskRevision: task?.revision ?? null,
+          taskSceneName: task?.sceneName ?? sceneLibraryName ?? null,
+          taskRequirementsSnapshot: taskRequirements
+            ? {
+                scene_name: task?.sceneName ?? null,
+                scene_description: taskRequirements.scene_description,
+                requirements: taskRequirements.requirements,
+                quality_notes: taskRequirements.quality_notes ?? [],
+              }
+            : guideSnapshot
+              ? {
+                  scene_name: sceneLibraryName,
+                  guide_task_id: guideTaskId,
+                }
+              : null,
+          taskPricePointsPerMinute:
+            task?.pricePointsPerMinute ?? scenePricePerHour ?? null,
+          guideTaskId,
+          sceneLibraryId,
           dataUsageAuthorized: true,
           privacyConfirmed: true,
           sensitiveContentConfirmed: true,
@@ -734,6 +782,13 @@ export class SubmissionsService {
       }
       throw error;
     }
+  }
+
+  private async sceneCategoryPricing(categoryKey: string): Promise<{ pricePerHour: string | null } | null> {
+    const row = await this.dataSource
+      .getRepository(SceneCategoryPricingEntity)
+      .findOneBy({ categoryKey });
+    return row ? { pricePerHour: row.pricePerHour } : null;
   }
 
   async presignParts(
