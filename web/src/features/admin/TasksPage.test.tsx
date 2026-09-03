@@ -74,7 +74,7 @@ const draftTask = {
   rawRequirements: "第一人称，出现双手",
   normalizedRequirements: null,
   normalizationStatus: "pending",
-  pricePointsPerMinute: 15.5,
+  pricePerHour: 15.5,
   status: "draft",
   revision: 1,
   createdByName: "管理员",
@@ -230,7 +230,7 @@ describe("TasksPage", () => {
           sceneName: "户外街道",
           taskType: "custom",
           rawRequirements: "第一人称拍摄",
-          pricePointsPerMinute: null,
+          pricePerHour: null,
         }),
       );
     });

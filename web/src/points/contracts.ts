@@ -9,7 +9,7 @@ export type BackendPointCycleItem = {
   taskId?: string | null;
   taskName?: string | null;
   taskSceneName?: string | null;
-  taskPricePointsPerMinute?: number | null;
+  taskPricePerHour?: number | null;
   finalScore: number;
   settlementRatio: number;
   effectiveDurationMs: number;

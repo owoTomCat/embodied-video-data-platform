@@ -262,7 +262,7 @@ export function backendSubmissionToDomain(
           revision: source.task.revision,
           sceneName: source.task.sceneName,
           taskType: source.task.taskType,
-          pricePointsPerMinute: source.task.pricePointsPerMinute,
+          pricePerHour: source.task.pricePerHour,
         }
       : null,
     createdAt: createdAt(source.createdAt),

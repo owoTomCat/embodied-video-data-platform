@@ -92,6 +92,7 @@ import { TaskSegmentAdaptiveCut2026090600001 } from "./migrations/202609060001-t
 import { TaskSegmentAnnotationPublication2026091200001 } from "./migrations/202609120001-task-segment-annotation-publication.js";
 import { SceneSingleLayer2026091500001 } from "./migrations/202609150001-scene-single-layer.js";
 import { TaskSceneBinding2026091600001 } from "./migrations/202609160001-task-scene-binding.js";
+import { PriceFieldRename2026091800001 } from "./migrations/202609180001-price-field-rename.js";
 
 export const identityEntities = [
   TeamEntity,
@@ -198,6 +199,7 @@ export function createDataSource(
       TaskAssetProjection2026091300001,
       SceneSingleLayer2026091500001,
       TaskSceneBinding2026091600001,
+      PriceFieldRename2026091800001,
     ],
     synchronize: false,
     logging: false,

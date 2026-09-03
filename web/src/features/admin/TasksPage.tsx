@@ -354,9 +354,9 @@ export function TasksPage() {
                     <td>{task.sceneName}</td>
                     <td className="nowrap-cell">{taskStatCell(task.id)}</td>
                     <td className="nowrap-cell">
-                      {task.pricePointsPerMinute !== null ? (
+                      {task.pricePerHour !== null ? (
                         <span className="mono">
-                          {task.pricePointsPerMinute} 元/小时
+                          {task.pricePerHour} 元/小时
                         </span>
                       ) : (
                         <span className="muted">全局默认</span>

@@ -89,7 +89,7 @@ export class CreateTaskDto {
   @IsNumber()
   @Min(0)
   @Max(10_000)
-  pricePointsPerMinute?: number | null;
+  pricePerHour?: number | null;
 }
 
 export class UpdateTaskDto {
@@ -144,7 +144,7 @@ export class UpdateTaskDto {
   @IsNumber()
   @Min(0)
   @Max(10_000)
-  pricePointsPerMinute?: number | null;
+  pricePerHour?: number | null;
 }
 
 export class NormalizedRequirementItemDto {

@@ -137,11 +137,11 @@ function publicItem(
     taskId: item.taskId,
     taskName: item.taskName,
     taskSceneName: item.taskSceneName,
-    taskPricePointsPerMinute:
-      item.taskPricePointsPerMinute === null ||
-      item.taskPricePointsPerMinute === undefined
+    taskPricePerHour:
+      item.taskPricePerHour === null ||
+      item.taskPricePerHour === undefined
         ? null
-        : Number(item.taskPricePointsPerMinute),
+        : Number(item.taskPricePerHour),
     finalScore: effective.finalScore,
     settlementRatio: effective.settlementRatio,
     effectiveDurationMs: effective.effectiveDurationMs,
@@ -577,7 +577,7 @@ export class PointCyclesService {
           taskId: candidate.submission.taskId,
           taskName: candidate.taskName,
           taskSceneName: candidate.submission.taskSceneName,
-          taskPricePointsPerMinute: candidate.submission.taskPricePointsPerMinute,
+          taskPricePerHour: candidate.submission.taskPricePerHour,
           finalScore: decimal(candidate.finalScore, 1),
           settlementRatio: decimal(candidate.settlementRatio, 4),
           effectiveDurationMs: String(candidate.effectiveDurationMs),
@@ -1015,10 +1015,10 @@ export class PointCyclesService {
       const effectiveDurationMs = Math.max(0, durationMs - invalidDurationMs);
       // 单价优先级：任务快照单价 > 团队单价 > 全局默认（元/小时）
       const taskPrice =
-        submission.taskPricePointsPerMinute === null ||
-        submission.taskPricePointsPerMinute === undefined
+        submission.taskPricePerHour === null ||
+        submission.taskPricePerHour === undefined
           ? null
-          : Number(submission.taskPricePointsPerMinute);
+          : Number(submission.taskPricePerHour);
       const teamPointsPerMinute = Number(
         submission.team?.unitPricePerMinute ?? 0,
       );

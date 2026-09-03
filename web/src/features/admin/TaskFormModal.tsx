@@ -69,8 +69,8 @@ export function TaskFormModal({
     task?.rawRequirements ?? "",
   );
   const [price, setPrice] = useState(
-    task?.pricePointsPerMinute !== null && task?.pricePointsPerMinute !== undefined
-      ? String(task.pricePointsPerMinute)
+    task?.pricePerHour !== null && task?.pricePerHour !== undefined
+      ? String(task.pricePerHour)
       : "",
   );
   const [categoryKey, setCategoryKey] = useState(task?.categoryKey ?? "");
@@ -242,8 +242,8 @@ export function TaskFormModal({
         : {}),
       rawRequirements: rawRequirements.trim(),
       ...(parsedPrice !== null && Number.isFinite(parsedPrice)
-        ? { pricePointsPerMinute: parsedPrice }
-        : { pricePointsPerMinute: null }),
+        ? { pricePerHour: parsedPrice }
+        : { pricePerHour: null }),
     };
 
     try {

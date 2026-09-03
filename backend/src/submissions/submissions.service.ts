@@ -398,11 +398,11 @@ function publicSubmission(submission: SubmissionEntity) {
           sceneName: submission.taskSceneName ?? "",
           taskType: collectionTask?.taskType ?? "custom",
           requirements: submission.taskRequirementsSnapshot ?? undefined,
-          pricePointsPerMinute:
-            submission.taskPricePointsPerMinute === null ||
-            submission.taskPricePointsPerMinute === undefined
+          pricePerHour:
+            submission.taskPricePerHour === null ||
+            submission.taskPricePerHour === undefined
               ? null
-              : Number(submission.taskPricePointsPerMinute),
+              : Number(submission.taskPricePerHour),
           guideTaskId: submission.guideTaskId,
           sceneLibraryId: submission.sceneLibraryId,
         }
@@ -768,8 +768,8 @@ export class SubmissionsService {
                   task_card: guideSnapshot,
                 }
               : null,
-          taskPricePointsPerMinute:
-            task?.pricePointsPerMinute ?? scenePricePerHour ?? null,
+          taskPricePerHour:
+            task?.pricePerHour ?? scenePricePerHour ?? null,
           guideTaskId,
           sceneLibraryId,
           sceneId,

@@ -43,7 +43,7 @@ export type PublicTask = {
   rawRequirements: string;
   normalizedRequirements: NormalizedTaskRequirements | null;
   normalizationStatus: string;
-  pricePointsPerMinute: number | null;
+  pricePerHour: number | null;
   status: CollectionTaskStatus;
   revision: number;
   createdByName: string;
@@ -65,7 +65,7 @@ export type PublicTaskForCollector = {
   categoryKey: string | null;
   targetDurationSeconds: number | null;
   normalizedRequirements: NormalizedTaskRequirements | null;
-  pricePointsPerMinute: number | null;
+  pricePerHour: number | null;
   status: CollectionTaskStatus;
   revision: number;
   publishedAt: number | null;
@@ -86,7 +86,7 @@ export function publicTask(task: CollectionTaskEntity): PublicTask {
     rawRequirements: task.rawRequirements,
     normalizedRequirements: task.normalizedRequirements,
     normalizationStatus: task.normalizationStatus,
-    pricePointsPerMinute: numericOrNull(task.pricePointsPerMinute),
+    pricePerHour: numericOrNull(task.pricePerHour),
     status: task.status,
     revision: task.revision,
     createdByName: task.createdByName,
@@ -112,7 +112,7 @@ export function publicTaskForCollector(
     categoryKey: task.categoryKey,
     targetDurationSeconds: numericOrNull(task.targetDurationSeconds),
     normalizedRequirements: task.normalizedRequirements,
-    pricePointsPerMinute: numericOrNull(task.pricePointsPerMinute),
+    pricePerHour: numericOrNull(task.pricePerHour),
     status: task.status,
     revision: task.revision,
     publishedAt: task.publishedAt?.getTime() ?? null,
@@ -300,10 +300,10 @@ export class TasksService {
         null;
     }
     const explicitPrice =
-      input.pricePointsPerMinute === null ||
-      input.pricePointsPerMinute === undefined
+      input.pricePerHour === null ||
+      input.pricePerHour === undefined
         ? null
-        : input.pricePointsPerMinute;
+        : input.pricePerHour;
     const price =
       explicitPrice ??
       categoryPrice ??
@@ -333,7 +333,7 @@ export class TasksService {
         rawRequirements: input.rawRequirements.trim(),
         normalizedRequirements: null,
         normalizationStatus: "pending",
-        pricePointsPerMinute: price === null ? null : price.toFixed(2),
+        pricePerHour: price === null ? null : price.toFixed(2),
         status: "draft",
         revision: 1,
         createdByAccountId: actor.id,
@@ -438,11 +438,11 @@ export class TasksService {
       task.rawRequirements = input.rawRequirements.trim();
       task.normalizationStatus = "pending";
     }
-    if (input.pricePointsPerMinute !== undefined) {
-      task.pricePointsPerMinute =
-        input.pricePointsPerMinute === null
+    if (input.pricePerHour !== undefined) {
+      task.pricePerHour =
+        input.pricePerHour === null
           ? null
-          : input.pricePointsPerMinute.toFixed(2);
+          : input.pricePerHour.toFixed(2);
     }
     const saved = await this.tasks.save(task);
     await this.audit.record(

@@ -94,7 +94,7 @@ describe("team metrics", () => {
       taskType: "generic" | "scene_type" | "custom",
     ): Submission => ({
       ...submission(id, "2026-08-13 09:00", status, score),
-      task: { taskId, title, revision: 1, sceneName: "家庭-厨房", taskType, pricePointsPerMinute: 12 },
+      task: { taskId, title, revision: 1, sceneName: "家庭-厨房", taskType, pricePerHour: 12 },
     });
     const tasks = taskContributions([
       withTask("A", "passed", 88, "TASK-1", "厨房任务", "custom"),

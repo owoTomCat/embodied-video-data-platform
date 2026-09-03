@@ -113,13 +113,13 @@ export class SubmissionEntity {
 
   /** 快照：任务单价（元/小时，结算使用）；空则回退全局默认 */
   @Column({
-    name: "task_price_points_per_minute",
+    name: "task_price_per_hour",
     type: "numeric",
     precision: 10,
     scale: 2,
     nullable: true,
   })
-  taskPricePointsPerMinute: string | null = null;
+  taskPricePerHour: string | null = null;
 
   /** 关联的 AI 指导任务卡（guide_tasks）；从任务卡进入提交时写入，追溯场景库→任务卡→提交链路 */
   @Index("idx_submissions_guide_task")

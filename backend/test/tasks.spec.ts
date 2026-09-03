@@ -130,7 +130,7 @@ describe("publicTask serializer", () => {
       rawRequirements: "原始要求",
       normalizedRequirements: null,
       normalizationStatus: "pending",
-      pricePointsPerMinute: null,
+      pricePerHour: null,
       status: "draft",
       revision: 1,
       createdByAccountId: "u1",
@@ -143,7 +143,7 @@ describe("publicTask serializer", () => {
     });
     const serialized = publicTask(task);
     expect(serialized.id).toBe("TASK-abc123");
-    expect(serialized.pricePointsPerMinute).toBeNull();
+    expect(serialized.pricePerHour).toBeNull();
     expect(serialized.normalizationStatus).toBe("pending");
     expect(serialized.status).toBe("draft");
     expect(serialized.publishedAt).toBeNull();
@@ -168,7 +168,7 @@ describe("publicTask serializer", () => {
         quality_notes: [],
       },
       normalizationStatus: "ready",
-      pricePointsPerMinute: "15.00",
+      pricePerHour: "15.00",
       status: "published",
       revision: 1,
       createdByAccountId: "u1",
@@ -180,7 +180,7 @@ describe("publicTask serializer", () => {
       updatedAt: new Date("2026-08-24T08:00:00Z"),
     });
     const serialized = publicTask(task);
-    expect(serialized.pricePointsPerMinute).toBe(15);
+    expect(serialized.pricePerHour).toBe(15);
     expect(serialized.status).toBe("published");
     expect(serialized.sceneLabelId).toBe("SCENE-002");
     expect(serialized.taskType).toBe("custom");

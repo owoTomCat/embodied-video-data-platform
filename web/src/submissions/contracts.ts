@@ -336,7 +336,7 @@ export type BackendSubmission = {
     sceneName: string;
     taskType: "generic" | "scene_type" | "custom";
     requirements?: unknown;
-    pricePointsPerMinute: number | null;
+    pricePerHour: number | null;
   } | null;
   authorization?: {
     dataUsageAuthorized: boolean;

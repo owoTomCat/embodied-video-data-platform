@@ -44,7 +44,7 @@ export type CollectionTask = {
   rawRequirements: string;
   normalizedRequirements: NormalizedTaskRequirements | null;
   normalizationStatus: TaskNormalizationStatus;
-  pricePointsPerMinute: number | null;
+  pricePerHour: number | null;
   status: CollectionTaskStatus;
   revision: number;
   createdByName: string;
@@ -66,7 +66,7 @@ export type CollectionTaskForCollector = {
   categoryKey: string | null;
   targetDurationSeconds: number | null;
   normalizedRequirements: NormalizedTaskRequirements | null;
-  pricePointsPerMinute: number | null;
+  pricePerHour: number | null;
   status: CollectionTaskStatus;
   revision: number;
   publishedAt: number | null;
@@ -81,7 +81,7 @@ export type CreateTaskInput = {
   sceneLibraryId?: string | null;
   categoryKey?: string;
   sceneTargets?: SceneTargetInput[];
-  pricePointsPerMinute?: number | null;
+  pricePerHour?: number | null;
 };
 
 export type UpdateTaskInput = Partial<CreateTaskInput>;

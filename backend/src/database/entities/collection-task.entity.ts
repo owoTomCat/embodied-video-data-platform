@@ -97,13 +97,13 @@ export class CollectionTaskEntity {
 
   /** 任务单价（元/小时）；空则回退全局默认单价规则 */
   @Column({
-    name: "price_points_per_minute",
+    name: "price_per_hour",
     type: "numeric",
     precision: 10,
     scale: 2,
     nullable: true,
   })
-  pricePointsPerMinute: string | null = null;
+  pricePerHour: string | null = null;
 
   @Column({ type: "varchar", length: 16, default: "draft" })
   status: CollectionTaskStatus = "draft";
