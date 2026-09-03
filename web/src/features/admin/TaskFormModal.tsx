@@ -228,7 +228,6 @@ export function TaskFormModal({
       description: description.trim(),
       sceneName: trimmedScene,
       taskType,
-      sceneLibraryId: null,
       ...(taskType === "scene_type"
         ? {
             categoryKey,

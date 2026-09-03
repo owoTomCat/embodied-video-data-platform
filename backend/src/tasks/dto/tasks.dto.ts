@@ -21,8 +21,7 @@ const MAX_SCENE_NAME_LENGTH = 120;
 const MAX_RAW_REQUIREMENTS_LENGTH = 20_000;
 const MAX_REQUIREMENT_ITEMS = 100;
 
-// 统一场景管理：任务类型仅保留 generic（通用）/ scene_type（场景型补量）/ custom（自定义）。
-// preset（场景库场景任务）已废弃：数采不再通过平台派发的场景库任务采集，而是直接进个人场景库→任务卡→提交。
+// 任务类型：generic（通用）/ scene_type（场景型补量）/ custom（自定义）。
 const TASK_TYPES = ["generic", "scene_type", "custom"] as const;
 
 /** 场景型任务目标（按场景） */
@@ -109,11 +108,6 @@ export class UpdateTaskDto {
   @IsString()
   @MaxLength(MAX_SCENE_NAME_LENGTH, { message: "场景名称不能超过 120 个字符" })
   sceneName?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(64)
-  sceneLibraryId?: string | null;
 
   @IsOptional()
   @IsIn(TASK_TYPES, { message: "任务类型不合法" })

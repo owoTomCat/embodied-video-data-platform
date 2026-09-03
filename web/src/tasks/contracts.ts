@@ -36,7 +36,6 @@ export type CollectionTask = {
   description: string;
   sceneName: string;
   sceneLabelId: string | null;
-  sceneLibraryId: string | null;
   taskType: CollectionTaskType;
   categoryKey: string | null;
   targetDurationSeconds: number | null;
@@ -61,7 +60,6 @@ export type CollectionTaskForCollector = {
   description: string;
   sceneName: string;
   sceneLabelId: string | null;
-  sceneLibraryId: string | null;
   taskType: CollectionTaskType;
   categoryKey: string | null;
   targetDurationSeconds: number | null;
@@ -78,7 +76,6 @@ export type CreateTaskInput = {
   sceneName: string;
   taskType?: CollectionTaskType;
   rawRequirements: string;
-  sceneLibraryId?: string | null;
   categoryKey?: string;
   sceneTargets?: SceneTargetInput[];
   pricePerHour?: number | null;

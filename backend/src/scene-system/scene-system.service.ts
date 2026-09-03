@@ -191,14 +191,6 @@ export class SceneSystemService {
     return this.hydrateLibraries(rows);
   }
 
-  /** 按 id 查单个场景库条目 */
-  async getLibraryById(id: string): Promise<PublicSceneLibrary | null> {
-    const row = await this.library.findOneBy({ id });
-    if (!row) return null;
-    const [hydrated] = await this.hydrateLibraries([row]);
-    return hydrated ?? null;
-  }
-
   private async hydrateLibraries(
     rows: SceneLibraryEntity[],
   ): Promise<PublicSceneLibrary[]> {

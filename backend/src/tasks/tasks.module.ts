@@ -9,7 +9,6 @@ import { SceneEntity } from "../database/entities/scene.entity.js";
 import { SceneTaskTargetEntity } from "../database/entities/scene-task-target.entity.js";
 import { AllowedOriginGuard } from "../http/allowed-origin.guard.js";
 import { ScenePricingModule } from "../scene-pricing/scene-pricing.module.js";
-import { SceneSystemModule } from "../scene-system/scene-system.module.js";
 import { SecurityModule } from "../security/security.module.js";
 import { RequirementNormalizerService } from "./requirement-normalizer.service.js";
 import { TaskFailureFilter } from "./tasks.failure.filter.js";
@@ -29,7 +28,6 @@ import { TasksService } from "./tasks.service.js";
     SecurityModule,
     AiQualityModule,
     ScenePricingModule,
-    SceneSystemModule,
   ],
   controllers: [TasksController],
   providers: [

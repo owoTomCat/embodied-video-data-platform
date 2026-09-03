@@ -29,7 +29,6 @@ import type { QwenSceneGuideProvider } from "./qwen-scene-guide.provider.js";
 import {
   envelopeTaskCardSchema,
   type EnvRecognitionRaw,
-  type TaskCardRaw,
   type TaskCardsRaw,
 } from "./scene-guide.schema.js";
 
@@ -69,7 +68,6 @@ export type PublicGuideTask = {
   visionModel: string | null;
   cardPromptVersion: string | null;
   status: GuideTaskStatus;
-  editedAt: number | null;
   submissionId: string | null;
   lastErrorCode: string | null;
   lastErrorMessage: string | null;
@@ -91,7 +89,6 @@ export function publicGuideTask(task: GuideTaskEntity): PublicGuideTask {
     visionModel: task.visionModel,
     cardPromptVersion: task.cardPromptVersion,
     status: task.status,
-    editedAt: task.editedAt?.getTime() ?? null,
     submissionId: task.submissionId,
     lastErrorCode: task.lastErrorCode,
     lastErrorMessage: task.lastErrorMessage,
@@ -393,7 +390,6 @@ export class SceneGuideService {
         visionModel: recognition.model ?? cards.model,
         cardPromptVersion: "scene_guide_v1",
         status: "ai_generated" as GuideTaskStatus,
-        editedAt: null,
         submissionId: null,
         lastErrorCode: null,
         lastErrorMessage: null,

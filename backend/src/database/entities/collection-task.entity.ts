@@ -15,8 +15,8 @@ export type CollectionTaskStatus = "draft" | "published" | "paused" | "closed";
 export type TaskNormalizationStatus = "pending" | "ready" | "failed";
 /**
  * 任务类型：
- * generic = 通用任务（不绑定场景）；scene_type = 场景型任务（平台补量，绑定二级场景 + 目标时长）；
- * preset = 场景库任务；custom = 自定义场景任务。
+ * generic = 通用任务（不绑定场景）；scene_type = 场景型任务（绑定计费大类 + 按场景目标时长）；
+ * custom = 自定义场景任务。
  */
 export type CollectionTaskType = "generic" | "scene_type" | "custom";
 
@@ -56,18 +56,11 @@ export class CollectionTaskEntity {
   @Column({ name: "scene_label_id", type: "varchar", length: 64, nullable: true })
   sceneLabelId: string | null = null;
 
-  /** 关联场景库场景 id（任务创建从场景库选时记录，用于任务维度场景归属） */
-  @Column({ name: "scene_library_id", type: "varchar", length: 64, nullable: true })
-  sceneLibraryId: string | null = null;
-
   /** 补量任务绑定的计费大类 key（taskType=scene_type 使用） */
   @Column({ name: "category_key", type: "varchar", length: 64, nullable: true })
   categoryKey: string | null = null;
 
-  /**
-   * 任务类型：generic = 通用任务（不绑定场景）；scene_type = 场景型任务（平台补量）；
-   * preset = 场景库任务；custom = 自定义场景任务。
-   */
+  /** 任务类型：generic = 通用任务；scene_type = 场景型任务（补量）；custom = 自定义场景任务。 */
   @Column({ name: "task_type", type: "varchar", length: 24, default: "custom" })
   taskType: CollectionTaskType = "custom";
 

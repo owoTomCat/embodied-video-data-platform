@@ -36,7 +36,6 @@ export type GuideTask = {
   visionModel: string | null;
   cardPromptVersion: string | null;
   status: GuideTaskStatus;
-  editedAt: number | null;
   submissionId: string | null;
   createdAt: number;
   updatedAt: number;

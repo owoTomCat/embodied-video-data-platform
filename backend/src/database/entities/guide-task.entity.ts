@@ -104,10 +104,6 @@ export class GuideTaskEntity {
   @Column({ name: "status", type: "varchar", length: 24 })
   status!: GuideTaskStatus;
 
-  /** 数采是否编辑过任务卡（编辑过 → 需人工审核） */
-  @Column({ name: "edited_at", type: "timestamptz", nullable: true })
-  editedAt: Date | null = null;
-
   /** 采集完成后回填，追溯 AI 指导链路 */
   @Column({ name: "submission_id", type: "varchar", length: 64, nullable: true })
   submissionId: string | null = null;
