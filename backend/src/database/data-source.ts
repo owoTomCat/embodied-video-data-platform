@@ -18,6 +18,9 @@ import { MediaSegmentEntity } from "./entities/media-segment.entity.js";
 import { PointCycleAdjustmentEntity } from "./entities/point-cycle-adjustment.entity.js";
 import { PointCycleEntity } from "./entities/point-cycle.entity.js";
 import { WalletBalanceEntity, WalletTransactionEntity } from "./entities/wallet.entity.js";
+import { CollectorPayoutAccountEntity } from "./entities/collector-payout-account.entity.js";
+import { YzhPayoutOrderEntity } from "./entities/yzh-payout-order.entity.js";
+import { YzhCallbackLogEntity } from "./entities/yzh-callback-log.entity.js";
 import { PointCycleItemEntity } from "./entities/point-cycle-item.entity.js";
 import { PointRuleVersionEntity } from "./entities/point-rule-version.entity.js";
 import { PublicSiteSnapshotEntity } from "./entities/public-site-snapshot.entity.js";
@@ -80,6 +83,7 @@ import { WalletAndSettlement2026083100001 } from "./migrations/202608310001-wall
 import { TaskSegmentAssets2026090300001 } from "./migrations/202609030001-task-segment-assets.js";
 import { TaskBoundaryRefinements2026090500001 } from "./migrations/202609050001-task-boundary-refinements.js";
 import { TaskSegmentAdaptiveCut2026090600001 } from "./migrations/202609060001-task-segment-adaptive-cut.js";
+import { Yunzhanghu2026090900001 } from "./migrations/202609090001-yunzhanghu.js";
 
 export const identityEntities = [
   TeamEntity,
@@ -112,6 +116,9 @@ export const identityEntities = [
   CollectionTaskEntity,
   WalletBalanceEntity,
   WalletTransactionEntity,
+  CollectorPayoutAccountEntity,
+  YzhPayoutOrderEntity,
+  YzhCallbackLogEntity,
   SceneCategoryPricingEntity,
   SceneClassificationEntity,
   SceneLibraryEntity,
@@ -174,6 +181,7 @@ export function createDataSource(
       AddDedupIndexes2026090400001,
       TaskBoundaryRefinements2026090500001,
       TaskSegmentAdaptiveCut2026090600001,
+      Yunzhanghu2026090900001,
     ],
     synchronize: false,
     logging: false,
