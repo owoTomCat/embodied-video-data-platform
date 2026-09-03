@@ -25,6 +25,7 @@ import { EarningsPage } from "../features/collector/EarningsPage";
 import { GuideCreatePage } from "../features/collector/GuideCreatePage";
 import { GuidePage } from "../features/collector/GuidePage";
 import { SceneLibraryDetailPage } from "../features/collector/SceneLibraryDetailPage";
+import { SceneSelectionPage } from "../features/collector/SceneSelectionPage";
 import { TaskHallPage } from "../features/collector/TaskHallPage";
 import { AccountProfilePage } from "../features/account/AccountProfilePage";
 import { SubmissionDetail } from "../features/collector/SubmissionDetail";
@@ -109,6 +110,10 @@ function AuthenticatedPlatformContent({
     else if (safePath === "/collector/quality") page = <SubmissionsPage qualityOnly navigate={navigate} />;
     else if (safePath === "/collector/wallet" || safePath === "/collector/earnings") page = <EarningsPage />;
     else if (safePath === "/collector/guide") page = <GuidePage />;
+    else if (/^\/collector\/tasks\/[^/]+\/scenes$/u.test(safePath)) {
+      const segments = safePath.split("/");
+      page = <SceneSelectionPage taskId={segments[3] ?? ""} navigate={navigate} />;
+    }
     else if (safePath.startsWith("/collector/scenes/") && safePath.endsWith("/create")) {
       const segments = safePath.split("/");
       page = <GuideCreatePage libraryId={segments.at(-2) ?? ""} navigate={navigate} />;

@@ -67,7 +67,8 @@ export function isKnownAuthenticatedPath(path: string, role: Role): boolean {
     return (
       hasSingleDetailSegment(path, "/collector/submissions/") ||
       hasSingleDetailSegment(path, "/collector/scenes/") ||
-      /^\/collector\/scenes\/[^/]+\/create$/u.test(path)
+      /^\/collector\/scenes\/[^/]+\/create$/u.test(path) ||
+      /^\/collector\/tasks\/[^/]+\/scenes$/u.test(path)
     );
   }
   if (role === "admin") {

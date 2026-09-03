@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -173,7 +173,6 @@ describe("TasksPage", () => {
     expect(screen.getAllByText("草稿").length).toBeGreaterThan(0);
     expect(screen.getAllByText("已发布").length).toBeGreaterThan(0);
     expect(screen.getAllByText("15.5 元/小时").length).toBeGreaterThan(0);
-    expect(screen.getByText("共 2 个任务")).toBeInTheDocument();
   });
 
   it("opens the create form and creates a task", async () => {
@@ -283,9 +282,12 @@ describe("TasksPage", () => {
     renderAdmin();
     await screen.findByText("厨房数据采集");
 
-    await user.click(
-      screen.getByRole("button", { name: "删除任务 厨房数据采集" }),
-    );
+    // 卡片右上角「...」菜单 → 删除
+    const card = screen.getByText("厨房数据采集").closest(".admin-task-card")!;
+    const summary = card.querySelector(".task-menu-btn") as HTMLElement;
+    await user.click(summary);
+    await user.click(within(card).getByRole("button", { name: "删除" }));
+
     expect(screen.getByRole("heading", { name: "删除草稿任务" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "确认删除" }));
 

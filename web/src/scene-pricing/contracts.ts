@@ -11,3 +11,9 @@ export type UpdateSceneCategoryPriceInput = {
   pricePerHour: number;
   description?: string;
 };
+
+export type CreateSceneCategoryPriceInput = {
+  name: string;
+  pricePerHour: number;
+  description?: string;
+};

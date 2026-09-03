@@ -82,6 +82,16 @@ export async function listLibrariesByCategory(
   return result.libraries;
 }
 
+/** 某个大场景任务下的数采个人场景库列表（任务大厅「去采集」→ 场景选择页）。 */
+export async function listLibrariesByTask(
+  taskId: string,
+): Promise<CollectorLibrary[]> {
+  const result = await requestJson<{ libraries: CollectorLibrary[] }>(
+    `scene-guide/libraries/by-task/${encodeURIComponent(taskId)}`,
+  );
+  return result.libraries;
+}
+
 export async function createCollectorLibrary(
   input: CreateCollectorLibraryInput,
 ): Promise<CollectorLibrary> {

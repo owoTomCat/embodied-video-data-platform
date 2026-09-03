@@ -63,6 +63,7 @@ export type CollectionTaskForCollector = {
   taskType: CollectionTaskType;
   categoryKey: string | null;
   targetDurationSeconds: number | null;
+  currentDurationSeconds: number;
   normalizedRequirements: NormalizedTaskRequirements | null;
   pricePerHour: number | null;
   status: CollectionTaskStatus;
