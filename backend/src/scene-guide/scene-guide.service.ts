@@ -107,6 +107,8 @@ export type PublicLibrary = {
   categoryName: string;
   subSceneIds: string[];
   subScenes: Array<{ id: string; level2Name: string; level1Code: string }>;
+  photoRefs: Array<{ objectKey: string; contentType?: string; name?: string }>;
+  coverObjectKey: string | null;
   description: string;
   enabled: boolean;
   ownerAccountId: string | null;
@@ -156,7 +158,39 @@ export class SceneGuideService {
     );
   }
 
-  /** 数采：创建自己的场景库（从三层体系选一级大类 + 二级子场景） */
+  /** 数采：一级大场景分类（任务大厅分栏）。 */
+  async listLevel1(actor: PublicUser): Promise<Array<{ code: string; name: string; categoryKey: string }>> {
+    sceneGuidePolicy.requireCollector(actor);
+    const rows = await this.level1.find({
+      where: { enabled: true },
+      order: { sortOrder: "ASC", code: "ASC" },
+    });
+    return rows.map((row) => ({ code: row.code, name: row.name, categoryKey: row.categoryKey }));
+  }
+
+  /** 数采：某个一级大场景分类下的个人场景库列表（任务大厅进入某大场景后展示）。 */
+  async listLibrariesByCategory(
+    actor: PublicUser,
+    categoryKey: string,
+  ): Promise<PublicLibrary[]> {
+    sceneGuidePolicy.requireCollector(actor);
+    const rows = await this.libraries.find({
+      where: { ownerAccountId: actor.id, categoryKey },
+      order: { createdAt: "DESC", id: "DESC" },
+    });
+    const [classifications, level1Rows] = await Promise.all([
+      this.classification.find(),
+      this.level1.find(),
+    ]);
+    const byId = new Map(classifications.map((item) => [item.id, item]));
+    const level1ByKey = new Map(level1Rows.map((item) => [item.categoryKey, item]));
+    const taskCounts = await this.taskCountByLibrary(actor.id);
+    return rows.map((row) =>
+      this.toLibraryView(row, byId, level1ByKey, taskCounts),
+    );
+  }
+
+  /** 数采：创建自己的场景库（从三层体系选一级大类 + 二级子场景；photoRefs 首张作为库封面） */
   async createLibrary(
     actor: PublicUser,
     input: {
@@ -164,6 +198,7 @@ export class SceneGuideService {
       categoryKey: string;
       subSceneIds: string[];
       description?: string;
+      photoRefs?: GuidePhotoRef[];
     },
   ): Promise<PublicLibrary> {
     sceneGuidePolicy.requireCollector(actor);
@@ -175,12 +210,15 @@ export class SceneGuideService {
       throw new SceneGuideFailure("VALIDATION", "场景类别不存在", 400);
     }
     const subScenes = await this.validateSubScenes(input.subSceneIds, level1.code);
+    const photoRefs = input.photoRefs ?? [];
     const row = await this.libraries.save(
       this.libraries.create({
         id: `SL-${randomUUID().slice(0, 8).toUpperCase()}`,
         name: input.name.trim(),
         categoryKey: level1.categoryKey,
         subSceneIds: subScenes.map((item) => item.id),
+        photoRefs,
+        coverObjectKey: photoRefs[0]?.objectKey ?? null,
         description: input.description?.trim() ?? "",
         enabled: true,
         createdByAccountId: actor.id,
@@ -195,7 +233,7 @@ export class SceneGuideService {
       { id: row.id, name: row.name },
       `数采新建场景库「${row.name}」（类别：${level1.name}）`,
       null,
-      { id: row.id, name: row.name, categoryKey: row.categoryKey, subSceneIds: row.subSceneIds },
+      { id: row.id, name: row.name, categoryKey: row.categoryKey, subSceneIds: row.subSceneIds, photoRefs: row.photoRefs },
     );
     return (await this.listMyLibraries(actor)).find((item) => item.id === row.id)!;
   }
@@ -580,6 +618,8 @@ export class SceneGuideService {
           level2Name: item.level2Name,
           level1Code: item.level1Code,
         })),
+      photoRefs: row.photoRefs,
+      coverObjectKey: row.coverObjectKey,
       description: row.description,
       enabled: row.enabled,
       ownerAccountId: row.ownerAccountId,

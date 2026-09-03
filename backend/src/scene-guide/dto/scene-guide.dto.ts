@@ -54,6 +54,14 @@ export class CreateCollectorLibraryDto {
   @IsString()
   @MaxLength(2_000)
   description?: string;
+
+  /** 建库时上传的环境照片（MinIO 对象），首张作为场景库卡片封面 + 供 AI 识别生成任务卡 */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(5)
+  @ValidateNested({ each: true })
+  @Type(() => PhotoRefDto)
+  photoRefs?: PhotoRefDto[];
 }
 
 /** 拍照指导：用于生成任务卡的请求（环境照片已通过预签名上传到 MinIO） */

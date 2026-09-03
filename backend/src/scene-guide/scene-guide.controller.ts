@@ -36,6 +36,21 @@ export class SceneGuideController {
 
   // ---------- 数采个人场景库 ----------
 
+  /** 数采：一级大场景分类（任务大厅分栏）。 */
+  @Get("level1")
+  async listLevel1(@CurrentUser() actor: PublicUser) {
+    return { level1: await this.guide.listLevel1(actor) };
+  }
+
+  /** 数采：某个一级大场景分类下的个人场景库列表。 */
+  @Get("libraries/by-category/:categoryKey")
+  async listLibrariesByCategory(
+    @CurrentUser() actor: PublicUser,
+    @Param("categoryKey") categoryKey: string,
+  ) {
+    return { libraries: await this.guide.listLibrariesByCategory(actor, categoryKey) };
+  }
+
   /** 数采：我的场景库列表。 */
   @Get("libraries/mine")
   async listMyLibraries(@CurrentUser() actor: PublicUser) {
@@ -55,6 +70,7 @@ export class SceneGuideController {
         categoryKey: input.categoryKey,
         subSceneIds: input.subSceneIds,
         description: input.description,
+        photoRefs: input.photoRefs,
       }),
     };
   }

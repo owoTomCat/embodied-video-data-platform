@@ -239,9 +239,9 @@ describe("tasks API with task type dimension", () => {
       });
     });
 
-    it("creates a preset scene task with the preset scene name", async () => {
+    it("rejects the deprecated preset task type", async () => {
       const cookie = await login("stat-admin");
-      const response = await request(app.getHttpServer())
+      await request(app.getHttpServer())
         .post("/api/v1/tasks")
         .set("Origin", WEB_ORIGIN)
         .set("Cookie", cookie)
@@ -252,8 +252,7 @@ describe("tasks API with task type dimension", () => {
           taskType: "preset",
           rawRequirements: "必须使用第一人称视角拍摄。",
         })
-        .expect(201);
-      expect(response.body.task.taskType).toBe("preset");
+        .expect(400);
     });
 
     it("defaults to custom when taskType is omitted", async () => {
@@ -298,7 +297,7 @@ describe("tasks API with task type dimension", () => {
           title: "类型调整任务",
           description: "",
           sceneName: "家庭-客厅",
-          taskType: "preset",
+          taskType: "custom",
           rawRequirements: "必须第一人称拍摄。",
         })
         .expect(201);
