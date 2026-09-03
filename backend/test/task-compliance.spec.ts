@@ -351,4 +351,31 @@ describe("parseTaskRequirementsSnapshot", () => {
     expect(parseTaskRequirementsSnapshot("junk")).toBeNull();
     expect(parseTaskRequirementsSnapshot(null)).toBeNull();
   });
+
+  it("derives hard/soft requirements from a guide task_card", () => {
+    const parsed = parseTaskRequirementsSnapshot({
+      scene_name: "厨房",
+      scene_id: "SC-001",
+      category_key: "family",
+      task_card: {
+        title: "把罐头放锅里",
+        target_objects: [{ name: "罐头", action: "放入锅中" }],
+        steps: ["打开锅盖", "放入罐头"],
+        end_condition: "罐头放入锅中并盖上锅盖",
+        success_criteria: ["罐头完整放入锅中"],
+        fail_criteria: ["罐头掉出锅中"],
+      },
+    });
+    expect(parsed).not.toBeNull();
+    expect(parsed!.sceneName).toBe("厨房");
+    expect(parsed!.snapshot.requirements.map((r) => r.type)).toEqual([
+      "hard",
+      "hard",
+      "soft",
+      "soft",
+      "soft",
+    ]);
+    expect(parsed!.snapshot.requirements[0]!.content).toContain("成功判定");
+    expect(parsed!.snapshot.requirements[1]!.content).toContain("失败判定");
+  });
 });

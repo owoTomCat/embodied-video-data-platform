@@ -21,6 +21,7 @@ import { AnnotationRunEntity } from "../database/entities/annotation-run.entity.
 import { CollectionTaskEntity } from "../database/entities/collection-task.entity.js";
 import { GuideTaskEntity } from "../database/entities/guide-task.entity.js";
 import { SceneCategoryPricingEntity } from "../database/entities/scene-category-pricing.entity.js";
+import { SceneEntity } from "../database/entities/scene.entity.js";
 import { SceneLibraryEntity } from "../database/entities/scene-library.entity.js";
 import { csvDocument } from "../csv/csv.js";
 import { JobOutboxEntity } from "../database/entities/job-outbox.entity.js";
@@ -651,6 +652,7 @@ export class SubmissionsService {
     let sceneLibraryName: string | null = null;
     let sceneCategoryKey: string | null = null;
     let sceneId: string | null = null;
+    let sceneName: string | null = null;
     let collectionTaskId: string | null = null;
     let scenePricePerHour: string | null = null;
     let guideSnapshot: unknown = null;
@@ -671,6 +673,12 @@ export class SubmissionsService {
       sceneLibraryName = library?.name ?? guideTask?.title ?? null;
       sceneCategoryKey = library?.categoryKey ?? null;
       sceneId = library?.sceneId ?? null;
+      const scene = sceneId
+        ? await this.dataSource
+            .getRepository(SceneEntity)
+            .findOneBy({ id: sceneId })
+        : null;
+      sceneName = scene?.name ?? null;
       collectionTaskId = library?.collectionTaskId ?? null;
       if (sceneCategoryKey) {
         const pricing = await this.sceneCategoryPricing(sceneCategoryKey);
@@ -743,7 +751,7 @@ export class SubmissionsService {
           // 后续任务修改不影响本提交的 AI 质检与结算。
           taskId: task?.id ?? null,
           taskRevision: task?.revision ?? null,
-          taskSceneName: task?.sceneName ?? sceneLibraryName ?? null,
+          taskSceneName: task?.sceneName ?? sceneName ?? sceneLibraryName ?? null,
           taskRequirementsSnapshot: taskRequirements
             ? {
                 scene_name: task?.sceneName ?? null,
@@ -753,7 +761,7 @@ export class SubmissionsService {
               }
             : guideSnapshot
               ? {
-                  scene_name: sceneLibraryName,
+                  scene_name: sceneName ?? sceneLibraryName,
                   guide_task_id: guideTaskId,
                   scene_id: sceneId,
                   category_key: sceneCategoryKey,
