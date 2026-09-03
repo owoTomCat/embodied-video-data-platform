@@ -131,6 +131,20 @@ export class SubmissionEntity {
   @Column({ name: "scene_library_id", type: "varchar", length: 64, nullable: true })
   sceneLibraryId: string | null = null;
 
+  /** 提交归属的场景（scene.id），由 scene_library.scene_id 继承 */
+  @Index("idx_submissions_scene")
+  @Column({ name: "scene_id", type: "varchar", length: 64, nullable: true })
+  sceneId: string | null = null;
+
+  /** 提交归属的计费大类（scene.category_key），用于计费/统计 */
+  @Column({ name: "category_key", type: "varchar", length: 64, nullable: true })
+  categoryKey: string | null = null;
+
+  /** 关联大场景任务（collection_tasks.id，task_type='scene_type'），由 scene_library.collection_task_id 继承 */
+  @Index("idx_submissions_collection_task")
+  @Column({ name: "collection_task_id", type: "varchar", length: 64, nullable: true })
+  collectionTaskId: string | null = null;
+
   @Column({ name: "asset_status", type: "varchar", length: 24, default: "active" })
   assetStatus: SubmissionAssetStatus = "active";
 

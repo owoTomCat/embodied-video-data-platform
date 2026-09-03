@@ -69,8 +69,8 @@ export class SceneGuideController {
     return {
       library: await this.guide.createLibrary(actor, {
         name: input.name,
-        categoryKey: input.categoryKey,
-        subSceneIds: input.subSceneIds,
+        sceneId: input.sceneId,
+        collectionTaskId: input.collectionTaskId,
         description: input.description,
         photoRefs: input.photoRefs,
       }),

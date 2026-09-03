@@ -25,6 +25,19 @@ const MAX_REQUIREMENT_ITEMS = 100;
 // preset（场景库场景任务）已废弃：数采不再通过平台派发的场景库任务采集，而是直接进个人场景库→任务卡→提交。
 const TASK_TYPES = ["generic", "scene_type", "custom"] as const;
 
+/** 场景型任务目标（按场景） */
+export class SceneTargetDto {
+  @IsString()
+  @MaxLength(64)
+  sceneId!: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(1_000_000_000)
+  targetDurationSeconds!: number;
+}
+
 export class CreateTaskDto {
   @IsString()
   @MaxLength(MAX_TITLE_LENGTH, { message: "任务标题不能超过 120 个字符" })
@@ -52,13 +65,19 @@ export class CreateTaskDto {
   @IsIn(TASK_TYPES, { message: "任务类型不合法" })
   taskType?: (typeof TASK_TYPES)[number];
 
-  /** 场景型任务目标时长（秒，仅 scene_type 使用；用于场景存量均衡） */
+  /** 场景型任务绑定的计费大类（category_key） */
   @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(1_000_000_000)
-  targetDurationSeconds?: number | null;
+  @IsString()
+  @MaxLength(64)
+  categoryKey?: string;
+
+  /** 场景型任务目标（按场景）；scene_type 使用 */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => SceneTargetDto)
+  sceneTargets?: SceneTargetDto[];
 
   @IsString()
   @MaxLength(MAX_RAW_REQUIREMENTS_LENGTH, {
@@ -100,12 +119,19 @@ export class UpdateTaskDto {
   @IsIn(TASK_TYPES, { message: "任务类型不合法" })
   taskType?: (typeof TASK_TYPES)[number];
 
+  /** 场景型任务绑定的计费大类（category_key） */
   @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(1_000_000_000)
-  targetDurationSeconds?: number | null;
+  @IsString()
+  @MaxLength(64)
+  categoryKey?: string;
+
+  /** 场景型任务目标（按场景）；scene_type 使用 */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => SceneTargetDto)
+  sceneTargets?: SceneTargetDto[];
 
   @IsOptional()
   @IsString()

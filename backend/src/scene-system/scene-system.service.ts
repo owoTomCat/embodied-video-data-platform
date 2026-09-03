@@ -24,8 +24,9 @@ export type PublicSceneLibrary = {
   name: string;
   categoryKey: string;
   categoryName: string;
-  subScenes: Array<{ id: string; name: string; categoryKey: string }>;
-  subSceneIds: string[];
+  sceneId: string | null;
+  scene: { id: string; name: string; categoryKey: string } | null;
+  collectionTaskId: string | null;
   description: string;
   enabled: boolean;
   createdByName: string;
@@ -159,12 +160,7 @@ export class SceneSystemService {
     if (!row) {
       throw new SceneSystemFailure("NOT_FOUND", "场景不存在", 404);
     }
-    const usedBy = await this.library
-      .createQueryBuilder("library")
-      .where("library.sub_scene_ids @> :ids::jsonb", {
-        ids: JSON.stringify([id]),
-      })
-      .getCount();
+    const usedBy = await this.library.countBy({ sceneId: id });
     if (usedBy > 0) {
       throw new SceneSystemFailure(
         "IN_USE",
@@ -217,20 +213,17 @@ export class SceneSystemService {
     return rows.map((row) => {
       const categoryName =
         pricingByKey.get(row.categoryKey)?.name ?? row.categoryKey;
+      const scene = row.sceneId ? sceneById.get(row.sceneId) ?? null : null;
       return {
         id: row.id,
         name: row.name,
         categoryKey: row.categoryKey,
         categoryName,
-        subScenes: row.subSceneIds
-          .map((id) => sceneById.get(id))
-          .filter((item): item is SceneEntity => Boolean(item))
-          .map((item) => ({
-            id: item.id,
-            name: item.name,
-            categoryKey: item.categoryKey,
-          })),
-        subSceneIds: row.subSceneIds,
+        sceneId: row.sceneId,
+        scene: scene
+          ? { id: scene.id, name: scene.name, categoryKey: scene.categoryKey }
+          : null,
+        collectionTaskId: row.collectionTaskId,
         description: row.description,
         enabled: row.enabled,
         createdByName: row.createdByName,
@@ -244,12 +237,14 @@ export class SceneSystemService {
   /**
    * 各场景的存量/目标/缺口。
    * 存量 = 该场景下质检合格提交的有效时长（可计费时长）；
-   * 目标 = 该场景下所有 scene_type 任务的目标时长之和；
+   * 目标 = scene_task_targets 该场景目标时长之和；
    * 缺口 = max(0, 目标 − 当前存量)。用于场景存量均衡看板。
    */
   async sceneInventory(): Promise<{
     items: Array<{
+      sceneId: string;
       sceneName: string;
+      categoryKey: string;
       type: "scene_type" | "measured";
       currentSeconds: number;
       targetSeconds: number;
@@ -257,55 +252,57 @@ export class SceneSystemService {
       taskCount: number;
     }>;
   }> {
-    // 目标：按场景名分组 scene_type 任务的目标时长
+    // 目标：scene_task_targets 按 scene_id 分组
     const targetRows = await this.dataSource.query<Array<{
-      scene_name: string;
+      scene_id: string;
       target_seconds: string;
       task_count: string;
     }>>(
-      `SELECT scene_name,
+      `SELECT scene_id,
               COALESCE(SUM(target_duration_seconds), 0)::float AS target_seconds,
-              COUNT(*)::int AS task_count
-         FROM collection_tasks
-        WHERE task_type = 'scene_type' AND target_duration_seconds IS NOT NULL
-        GROUP BY scene_name`,
+              COUNT(DISTINCT task_id)::int AS task_count
+         FROM scene_task_targets
+        GROUP BY scene_id`,
     );
 
-    // 存量：按提交快照场景名分组合格提交的有效时长（与计费同口径）
+    // 存量：submissions 按 scene_id 分组合格提交的有效时长（与计费同口径）
     const stockRows = await this.dataSource.query<Array<{
-      scene_name: string;
+      scene_id: string;
       current_ms: string;
     }>>(
-      `SELECT COALESCE(submission.task_scene_name, task.scene_name, '') AS scene_name,
+      `SELECT submission.scene_id,
               COALESCE(SUM(
                 COALESCE(quality.manual_billable_duration_ms, quality.billable_duration_ms, 0)
               ), 0)::float AS current_ms
          FROM submissions submission
-         LEFT JOIN collection_tasks task ON task.id = submission.task_id
          LEFT JOIN video_quality_results quality ON quality.submission_id = submission.id
-        WHERE quality.passed = true
+        WHERE submission.scene_id IS NOT NULL
+          AND quality.passed = true
           AND quality.status IN ('scored', 'review_pending')
-        GROUP BY 1`,
+        GROUP BY submission.scene_id`,
     );
 
-    const stockMap = new Map(
-      stockRows.map((row) => [
-        row.scene_name,
-        Number(row.current_ms) || 0,
-      ]),
-    );
-    const sceneSet = new Set<string>([
-      ...targetRows.map((row) => row.scene_name),
-      ...stockMap.keys(),
+    const sceneIdSet = new Set<string>([
+      ...targetRows.map((row) => row.scene_id),
+      ...stockRows.map((row) => row.scene_id),
     ]);
+    const scenes = await this.scenes.findBy({ id: In([...sceneIdSet]) });
+    const sceneById = new Map(scenes.map((scene) => [scene.id, scene]));
+    const targetMap = new Map(targetRows.map((row) => [row.scene_id, row]));
+    const stockMap = new Map(
+      stockRows.map((row) => [row.scene_id, Number(row.current_ms) || 0]),
+    );
 
-    const items = [...sceneSet].map((sceneName) => {
-      const currentMs = stockMap.get(sceneName) ?? 0;
-      const targetRow = targetRows.find((row) => row.scene_name === sceneName);
+    const items = [...sceneIdSet].map((sceneId) => {
+      const scene = sceneById.get(sceneId);
+      const targetRow = targetMap.get(sceneId);
+      const currentMs = stockMap.get(sceneId) ?? 0;
       const targetSeconds = Number(targetRow?.target_seconds) || 0;
       const currentSeconds = currentMs / 1000;
       return {
-        sceneName,
+        sceneId,
+        sceneName: scene?.name ?? sceneId,
+        categoryKey: scene?.categoryKey ?? "",
         type: targetRow ? ("scene_type" as const) : ("measured" as const),
         currentSeconds: Math.round(currentSeconds),
         targetSeconds: Math.round(targetSeconds),

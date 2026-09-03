@@ -35,7 +35,7 @@ export class PhotoRefDto {
   sizeBytes?: number;
 }
 
-/** 数采创建自己的场景库（从三层体系选一级大类 + 二级子场景） */
+/** 数采创建自己的场景库（强制单场景 + 可选挂大场景任务） */
 export class CreateCollectorLibraryDto {
   @IsString()
   @MaxLength(120)
@@ -43,12 +43,12 @@ export class CreateCollectorLibraryDto {
 
   @IsString()
   @MaxLength(64)
-  categoryKey!: string;
+  sceneId!: string;
 
-  @IsArray()
-  @ArrayMaxSize(50)
-  @IsString({ each: true })
-  subSceneIds!: string[];
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  collectionTaskId?: string | null;
 
   @IsOptional()
   @IsString()

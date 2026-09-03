@@ -14,6 +14,8 @@ import {
   type NormalizedTaskRequirements,
 } from "../database/entities/collection-task.entity.js";
 import { SubmissionEntity } from "../database/entities/submission.entity.js";
+import { SceneEntity } from "../database/entities/scene.entity.js";
+import { SceneTaskTargetEntity } from "../database/entities/scene-task-target.entity.js";
 import {
   GENERIC_TASK_TEMPLATE,
   presetSceneSummaries,
@@ -27,6 +29,7 @@ import { SceneSystemService } from "../scene-system/scene-system.service.js";
 import type {
   ConfirmNormalizedRequirementsDto,
   CreateTaskDto,
+  SceneTargetDto,
   UpdateTaskDto,
 } from "./dto/tasks.dto.js";
 
@@ -174,6 +177,10 @@ export class TasksService {
     private readonly normalizer: RequirementNormalizerService,
     private readonly scenePricing: ScenePricingService,
     private readonly sceneSystem: SceneSystemService,
+    @InjectRepository(SceneEntity)
+    private readonly scenes: Repository<SceneEntity>,
+    @InjectRepository(SceneTaskTargetEntity)
+    private readonly sceneTargets: Repository<SceneTaskTargetEntity>,
   ) {}
 
   /** 数采人员 / 团长：任务大厅（published + paused） */
@@ -302,6 +309,17 @@ export class TasksService {
       explicitPrice ??
       categoryPrice ??
       null;
+    // 场景型任务：绑定计费大类 + 按场景目标
+    let categoryKey: string | null = null;
+    let totalTargetSeconds: string | null = null;
+    if (input.taskType === "scene_type") {
+      const resolved = await this.resolveSceneTypeTargets(
+        input.categoryKey,
+        input.sceneTargets ?? [],
+      );
+      categoryKey = resolved.categoryKey;
+      totalTargetSeconds = resolved.totalTargetSeconds;
+    }
     const task = await this.tasks.save(
       this.tasks.create({
         id: `TASK-${randomUUID().slice(0, 8)}`,
@@ -311,11 +329,8 @@ export class TasksService {
         taskType: input.taskType ?? "custom",
         sceneLabelId: null,
         sceneLibraryId,
-        targetDurationSeconds:
-          input.targetDurationSeconds === null ||
-          input.targetDurationSeconds === undefined
-            ? null
-            : String(input.targetDurationSeconds),
+        categoryKey,
+        targetDurationSeconds: totalTargetSeconds,
         rawRequirements: input.rawRequirements.trim(),
         normalizedRequirements: null,
         normalizationStatus: "pending",
@@ -335,6 +350,9 @@ export class TasksService {
       null,
       { id: task.id, title: task.title, sceneName, sceneLibraryId },
     );
+    if (input.taskType === "scene_type") {
+      await this.saveSceneTargets(task.id, input.sceneTargets ?? []);
+    }
     // 创建成功后自动在后台进行 AI 规范化，结果直接落库，管理员只需核查一遍
     const normalized = await this.runAutoNormalize(task, actor);
     const final = await this.tasks.save(task);
@@ -414,11 +432,8 @@ export class TasksService {
     if (input.taskType !== undefined) {
       task.taskType = input.taskType;
     }
-    if (input.targetDurationSeconds !== undefined) {
-      task.targetDurationSeconds =
-        input.targetDurationSeconds === null
-          ? null
-          : String(input.targetDurationSeconds);
+    if (input.categoryKey !== undefined) {
+      task.categoryKey = input.categoryKey;
     }
     if (input.rawRequirements !== undefined) {
       task.rawRequirements = input.rawRequirements.trim();
@@ -444,6 +459,17 @@ export class TasksService {
         normalizationStatus: saved.normalizationStatus,
       },
     );
+
+    if (saved.taskType === "scene_type" && input.sceneTargets !== undefined) {
+      const resolved = await this.resolveSceneTypeTargets(
+        saved.categoryKey ?? undefined,
+        input.sceneTargets,
+      );
+      saved.categoryKey = resolved.categoryKey;
+      saved.targetDurationSeconds = resolved.totalTargetSeconds;
+      await this.tasks.save(saved);
+      await this.saveSceneTargets(saved.id, input.sceneTargets);
+    }
 
     // 提示词相关内容是否变化（场景名 / 说明 / 原始要求）
     const promptChanged =
@@ -764,6 +790,60 @@ export class TasksService {
     task.closedAt = null;
     if (previouslyPublished) task.revision += 1;
     return { sceneLabelId, previousRevision };
+  }
+
+  /** 校验并归一化场景型任务的计费大类 + 按场景目标 */
+  private async resolveSceneTypeTargets(
+    categoryKeyInput: string | undefined,
+    sceneTargets: SceneTargetDto[],
+  ): Promise<{ categoryKey: string; totalTargetSeconds: string }> {
+    if (!categoryKeyInput) {
+      throw new TaskFailure("VALIDATION", "场景型任务请选择计费大类", 400);
+    }
+    const pricing = await this.scenePricing.get(categoryKeyInput);
+    if (!pricing) {
+      throw new TaskFailure("VALIDATION", "计费大类不存在", 400);
+    }
+    if (sceneTargets.length === 0) {
+      throw new TaskFailure(
+        "VALIDATION",
+        "场景型任务请至少设置一个场景目标",
+        400,
+      );
+    }
+    let total = 0;
+    for (const target of sceneTargets) {
+      const scene = await this.scenes.findOneBy({ id: target.sceneId });
+      if (!scene || !scene.enabled) {
+        throw new TaskFailure("VALIDATION", "包含不存在或已停用的场景", 400);
+      }
+      if (scene.categoryKey !== categoryKeyInput) {
+        throw new TaskFailure(
+          "VALIDATION",
+          `场景「${scene.name}」不属于所选计费大类`,
+          400,
+        );
+      }
+      total += target.targetDurationSeconds;
+    }
+    return { categoryKey: categoryKeyInput, totalTargetSeconds: String(total) };
+  }
+
+  /** 保存场景型任务的按场景目标 */
+  private async saveSceneTargets(
+    taskId: string,
+    sceneTargets: SceneTargetDto[],
+  ): Promise<void> {
+    await this.sceneTargets.delete({ taskId });
+    const rows = sceneTargets.map((target) =>
+      this.sceneTargets.create({
+        id: `STT-${randomUUID().slice(0, 8).toUpperCase()}`,
+        taskId,
+        sceneId: target.sceneId,
+        targetDurationSeconds: String(target.targetDurationSeconds),
+      }),
+    );
+    await this.sceneTargets.save(rows);
   }
 
   private async findEntity(id: string): Promise<CollectionTaskEntity> {

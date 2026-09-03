@@ -27,6 +27,7 @@ import { QualityRuleVersionEntity } from "./entities/quality-rule-version.entity
 import { SceneCategoryPricingEntity } from "./entities/scene-category-pricing.entity.js";
 import { SceneEntity } from "./entities/scene.entity.js";
 import { SceneLibraryEntity } from "./entities/scene-library.entity.js";
+import { SceneTaskTargetEntity } from "./entities/scene-task-target.entity.js";
 import { SessionEntity } from "./entities/session.entity.js";
 import { SubmissionDuplicateCandidateEntity } from "./entities/submission-duplicate-candidate.entity.js";
 import { SubmissionEntity } from "./entities/submission.entity.js";
@@ -90,6 +91,7 @@ import { TaskBoundaryRefinements2026090500001 } from "./migrations/202609050001-
 import { TaskSegmentAdaptiveCut2026090600001 } from "./migrations/202609060001-task-segment-adaptive-cut.js";
 import { TaskSegmentAnnotationPublication2026091200001 } from "./migrations/202609120001-task-segment-annotation-publication.js";
 import { SceneSingleLayer2026091500001 } from "./migrations/202609150001-scene-single-layer.js";
+import { TaskSceneBinding2026091600001 } from "./migrations/202609160001-task-scene-binding.js";
 
 export const identityEntities = [
   TeamEntity,
@@ -125,6 +127,7 @@ export const identityEntities = [
   SceneCategoryPricingEntity,
   SceneEntity,
   SceneLibraryEntity,
+  SceneTaskTargetEntity,
   TaskSegmentAssetEntity,
   TaskSegmentAnnotationRevisionEntity,
   TaskSegmentAssetProjectionEntity,
@@ -194,6 +197,7 @@ export function createDataSource(
       UnifiedSceneManagement2026091100001,
       TaskAssetProjection2026091300001,
       SceneSingleLayer2026091500001,
+      TaskSceneBinding2026091600001,
     ],
     synchronize: false,
     logging: false,

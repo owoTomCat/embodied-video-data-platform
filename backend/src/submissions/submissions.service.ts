@@ -650,6 +650,8 @@ export class SubmissionsService {
     let sceneLibraryId: string | null = input.sceneLibraryId ?? null;
     let sceneLibraryName: string | null = null;
     let sceneCategoryKey: string | null = null;
+    let sceneId: string | null = null;
+    let collectionTaskId: string | null = null;
     let scenePricePerHour: string | null = null;
     let guideSnapshot: unknown = null;
     if (guideTaskId || sceneLibraryId) {
@@ -668,6 +670,8 @@ export class SubmissionsService {
       sceneLibraryId = library?.id ?? libraryId;
       sceneLibraryName = library?.name ?? guideTask?.title ?? null;
       sceneCategoryKey = library?.categoryKey ?? null;
+      sceneId = library?.sceneId ?? null;
+      collectionTaskId = library?.collectionTaskId ?? null;
       if (sceneCategoryKey) {
         const pricing = await this.sceneCategoryPricing(sceneCategoryKey);
         scenePricePerHour = pricing?.pricePerHour ?? null;
@@ -751,12 +755,18 @@ export class SubmissionsService {
               ? {
                   scene_name: sceneLibraryName,
                   guide_task_id: guideTaskId,
+                  scene_id: sceneId,
+                  category_key: sceneCategoryKey,
+                  task_card: guideSnapshot,
                 }
               : null,
           taskPricePointsPerMinute:
             task?.pricePointsPerMinute ?? scenePricePerHour ?? null,
           guideTaskId,
           sceneLibraryId,
+          sceneId,
+          categoryKey: sceneCategoryKey,
+          collectionTaskId,
           dataUsageAuthorized: true,
           privacyConfirmed: true,
           sensitiveContentConfirmed: true,

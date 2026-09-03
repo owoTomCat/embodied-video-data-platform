@@ -60,6 +60,10 @@ export class CollectionTaskEntity {
   @Column({ name: "scene_library_id", type: "varchar", length: 64, nullable: true })
   sceneLibraryId: string | null = null;
 
+  /** 补量任务绑定的计费大类 key（taskType=scene_type 使用） */
+  @Column({ name: "category_key", type: "varchar", length: 64, nullable: true })
+  categoryKey: string | null = null;
+
   /**
    * 任务类型：generic = 通用任务（不绑定场景）；scene_type = 场景型任务（平台补量）；
    * preset = 场景库任务；custom = 自定义场景任务。

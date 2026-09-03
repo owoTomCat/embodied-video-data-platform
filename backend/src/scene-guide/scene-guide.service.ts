@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { randomUUID } from "node:crypto";
-import { In, Repository } from "typeorm";
+import { Repository } from "typeorm";
 
 import type { PublicUser } from "../auth/auth.types.js";
 import { AuditService } from "../audit/audit.service.js";
@@ -105,8 +105,9 @@ export type PublicLibrary = {
   name: string;
   categoryKey: string;
   categoryName: string;
-  subSceneIds: string[];
-  subScenes: Array<{ id: string; name: string; categoryKey: string }>;
+  sceneId: string | null;
+  scene: { id: string; name: string; categoryKey: string } | null;
+  collectionTaskId: string | null;
   photoRefs: Array<{ objectKey: string; contentType?: string; name?: string }>;
   coverObjectKey: string | null;
   description: string;
@@ -189,13 +190,13 @@ export class SceneGuideService {
     );
   }
 
-  /** 数采：创建自己的场景库（从三层体系选一级大类 + 二级子场景；photoRefs 首张作为库封面） */
+  /** 数采：创建自己的场景库（强制单场景；category_key 由 scene 继承） */
   async createLibrary(
     actor: PublicUser,
     input: {
       name: string;
-      categoryKey: string;
-      subSceneIds: string[];
+      sceneId: string;
+      collectionTaskId?: string | null;
       description?: string;
       photoRefs?: GuidePhotoRef[];
     },
@@ -204,18 +205,18 @@ export class SceneGuideService {
     if (!input.name?.trim()) {
       throw new SceneGuideFailure("VALIDATION", "请填写场景库名称", 400);
     }
-    const category = await this.pricing.findOneBy({ categoryKey: input.categoryKey });
-    if (!category) {
-      throw new SceneGuideFailure("VALIDATION", "场景类别不存在", 400);
+    const scene = await this.scenes.findOneBy({ id: input.sceneId });
+    if (!scene || !scene.enabled) {
+      throw new SceneGuideFailure("VALIDATION", "场景不存在或已停用", 400);
     }
-    const subScenes = await this.validateSubScenes(input.subSceneIds, input.categoryKey);
     const photoRefs = input.photoRefs ?? [];
     const row = await this.libraries.save(
       this.libraries.create({
         id: `SL-${randomUUID().slice(0, 8).toUpperCase()}`,
         name: input.name.trim(),
-        categoryKey: input.categoryKey,
-        subSceneIds: subScenes.map((item) => item.id),
+        categoryKey: scene.categoryKey,
+        sceneId: scene.id,
+        collectionTaskId: input.collectionTaskId ?? null,
         photoRefs,
         coverObjectKey: photoRefs[0]?.objectKey ?? null,
         description: input.description?.trim() ?? "",
@@ -230,9 +231,16 @@ export class SceneGuideService {
       actor,
       "collector_library_create",
       { id: row.id, name: row.name },
-      `数采新建场景库「${row.name}」（类别：${category.name}）`,
+      `数采新建场景库「${row.name}」（场景：${scene.name}）`,
       null,
-      { id: row.id, name: row.name, categoryKey: row.categoryKey, subSceneIds: row.subSceneIds, photoRefs: row.photoRefs },
+      {
+        id: row.id,
+        name: row.name,
+        categoryKey: row.categoryKey,
+        sceneId: row.sceneId,
+        collectionTaskId: row.collectionTaskId,
+        photoRefs: row.photoRefs,
+      },
     );
     return (await this.listMyLibraries(actor)).find((item) => item.id === row.id)!;
   }
@@ -617,20 +625,17 @@ export class SceneGuideService {
   ): PublicLibrary {
     const categoryName =
       pricingByCategoryKey.get(row.categoryKey)?.name ?? row.categoryKey;
+    const scene = row.sceneId ? sceneById.get(row.sceneId) ?? null : null;
     return {
       id: row.id,
       name: row.name,
       categoryKey: row.categoryKey,
       categoryName,
-      subSceneIds: row.subSceneIds,
-      subScenes: row.subSceneIds
-        .map((id) => sceneById.get(id))
-        .filter((item): item is SceneEntity => Boolean(item))
-        .map((item) => ({
-          id: item.id,
-          name: item.name,
-          categoryKey: item.categoryKey,
-        })),
+      sceneId: row.sceneId,
+      scene: scene
+        ? { id: scene.id, name: scene.name, categoryKey: scene.categoryKey }
+        : null,
+      collectionTaskId: row.collectionTaskId,
       photoRefs: row.photoRefs,
       coverObjectKey: row.coverObjectKey,
       description: row.description,
@@ -640,26 +645,6 @@ export class SceneGuideService {
       createdAt: row.createdAt.getTime(),
       updatedAt: row.updatedAt.getTime(),
     };
-  }
-
-  private async validateSubScenes(
-    ids: string[],
-    categoryKey: string,
-  ): Promise<SceneEntity[]> {
-    const uniqueIds = [...new Set(ids)];
-    const rows = await this.scenes.findBy({ id: In(uniqueIds) });
-    if (rows.length !== uniqueIds.length) {
-      throw new SceneGuideFailure("VALIDATION", "包含不存在的场景", 400);
-    }
-    const wrongCategory = rows.find((row) => row.categoryKey !== categoryKey);
-    if (wrongCategory) {
-      throw new SceneGuideFailure(
-        "VALIDATION",
-        `场景「${wrongCategory.name}」不属于所选场景类别`,
-        400,
-      );
-    }
-    return rows;
   }
 }
 
