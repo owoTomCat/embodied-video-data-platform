@@ -218,9 +218,7 @@ export function SceneSystemPage() {
                 <td><strong>{item.name}</strong><small className="field-help">{item.id}</small></td>
                 <td><span className="scene-group-code">{item.categoryName}</span></td>
                 <td>
-                  {item.subScenes.length > 0
-                    ? item.subScenes.map((sub) => <span key={sub.id} className="tag-chip">{sub.name}</span>)
-                    : <span className="muted">未设置子场景</span>}
+                  {item.scene ? <span className="tag-chip">{item.scene.name}</span> : <span className="muted">未设置场景</span>}
                 </td>
                 <td><small className="field-help">{item.description || "—"}</small></td>
                 <td>{item.enabled ? <StatusBadge label="启用" tone="success" /> : <StatusBadge label="停用" tone="neutral" />}</td>

@@ -51,8 +51,9 @@ export type CollectorLibrary = {
   name: string;
   categoryKey: string;
   categoryName: string;
-  subSceneIds: string[];
-  subScenes: Array<{ id: string; name: string; categoryKey: string }>;
+  sceneId: string | null;
+  scene: { id: string; name: string; categoryKey: string } | null;
+  collectionTaskId: string | null;
   photoRefs: GuidePhotoRef[];
   coverObjectKey: string | null;
   description: string;
@@ -102,8 +103,8 @@ export type ReviewGuideTaskInput = {
 
 export type CreateCollectorLibraryInput = {
   name: string;
-  categoryKey: string;
-  subSceneIds: string[];
+  sceneId: string;
+  collectionTaskId?: string | null;
   description?: string;
   photoRefs?: GuidePhotoRef[];
 };

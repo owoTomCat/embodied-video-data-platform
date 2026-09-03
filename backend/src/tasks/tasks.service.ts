@@ -41,7 +41,9 @@ export type PublicTask = {
   sceneLabelId: string | null;
   sceneLibraryId: string | null;
   taskType: CollectionTaskType;
+  categoryKey: string | null;
   targetDurationSeconds: number | null;
+  sceneTargets: Array<{ sceneId: string; targetDurationSeconds: number }>;
   rawRequirements: string;
   normalizedRequirements: NormalizedTaskRequirements | null;
   normalizationStatus: string;
@@ -64,6 +66,7 @@ export type PublicTaskForCollector = {
   sceneLabelId: string | null;
   sceneLibraryId: string | null;
   taskType: CollectionTaskType;
+  categoryKey: string | null;
   targetDurationSeconds: number | null;
   normalizedRequirements: NormalizedTaskRequirements | null;
   pricePointsPerMinute: number | null;
@@ -81,7 +84,9 @@ export function publicTask(task: CollectionTaskEntity): PublicTask {
     sceneLabelId: task.sceneLabelId,
     sceneLibraryId: task.sceneLibraryId,
     taskType: task.taskType,
+    categoryKey: task.categoryKey,
     targetDurationSeconds: numericOrNull(task.targetDurationSeconds),
+    sceneTargets: [],
     rawRequirements: task.rawRequirements,
     normalizedRequirements: task.normalizedRequirements,
     normalizationStatus: task.normalizationStatus,
@@ -108,6 +113,7 @@ export function publicTaskForCollector(
     sceneLabelId: task.sceneLabelId,
     sceneLibraryId: task.sceneLibraryId,
     taskType: task.taskType,
+    categoryKey: task.categoryKey,
     targetDurationSeconds: numericOrNull(task.targetDurationSeconds),
     normalizedRequirements: task.normalizedRequirements,
     pricePointsPerMinute: numericOrNull(task.pricePointsPerMinute),

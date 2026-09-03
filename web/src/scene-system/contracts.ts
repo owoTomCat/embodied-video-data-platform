@@ -20,14 +20,15 @@ export type UpdateSceneInput = {
   enabled?: boolean;
 };
 
-/** 场景库条目：实际采集场景（场景名称 + 计费大类 + 子场景） */
+/** 场景库条目：实际采集场景（场景名称 + 计费大类 + 单场景） */
 export type SceneLibraryItem = {
   id: string;
   name: string;
   categoryKey: string;
   categoryName: string;
-  subScenes: Array<{ id: string; name: string; categoryKey: string }>;
-  subSceneIds: string[];
+  sceneId: string | null;
+  scene: { id: string; name: string; categoryKey: string } | null;
+  collectionTaskId: string | null;
   description: string;
   enabled: boolean;
   createdByName: string;

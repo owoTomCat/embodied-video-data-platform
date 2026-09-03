@@ -56,10 +56,12 @@ vi.mock("../../scene-pricing/client/scenePricingApi", () => ({
 
 const sceneSystemApi = vi.hoisted(() => ({
   listSceneLibrary: vi.fn(),
+  listScenes: vi.fn(),
 }));
 
 vi.mock("../../scene-system/client/sceneSystemApi", () => ({
   listSceneLibrary: sceneSystemApi.listSceneLibrary,
+  listScenes: sceneSystemApi.listScenes,
 }));
 
 const draftTask = {
@@ -136,14 +138,18 @@ describe("TasksPage", () => {
       { categoryKey: "factory", name: "工厂", pricePerHour: 30, description: "", updatedAt: 0 },
       { categoryKey: "generic", name: "通用", pricePerHour: 20, description: "", updatedAt: 0 },
     ]);
+    sceneSystemApi.listScenes.mockResolvedValue([
+      { id: "SC-001", name: "厨房", categoryKey: "family", description: "", enabled: true, updatedAt: 0 },
+    ]);
     sceneSystemApi.listSceneLibrary.mockResolvedValue([
       {
         id: "SL-001",
         name: "采集员A家",
         categoryKey: "family",
         categoryName: "家庭",
-        subScenes: [{ id: "SC-001", name: "厨房", categoryKey: "family" }],
-        subSceneIds: ["SC-001"],
+        sceneId: "SC-001",
+        scene: { id: "SC-001", name: "厨房", categoryKey: "family" },
+        collectionTaskId: null,
         description: "",
         enabled: true,
         createdByName: "管理员",

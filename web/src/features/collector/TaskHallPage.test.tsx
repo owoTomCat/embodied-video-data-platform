@@ -39,8 +39,9 @@ const kitchenLibrary = {
   name: "我家厨房",
   categoryKey: "family",
   categoryName: "家庭",
-  subSceneIds: ["SC-001"],
-  subScenes: [{ id: "SC-001", name: "厨房", categoryKey: "family" }],
+  sceneId: "SC-001",
+  scene: { id: "SC-001", name: "厨房", categoryKey: "family" },
+  collectionTaskId: null,
   photoRefs: [],
   coverObjectKey: null,
   description: "",
@@ -101,10 +102,10 @@ describe("TaskHallPage", () => {
     await screen.findByText("我家厨房");
     await user.click(screen.getByRole("button", { name: /拍照新建场景库/ }));
     await user.type(await screen.findByLabelText("场景库名称"), "我家卧室");
-    await user.click(screen.getByLabelText("厨房"));
+    await user.selectOptions(await screen.findByLabelText("场景（单选）"), "SC-001");
     await user.click(screen.getByRole("button", { name: /创建场景库/ }));
     expect(sceneGuideApi.createCollectorLibrary).toHaveBeenCalledWith(
-      expect.objectContaining({ name: "我家卧室", categoryKey: "family" }),
+      expect.objectContaining({ name: "我家卧室", sceneId: "SC-001" }),
     );
   });
 

@@ -46,7 +46,7 @@ export function TaskHallPage({ navigate }: { navigate(path: string): void }) {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [formName, setFormName] = useState("");
-  const [selectedSubScenes, setSelectedSubScenes] = useState<string[]>([]);
+  const [selectedSceneId, setSelectedSceneId] = useState("");
   const [formDescription, setFormDescription] = useState("");
   const [photos, setPhotos] = useState<Array<{ file: File; url: string }>>([]);
 
@@ -106,17 +106,9 @@ export function TaskHallPage({ navigate }: { navigate(path: string): void }) {
     [scenes, activeCategory],
   );
 
-  function toggleSubScene(id: string) {
-    setSelectedSubScenes((current) =>
-      current.includes(id)
-        ? current.filter((item) => item !== id)
-        : [...current, id],
-    );
-  }
-
   function resetForm() {
     setFormName("");
-    setSelectedSubScenes([]);
+    setSelectedSceneId("");
     setFormDescription("");
     setPhotos((current) => {
       current.forEach((photo) => URL.revokeObjectURL(photo.url));
@@ -158,8 +150,8 @@ export function TaskHallPage({ navigate }: { navigate(path: string): void }) {
       notify("error", "请填写场景库名称");
       return;
     }
-    if (selectedSubScenes.length === 0) {
-      notify("error", "请至少选择一个二级场景");
+    if (!selectedSceneId) {
+      notify("error", "请选择一个场景");
       return;
     }
     setSaving(true);
@@ -175,8 +167,7 @@ export function TaskHallPage({ navigate }: { navigate(path: string): void }) {
       }
       const created = await createCollectorLibrary({
         name: formName.trim(),
-        categoryKey: activeCategory,
-        subSceneIds: selectedSubScenes,
+        sceneId: selectedSceneId,
         description: formDescription.trim() || undefined,
         ...(photoRefs.length ? { photoRefs } : {}),
       });
@@ -280,7 +271,7 @@ export function TaskHallPage({ navigate }: { navigate(path: string): void }) {
                     <span className="task-card-tag">{library.taskCount} 张任务卡</span>
                   </div>
                   <p className="task-desc">
-                    {library.description || `包含 ${library.subScenes.map((s) => s.name).join("、")}`}
+                    {library.description || (library.scene ? `场景：${library.scene.name}` : "")}
                   </p>
                   <div className="task-card-foot">
                     <div className="task-card-actions">
@@ -322,20 +313,14 @@ export function TaskHallPage({ navigate }: { navigate(path: string): void }) {
                 <input value={formName} onChange={(event) => setFormName(event.target.value)} placeholder="如：我家厨房" />
               </label>
 
-              <label className="form-label"><span>二级场景（可多选）</span>
-                <div className="guide-checkbox-grid">
+              <label className="form-label"><span>场景（单选）</span>
+                <select value={selectedSceneId} onChange={(event) => setSelectedSceneId(event.target.value)}>
+                  <option value="">请选择场景…</option>
                   {subScenes.map((scene) => (
-                    <label key={scene.id} className="guide-checkbox">
-                      <input
-                        type="checkbox"
-                        checked={selectedSubScenes.includes(scene.id)}
-                        onChange={() => toggleSubScene(scene.id)}
-                      />
-                      <span>{scene.name}</span>
-                    </label>
+                    <option key={scene.id} value={scene.id}>{scene.name}</option>
                   ))}
-                  {subScenes.length === 0 && <span className="form-message">当前分类暂无二级场景</span>}
-                </div>
+                </select>
+                {subScenes.length === 0 && <span className="form-message">当前分类暂无场景</span>}
               </label>
 
               <label className="form-label"><span>环境照片（首张做封面）</span>
