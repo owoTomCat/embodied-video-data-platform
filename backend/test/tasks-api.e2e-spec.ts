@@ -178,40 +178,22 @@ describe("tasks API with task type dimension", () => {
     ]);
   });
 
-  describe("GET /tasks/preset-scenes", () => {
-    it("returns the generic template and five preset scenes for admins", async () => {
+  describe("GET /tasks/task-type-catalog", () => {
+    it("returns the generic template for admins", async () => {
       const cookie = await login("stat-admin");
       const response = await request(app.getHttpServer())
-        .get("/api/v1/tasks/preset-scenes")
+        .get("/api/v1/tasks/task-type-catalog")
         .set("Cookie", cookie)
         .expect(200);
-      const { presetScenes, generic } = response.body;
-      expect(presetScenes.map((scene: { name: string }) => scene.name)).toEqual([
-        "家庭-厨房",
-        "家庭-客厅",
-        "家庭-卧室",
-        "办公室",
-        "工厂",
-      ]);
+      const { generic } = response.body;
       expect(generic.sceneName).toBe("通用");
       expect(generic.requirements.length).toBeGreaterThanOrEqual(4);
-      for (const scene of presetScenes as Array<{
-        defaultTitle: string;
-        description: string;
-        requirements: string[];
-        qualityNotes: string[];
-      }>) {
-        expect(scene.defaultTitle.length).toBeGreaterThan(0);
-        expect(scene.description.length).toBeGreaterThan(50);
-        expect(scene.requirements.length).toBeGreaterThanOrEqual(4);
-        expect(scene.qualityNotes.length).toBeGreaterThanOrEqual(2);
-      }
     });
 
     it("rejects non-admin roles", async () => {
       const cookie = await login("stat-collector");
       await request(app.getHttpServer())
-        .get("/api/v1/tasks/preset-scenes")
+        .get("/api/v1/tasks/task-type-catalog")
         .set("Cookie", cookie)
         .expect(403);
     });
@@ -333,7 +315,8 @@ describe("tasks API with task type dimension", () => {
           description: "平台补量",
           sceneName: "家庭-厨房",
           taskType: "scene_type",
-          targetDurationSeconds: 3600,
+          categoryKey: "family",
+          sceneTargets: [{ sceneId: "SC-001", targetDurationSeconds: 3600 }],
           rawRequirements: "必须第一人称拍摄。",
         })
         .expect(201);
@@ -429,10 +412,10 @@ describe("tasks API with task type dimension", () => {
       await dataSource.getRepository(CollectionTaskEntity).save([
         {
           id: "TASK-STAT-A",
-          title: "厨房预设任务",
+          title: "厨房任务",
           description: "",
           sceneName: "家庭-厨房",
-          taskType: "preset",
+          taskType: "custom",
           rawRequirements: "第一人称拍摄",
           normalizationStatus: "ready",
           status: "published",

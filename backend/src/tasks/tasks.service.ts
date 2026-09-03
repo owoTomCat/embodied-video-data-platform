@@ -16,11 +16,7 @@ import {
 import { SubmissionEntity } from "../database/entities/submission.entity.js";
 import { SceneEntity } from "../database/entities/scene.entity.js";
 import { SceneTaskTargetEntity } from "../database/entities/scene-task-target.entity.js";
-import {
-  GENERIC_TASK_TEMPLATE,
-  presetSceneSummaries,
-  type PresetScene,
-} from "./preset-scenes.js";
+import { GENERIC_TASK_TEMPLATE } from "./generic-task-template.js";
 import { TaskFailure } from "./tasks.failure.js";
 import { TasksPolicy } from "./tasks.policy.js";
 import { RequirementNormalizerService } from "./requirement-normalizer.service.js";
@@ -207,15 +203,12 @@ export class TasksService {
     };
   }
 
-  /** 管理员：任务类型选择器使用的预设场景目录（含默认模板内容） */
-  async listPresetScenes(
+  /** 管理员：任务类型选择器使用的通用任务模板 */
+  async listTaskTypeCatalog(
     actor: PublicUser,
-  ): Promise<{ presetScenes: PresetScene[]; generic: typeof GENERIC_TASK_TEMPLATE }> {
+  ): Promise<{ generic: typeof GENERIC_TASK_TEMPLATE }> {
     this.policy.requireManage(actor);
-    return {
-      presetScenes: presetSceneSummaries(),
-      generic: GENERIC_TASK_TEMPLATE,
-    };
+    return { generic: GENERIC_TASK_TEMPLATE };
   }
 
   /** 管理员：任务管理列表（状态筛选 + 关键词 + 分页） */
@@ -684,8 +677,25 @@ export class TasksService {
         409,
       );
     }
-    const { sceneLabelId, previousRevision } =
-      await this.prepareTaskForPublication(actor, task);
+    if (task.normalizationStatus !== "ready" || !task.normalizedRequirements) {
+      throw new TaskFailure(
+        "TASK_REQUIREMENTS_NOT_READY",
+        "请先完成 AI 要求规范化并确认后再发布任务",
+        409,
+      );
+    }
+    // 通用任务与场景型任务不写自由文本场景标签字典（结构化场景不走标签字典）
+    const sceneLabelId =
+      task.taskType === "generic" || task.taskType === "scene_type"
+        ? null
+        : await this.resolveSceneLabelId(actor, task);
+    const previouslyPublished = task.publishedAt !== null;
+    task.sceneLabelId = sceneLabelId;
+    task.status = "published";
+    task.publishedAt = task.publishedAt ?? new Date();
+    task.pausedAt = null;
+    task.closedAt = null;
+    if (previouslyPublished) task.revision += 1;
     const saved = await this.tasks.save(task);
     await this.audit.record(
       this.dataSource.manager,
@@ -693,7 +703,7 @@ export class TasksService {
       "task_publish",
       { id: task.id, name: task.title },
       `发布采集任务 ${task.title}（场景：${task.sceneName}，版本 V${saved.revision}）`,
-      { revision: previousRevision },
+      { revision: task.revision - (previouslyPublished ? 1 : 0) },
       { revision: saved.revision, status: saved.status, sceneLabelId },
     );
     return publicTask(saved);

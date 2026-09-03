@@ -34,7 +34,6 @@ const GENERIC_SCENE_NAME = "通用";
 function taskTypeLabel(type: CollectionTaskType): string {
   if (type === "generic") return "通用任务";
   if (type === "scene_type") return "场景型任务";
-  if (type === "preset") return "场景库场景";
   return "自定义";
 }
 

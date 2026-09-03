@@ -5,9 +5,7 @@ import type {
   GuideScene,
   GuideTask,
   PhotoUploadResult,
-  ReviewGuideTaskInput,
   SceneCategory,
-  SubmitEditedCardInput,
 } from "../contracts";
 
 export class SceneGuideApiError extends Error {
@@ -156,48 +154,6 @@ export async function listLibraryTasks(
     `scene-guide/library/${encodeURIComponent(libraryId)}/tasks`,
   );
   return result.tasks;
-}
-
-export async function submitEditedCard(
-  id: string,
-  input: SubmitEditedCardInput,
-): Promise<GuideTask> {
-  const result = await requestJson<{ task: GuideTask }>(
-    `scene-guide/${encodeURIComponent(id)}/submit-edited`,
-    {
-      method: "POST",
-      body: JSON.stringify(input),
-    },
-  );
-  return result.task;
-}
-
-export async function reviewGuideTask(
-  id: string,
-  input: ReviewGuideTaskInput,
-): Promise<GuideTask> {
-  const result = await requestJson<{ task: GuideTask }>(
-    `scene-guide/${encodeURIComponent(id)}/review`,
-    {
-      method: "POST",
-      body: JSON.stringify(input),
-    },
-  );
-  return result.task;
-}
-
-export async function backfillSubmission(
-  id: string,
-  submissionId: string,
-): Promise<GuideTask> {
-  const result = await requestJson<{ task: GuideTask }>(
-    `scene-guide/${encodeURIComponent(id)}/submission`,
-    {
-      method: "PUT",
-      body: JSON.stringify({ submissionId }),
-    },
-  );
-  return result.task;
 }
 
 export async function getGuideTask(id: string): Promise<GuideTask> {

@@ -171,7 +171,7 @@ export function taskContributions(submissions: Submission[]) {
       taskId: string | null;
       title: string;
       sceneName: string;
-      taskType: "generic" | "preset" | "custom";
+      taskType: "generic" | "scene_type" | "custom";
       uploads: number;
       effectiveSeconds: number;
       reviewed: number;

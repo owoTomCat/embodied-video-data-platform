@@ -1,23 +1,9 @@
 export type CollectionTaskStatus = "draft" | "published" | "paused" | "closed";
 export type TaskNormalizationStatus = "pending" | "ready" | "failed";
-// preset（场景库场景任务）已废弃：不再新建，但保留类型以兼容历史数据读取。
-export type CollectionTaskType = "generic" | "scene_type" | "preset" | "custom";
+export type CollectionTaskType = "generic" | "scene_type" | "custom";
 
-export type PresetScene = {
-  key: string;
-  /** 所属场景大类（定价按大类设置，细分场景共用同一价格） */
-  categoryKey: string;
-  name: string;
-  tagline: string;
-  defaultTitle: string;
-  description: string;
-  requirements: string[];
-  qualityNotes: string[];
-};
-
-/** 任务类型选择器数据源：预设场景目录 + 通用任务模板 */
+/** 任务类型选择器数据源：通用任务模板 */
 export type TaskTypeCatalog = {
-  presetScenes: PresetScene[];
   generic: {
     sceneName: string;
     defaultTitle: string;

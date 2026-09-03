@@ -7,9 +7,9 @@ import { TaskDimensionStats } from "./TaskDimensionStats";
 const stats: BackendSubmissionTaskStat[] = [
   {
     taskId: "TASK-1",
-    title: "厨房预设任务",
+    title: "厨房任务",
     sceneName: "家庭-厨房",
-    taskType: "preset",
+    taskType: "custom",
     total: 5,
     reviewed: 4,
     passed: 3,

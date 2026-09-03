@@ -14,12 +14,8 @@ import { SceneLibraryEntity } from "./scene-library.entity.js";
 import { SubmissionEntity } from "./submission.entity.js";
 import { UserEntity } from "./user.entity.js";
 
-/** 指导任务卡状态：ai_generated=AI生成未编辑可直接采集；in_review=数采编辑后待人工审核；approved/rejected=审核结果 */
-export type GuideTaskStatus =
-  | "ai_generated"
-  | "in_review"
-  | "approved"
-  | "rejected";
+/** 指导任务卡状态：AI 生成即用（编辑与人工审核已移除） */
+export type GuideTaskStatus = "ai_generated";
 
 /** 环境照片引用：object_key 指向 MinIO 存储的对象；dataUrl 供缩略图展示（可选） */
 export type GuidePhotoRef = {

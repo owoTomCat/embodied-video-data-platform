@@ -26,7 +26,6 @@ import { GuideCreatePage } from "../features/collector/GuideCreatePage";
 import { GuidePage } from "../features/collector/GuidePage";
 import { SceneLibraryDetailPage } from "../features/collector/SceneLibraryDetailPage";
 import { TaskHallPage } from "../features/collector/TaskHallPage";
-import { GuideTaskReviewPage } from "../features/admin/GuideTaskReviewPage";
 import { AccountProfilePage } from "../features/account/AccountProfilePage";
 import { SubmissionDetail } from "../features/collector/SubmissionDetail";
 import { SubmissionsPage } from "../features/collector/SubmissionsPage";
@@ -157,7 +156,6 @@ function AuthenticatedPlatformContent({
     else if (safePath === "/admin/people") page = <UsersTeamsPage />;
     else if (safePath === "/admin/labels") page = <LabelSetPage />;
     else if (safePath === "/admin/scenes") page = <SceneSystemPage />;
-    else if (safePath === "/admin/guide-tasks") page = <GuideTaskReviewPage />;
     else if (safePath === "/admin/rules") page = <RulesPage />;
     else if (safePath === "/admin/settlements") page = <SettlementPage />;
     else if (safePath === "/admin/public") page = <PublicConfigPage />;

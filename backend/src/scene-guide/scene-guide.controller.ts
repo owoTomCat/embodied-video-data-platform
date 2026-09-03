@@ -18,8 +18,6 @@ import { AllowedOriginGuard } from "../http/allowed-origin.guard.js";
 import {
   CreateCollectorLibraryDto,
   GenerateGuideTaskDto,
-  ReviewGuideTaskDto,
-  SubmitEditedCardDto,
 } from "./dto/scene-guide.dto.js";
 import { SceneGuideFailureFilter } from "./scene-guide.failure.filter.js";
 import { SceneGuideService } from "./scene-guide.service.js";
@@ -149,51 +147,6 @@ export class SceneGuideController {
     @Param("libraryId") libraryId: string,
   ) {
     return { tasks: await this.guide.listByLibrary(actor, libraryId) };
-  }
-
-  /** 数采编辑并提交任务卡（→ in_review）。 */
-  @Post(":id/submit-edited")
-  @UseGuards(AllowedOriginGuard)
-  async submitEdited(
-    @CurrentUser() actor: PublicUser,
-    @Param("id") id: string,
-    @Body() input: SubmitEditedCardDto,
-  ) {
-    return {
-      task: await this.guide.submitEdited(actor, id, {
-        sceneName: input.sceneName,
-        card: input.card,
-      }),
-    };
-  }
-
-  /** 管理员审核任务卡（approved / rejected）。 */
-  @Post(":id/review")
-  @UseGuards(AllowedOriginGuard)
-  async review(
-    @CurrentUser() actor: PublicUser,
-    @Param("id") id: string,
-    @Body() input: ReviewGuideTaskDto,
-  ) {
-    return {
-      task: await this.guide.review(actor, id, {
-        decision: input.decision,
-        comment: input.comment,
-      }),
-    };
-  }
-
-  /** 采集完成后回填 submission_id。 */
-  @Put(":id/submission")
-  @UseGuards(AllowedOriginGuard)
-  async backfillSubmission(
-    @CurrentUser() actor: PublicUser,
-    @Param("id") id: string,
-    @Body() input: { submissionId: string },
-  ) {
-    return {
-      task: await this.guide.backfillSubmission(actor, id, input.submissionId),
-    };
   }
 
   /** 管理员：全部指导任务卡（审核）。 */

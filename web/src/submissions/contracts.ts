@@ -334,7 +334,7 @@ export type BackendSubmission = {
     title?: string;
     revision: number | null;
     sceneName: string;
-    taskType: "generic" | "preset" | "custom";
+    taskType: "generic" | "scene_type" | "custom";
     requirements?: unknown;
     pricePointsPerMinute: number | null;
   } | null;
@@ -639,7 +639,7 @@ export type BackendSubmissionTaskStat = {
   taskId: string | null;
   title: string;
   sceneName: string;
-  taskType: "generic" | "preset" | "custom" | "none";
+  taskType: "generic" | "scene_type" | "custom" | "none";
   total: number;
   reviewed: number;
   passed: number;

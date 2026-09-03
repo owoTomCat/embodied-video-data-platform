@@ -1,8 +1,4 @@
-export type GuideTaskStatus =
-  | "ai_generated"
-  | "in_review"
-  | "approved"
-  | "rejected";
+export type GuideTaskStatus = "ai_generated";
 
 export type GuidePhotoRef = {
   objectKey: string;
@@ -89,16 +85,6 @@ export type PhotoUploadResult = {
 export type GenerateGuideTaskInput = {
   sceneLibraryId: string;
   photoRefs: GuidePhotoRef[];
-};
-
-export type SubmitEditedCardInput = {
-  sceneName: string;
-  card: GuideTaskCard;
-};
-
-export type ReviewGuideTaskInput = {
-  decision: "approved" | "rejected";
-  comment?: string;
 };
 
 export type CreateCollectorLibraryInput = {

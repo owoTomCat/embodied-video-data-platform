@@ -20,15 +20,9 @@ import { GuideCardSummary } from "./GuideCardView";
 
 const statusLabel: Record<GuideTask["status"], string> = {
   ai_generated: "AI 生成",
-  in_review: "待审核",
-  approved: "已通过",
-  rejected: "已驳回",
 };
 const statusTone: Record<GuideTask["status"], "success" | "warning" | "danger" | "info"> = {
   ai_generated: "info",
-  in_review: "warning",
-  approved: "success",
-  rejected: "danger",
 };
 
 export function SceneLibraryDetailPage({

@@ -89,9 +89,9 @@ export async function listTasksForCollector(): Promise<
   return payload.tasks;
 }
 
-/** 任务类型选择器数据源：预设场景目录 + 通用任务模板（管理员） */
+/** 任务类型选择器数据源：通用任务模板（管理员） */
 export async function listTaskTypeCatalog(): Promise<TaskTypeCatalog> {
-  return requestJson<TaskTypeCatalog>("tasks/preset-scenes");
+  return requestJson<TaskTypeCatalog>("tasks/task-type-catalog");
 }
 
 export async function listManageTasks(

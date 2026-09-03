@@ -113,7 +113,6 @@ export const navigationByRole: Record<Role, NavigationGroup[]> = {
       label: "任务",
       items: [
         { label: "任务管理", path: "/admin/tasks", icon: ClipboardList },
-        { label: "指导任务卡", path: "/admin/guide-tasks", icon: Camera },
       ],
     },
     {

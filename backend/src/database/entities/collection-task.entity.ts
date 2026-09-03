@@ -18,7 +18,7 @@ export type TaskNormalizationStatus = "pending" | "ready" | "failed";
  * generic = 通用任务（不绑定场景）；scene_type = 场景型任务（平台补量，绑定二级场景 + 目标时长）；
  * preset = 场景库任务；custom = 自定义场景任务。
  */
-export type CollectionTaskType = "generic" | "scene_type" | "preset" | "custom";
+export type CollectionTaskType = "generic" | "scene_type" | "custom";
 
 export type NormalizedRequirementItem = {
   type: "hard" | "soft";

@@ -51,10 +51,10 @@ export class TasksController {
     });
   }
 
-  /** 管理员：任务类型选择器使用的预设场景目录（注意：必须声明在 :id 之前） */
-  @Get("preset-scenes")
-  async presetScenes(@CurrentUser() actor: PublicUser) {
-    return await this.tasks.listPresetScenes(actor);
+  /** 管理员：任务类型选择器使用的通用任务模板（注意：必须声明在 :id 之前） */
+  @Get("task-type-catalog")
+  async taskTypeCatalog(@CurrentUser() actor: PublicUser) {
+    return await this.tasks.listTaskTypeCatalog(actor);
   }
 
   @Get(":id")
