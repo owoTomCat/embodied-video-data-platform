@@ -6,6 +6,7 @@ import {
   Param,
   Post,
   Put,
+  Query,
   UseFilters,
   UseGuards,
 } from "@nestjs/common";
@@ -22,6 +23,7 @@ import {
 } from "./dto/scene-guide.dto.js";
 import { SceneGuideFailureFilter } from "./scene-guide.failure.filter.js";
 import { SceneGuideService } from "./scene-guide.service.js";
+import { SceneGuideFailure } from "./scene-guide.policy.js";
 
 /**
  * 数采个人场景库 + 拍照生成任务卡：
@@ -98,6 +100,19 @@ export class SceneGuideController {
   @Get("libraries")
   async listAllLibraries(@CurrentUser() actor: PublicUser) {
     return { libraries: await this.guide.listAllLibraries(actor) };
+  }
+
+  /** 数采：获取照片的预签名下载 URL（用于场景库卡片封面展示）。 */
+  @Get("photo")
+  @UseGuards(AllowedOriginGuard)
+  async photoUrl(
+    @CurrentUser() actor: PublicUser,
+    @Query("key") key: string,
+  ) {
+    if (!key) {
+      throw new SceneGuideFailure("VALIDATION", "缺少照片 key", 400);
+    }
+    return await this.guide.resolvePhotoUrl(actor, key);
   }
 
   // ---------- 任务卡 ----------

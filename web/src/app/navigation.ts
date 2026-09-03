@@ -50,7 +50,6 @@ export const navigationByRole: Record<Role, NavigationGroup[]> = {
       label: "任务",
       items: [
         { label: "任务大厅", path: "/collector/tasks", icon: ClipboardList },
-        { label: "我的场景库", path: "/collector/scenes", icon: Map },
         { label: "上传视频", path: "/collector/upload", icon: Upload },
       ],
     },

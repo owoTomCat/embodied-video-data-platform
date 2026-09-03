@@ -4,6 +4,7 @@ import type {
   GenerateGuideTaskInput,
   GuideSceneClassification,
   GuideTask,
+  Level1Scene,
   PhotoUploadResult,
   ReviewGuideTaskInput,
   SubmitEditedCardInput,
@@ -65,6 +66,22 @@ export async function listMyLibraries(): Promise<CollectorLibrary[]> {
   return result.libraries;
 }
 
+/** 一级大场景分类（任务大厅分栏）。 */
+export async function listSceneLevel1(): Promise<Level1Scene[]> {
+  const result = await requestJson<{ level1: Level1Scene[] }>("scene-guide/level1");
+  return result.level1;
+}
+
+/** 某个一级大场景分类下的数采个人场景库列表（任务大厅进入某大场景后展示）。 */
+export async function listLibrariesByCategory(
+  categoryKey: string,
+): Promise<CollectorLibrary[]> {
+  const result = await requestJson<{ libraries: CollectorLibrary[] }>(
+    `scene-guide/libraries/by-category/${encodeURIComponent(categoryKey)}`,
+  );
+  return result.libraries;
+}
+
 export async function createCollectorLibrary(
   input: CreateCollectorLibraryInput,
 ): Promise<CollectorLibrary> {
@@ -88,6 +105,13 @@ export async function deleteCollectorLibrary(id: string): Promise<void> {
   await requestJson<{ deleted: boolean }>(
     `scene-guide/libraries/${encodeURIComponent(id)}`,
     { method: "DELETE" },
+  );
+}
+
+/** 场景库/任务卡照片的预签名下载 URL（用于场景库卡片封面展示）。 */
+export async function getGuidePhotoUrl(objectKey: string): Promise<{ url: string; expiresAt: number }> {
+  return requestJson<{ url: string; expiresAt: number }>(
+    `scene-guide/photo?key=${encodeURIComponent(objectKey)}`,
   );
 }
 

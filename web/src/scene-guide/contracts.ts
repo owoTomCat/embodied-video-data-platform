@@ -53,12 +53,20 @@ export type CollectorLibrary = {
   categoryName: string;
   subSceneIds: string[];
   subScenes: Array<{ id: string; level2Name: string; level1Code: string }>;
+  photoRefs: GuidePhotoRef[];
+  coverObjectKey: string | null;
   description: string;
   enabled: boolean;
   ownerAccountId: string | null;
   taskCount: number;
   createdAt: number;
   updatedAt: number;
+};
+
+export type Level1Scene = {
+  code: string;
+  name: string;
+  categoryKey: string;
 };
 
 export type GuideSceneClassification = {
@@ -97,4 +105,5 @@ export type CreateCollectorLibraryInput = {
   categoryKey: string;
   subSceneIds: string[];
   description?: string;
+  photoRefs?: GuidePhotoRef[];
 };

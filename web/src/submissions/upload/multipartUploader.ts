@@ -63,14 +63,19 @@ type UploadOptions = {
     id: string;
     requirementsConfirmed: boolean;
   };
+  /** 从 AI 任务卡进入提交：关联任务卡 + 场景库 id，提交挂场景大类计费 */
+  guideTaskId?: string;
+  sceneLibraryId?: string;
 };
 
 function requireAuthorization(options: UploadOptions): {
   dataUsageAuthorized: boolean;
   privacyConfirmed: boolean;
   sensitiveContentConfirmed: boolean;
-  taskId: string;
+  taskId: string | undefined;
   taskRequirementsConfirmed: boolean;
+  guideTaskId?: string;
+  sceneLibraryId?: string;
 } {
   const authorization = options.authorization;
   if (
@@ -80,16 +85,18 @@ function requireAuthorization(options: UploadOptions): {
   ) {
     throw new Error("上传前请先确认数据授权、隐私规范和敏感内容处理要求");
   }
-  if (!options.task?.id) {
+  if (!options.task?.id && !options.guideTaskId) {
     throw new Error("请先选择采集任务");
   }
-  if (!options.task.requirementsConfirmed) {
+  if (options.task?.id && !options.task.requirementsConfirmed) {
     throw new Error("上传前请先确认已阅读并理解任务要求");
   }
   return {
     ...authorization,
-    taskId: options.task.id,
-    taskRequirementsConfirmed: true,
+    taskId: options.task?.id,
+    taskRequirementsConfirmed: options.task?.requirementsConfirmed ?? true,
+    ...(options.guideTaskId ? { guideTaskId: options.guideTaskId } : {}),
+    ...(options.sceneLibraryId ? { sceneLibraryId: options.sceneLibraryId } : {}),
   };
 }
 
