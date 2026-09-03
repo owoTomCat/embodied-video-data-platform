@@ -187,6 +187,28 @@ export class SceneGuideService {
     );
   }
 
+  /** 数采：某个大场景任务下的个人场景库列表（任务大厅「去采集」→ 场景选择页） */
+  async listLibrariesByTask(
+    actor: PublicUser,
+    taskId: string,
+  ): Promise<PublicLibrary[]> {
+    sceneGuidePolicy.requireCollector(actor);
+    const rows = await this.libraries.find({
+      where: { ownerAccountId: actor.id, collectionTaskId: taskId },
+      order: { createdAt: "DESC", id: "DESC" },
+    });
+    const [scenes, pricingRows] = await Promise.all([
+      this.scenes.find(),
+      this.pricing.find(),
+    ]);
+    const byId = new Map(scenes.map((item) => [item.id, item]));
+    const pricingByKey = new Map(pricingRows.map((item) => [item.categoryKey, item]));
+    const taskCounts = await this.taskCountByLibrary(actor.id);
+    return rows.map((row) =>
+      this.toLibraryView(row, byId, pricingByKey, taskCounts),
+    );
+  }
+
   /** 数采：创建自己的场景库（强制单场景；category_key 由 scene 继承） */
   async createLibrary(
     actor: PublicUser,

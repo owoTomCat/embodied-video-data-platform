@@ -1,8 +1,10 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
+  Post,
   Put,
   UseFilters,
   UseGuards,
@@ -13,6 +15,7 @@ import { CurrentUser } from "../auth/current-user.decorator.js";
 import { SessionGuard } from "../auth/session.guard.js";
 import { AllowedOriginGuard } from "../http/allowed-origin.guard.js";
 import { SensitiveActionRateLimitGuard } from "../security/sensitive-action-rate-limit.guard.js";
+import { CreateSceneCategoryPriceDto } from "./dto/create-scene-category-price.dto.js";
 import { UpdateSceneCategoryPriceDto } from "./dto/update-scene-category-price.dto.js";
 import { ScenePricingFailureFilter } from "./scene-pricing-failure.filter.js";
 import { ScenePricingService } from "./scene-pricing.service.js";
@@ -32,6 +35,21 @@ export class ScenePricingController {
     return { categories: await this.pricing.list() };
   }
 
+  @Post()
+  @UseGuards(AllowedOriginGuard, SensitiveActionRateLimitGuard)
+  async create(
+    @CurrentUser() actor: PublicUser,
+    @Body() input: CreateSceneCategoryPriceDto,
+  ) {
+    return {
+      category: await this.pricing.create(actor, {
+        name: input.name,
+        pricePerHour: input.pricePerHour,
+        description: input.description,
+      }),
+    };
+  }
+
   @Put(":key")
   @UseGuards(AllowedOriginGuard, SensitiveActionRateLimitGuard)
   async update(
@@ -42,5 +60,14 @@ export class ScenePricingController {
     return {
       category: await this.pricing.update(actor, key, input),
     };
+  }
+
+  @Delete(":key")
+  @UseGuards(AllowedOriginGuard, SensitiveActionRateLimitGuard)
+  async delete(
+    @CurrentUser() actor: PublicUser,
+    @Param("key") key: string,
+  ) {
+    return await this.pricing.delete(actor, key);
   }
 }

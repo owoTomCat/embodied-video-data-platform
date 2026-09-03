@@ -2598,7 +2598,7 @@ export class SubmissionsService {
       .leftJoin(
         CollectionTaskEntity,
         "task",
-        "task.id = submission.taskId",
+        "task.id = COALESCE(submission.taskId, submission.collectionTaskId)",
       )
       .leftJoin(
         VideoQualityResultEntity,
@@ -2610,7 +2610,10 @@ export class SubmissionsService {
         "cycle",
         "cycle.submissionId = submission.id",
       )
-      .select("submission.taskId", "task_id")
+      .select(
+        "COALESCE(submission.taskId, submission.collectionTaskId)",
+        "task_id",
+      )
       .addSelect("task.title", "task_title")
       .addSelect("task.scene_name", "scene_name")
       .addSelect("task.task_type", "task_type")
@@ -2649,7 +2652,7 @@ export class SubmissionsService {
         `COALESCE(SUM(cycle.points::float8), 0)`,
         "locked_points",
       )
-      .groupBy("submission.taskId")
+      .groupBy("COALESCE(submission.taskId, submission.collectionTaskId)")
       .addGroupBy("task.title")
       .addGroupBy("task.scene_name")
       .addGroupBy("task.task_type");

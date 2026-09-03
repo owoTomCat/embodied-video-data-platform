@@ -51,6 +51,15 @@ export class SceneGuideController {
     return { libraries: await this.guide.listLibrariesByCategory(actor, categoryKey) };
   }
 
+  /** 数采：某个大场景任务下的个人场景库列表（任务大厅「去采集」→ 场景选择页）。 */
+  @Get("libraries/by-task/:taskId")
+  async listLibrariesByTask(
+    @CurrentUser() actor: PublicUser,
+    @Param("taskId") taskId: string,
+  ) {
+    return { libraries: await this.guide.listLibrariesByTask(actor, taskId) };
+  }
+
   /** 数采：我的场景库列表。 */
   @Get("libraries/mine")
   async listMyLibraries(@CurrentUser() actor: PublicUser) {

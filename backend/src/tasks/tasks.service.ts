@@ -61,6 +61,8 @@ export type PublicTaskForCollector = {
   taskType: CollectionTaskType;
   categoryKey: string | null;
   targetDurationSeconds: number | null;
+  /** 已收集的合格有效时长（秒），用于任务大厅补量进度条 */
+  currentDurationSeconds: number;
   normalizedRequirements: NormalizedTaskRequirements | null;
   pricePerHour: number | null;
   status: CollectionTaskStatus;
@@ -96,6 +98,7 @@ export function publicTask(task: CollectionTaskEntity): PublicTask {
 
 export function publicTaskForCollector(
   task: CollectionTaskEntity,
+  currentDurationSeconds = 0,
 ): PublicTaskForCollector {
   return {
     id: task.id,
@@ -106,6 +109,7 @@ export function publicTaskForCollector(
     taskType: task.taskType,
     categoryKey: task.categoryKey,
     targetDurationSeconds: numericOrNull(task.targetDurationSeconds),
+    currentDurationSeconds,
     normalizedRequirements: task.normalizedRequirements,
     pricePerHour: numericOrNull(task.pricePerHour),
     status: task.status,
@@ -192,9 +196,37 @@ export class TasksService {
       where: { status: "paused" },
       order: { pausedAt: "DESC", createdAt: "DESC" },
     });
+    const currentByTask = await this.currentDurationByTask();
     return {
-      tasks: [...rows, ...paused].map(publicTaskForCollector),
+      tasks: [...rows, ...paused].map((task) =>
+        publicTaskForCollector(task, currentByTask.get(task.id) ?? 0),
+      ),
     };
+  }
+
+  /** 各任务已收集的合格有效时长（秒）：按 task_id 或 collection_task_id 归口，供补量进度条 */
+  private async currentDurationByTask(): Promise<Map<string, number>> {
+    const rows = await this.dataSource.query<Array<{
+      task_id: string;
+      current_ms: string;
+    }>>(
+      `SELECT COALESCE(submission.task_id, submission.collection_task_id) AS task_id,
+              COALESCE(SUM(
+                COALESCE(quality.manual_billable_duration_ms, quality.billable_duration_ms, 0)
+              ), 0)::float AS current_ms
+         FROM submissions submission
+         LEFT JOIN video_quality_results quality ON quality.submission_id = submission.id
+        WHERE COALESCE(submission.task_id, submission.collection_task_id) IS NOT NULL
+          AND quality.passed = true
+          AND quality.status IN ('scored', 'review_pending')
+        GROUP BY 1`,
+    );
+    return new Map(
+      rows.map((row) => [
+        row.task_id,
+        Math.round((Number(row.current_ms) || 0) / 1000),
+      ]),
+    );
   }
 
   /** 管理员：任务类型选择器使用的通用任务模板 */
@@ -259,7 +291,8 @@ export class TasksService {
         404,
       );
     }
-    return publicTaskForCollector(task);
+    const currentByTask = await this.currentDurationByTask();
+    return publicTaskForCollector(task, currentByTask.get(task.id) ?? 0);
   }
 
   /** 管理员：创建任务（draft）；创建成功后自动后台规范化，需人工核查 */
