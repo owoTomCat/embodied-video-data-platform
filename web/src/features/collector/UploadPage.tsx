@@ -92,12 +92,7 @@ export function UploadPage({ navigate }: { navigate?: (path: string) => void }) 
   useEffect(() => {
     let active = true;
     const guideTaskId = sessionStorage.getItem("evdp:selectedGuideTaskId");
-    if (!guideTaskId) {
-      setGuideTask(null);
-      return () => {
-        active = false;
-      };
-    }
+    if (!guideTaskId) return;
     sessionStorage.removeItem("evdp:selectedGuideTaskId");
     getGuideTask(guideTaskId)
       .then((task) => {

@@ -753,17 +753,28 @@ export class TasksService {
         409,
       );
     }
+    // 恢复时复用发布校验：要求 AI 要求规范化已就绪，不能绕过发布条件恢复
+    if (task.normalizationStatus !== "ready" || !task.normalizedRequirements) {
+      throw new TaskFailure(
+        "TASK_REQUIREMENTS_NOT_READY",
+        "请先完成 AI 要求规范化并确认后再发布任务",
+        409,
+      );
+    }
     task.status = "published";
     task.pausedAt = null;
+    task.closedAt = null;
+    task.publishedAt = task.publishedAt ?? new Date();
+    task.revision += 1;
     const saved = await this.tasks.save(task);
     await this.audit.record(
       this.dataSource.manager,
       actor,
       "task_resume",
       { id: task.id, name: task.title },
-      `恢复采集任务 ${task.title}`,
+      `恢复采集任务 ${task.title}（版本 V${saved.revision}）`,
       { status: "paused" },
-      { status: "published" },
+      { status: "published", revision: saved.revision },
     );
     return publicTask(saved);
   }

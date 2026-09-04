@@ -270,6 +270,7 @@ export function TaskFormModal({
                   {sceneTargets.map((target, index) => (
                     <div className="scene-target-row" key={index}>
                       <SceneTargetCombobox
+                        key={`${target.sceneId ?? "new"}-${target.sceneName ?? ""}-${index}`}
                         scenes={availableScenes}
                         sceneId={target.sceneId}
                         sceneName={target.sceneName}

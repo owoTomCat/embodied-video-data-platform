@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronDown, Plus, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import type { Scene } from "../../scene-system/contracts";
 
@@ -27,22 +27,15 @@ export function SceneTargetCombobox({
   onClear(): void;
   ariaLabel: string;
 }) {
-  const [query, setQuery] = useState("");
-  const [open, setOpen] = useState(false);
-  const [highlight, setHighlight] = useState(0);
-  const rootRef = useRef<HTMLDivElement>(null);
-
   const selected = useMemo(
     () => scenes.find((scene) => scene.id === sceneId) ?? null,
     [scenes, sceneId],
   );
 
-  // 外部值变化时回填输入框
-  useEffect(() => {
-    if (selected) setQuery(selected.name);
-    else if (sceneName) setQuery(sceneName);
-    else setQuery("");
-  }, [selected, sceneName]);
+  const [query, setQuery] = useState(() => selected?.name ?? sceneName ?? "");
+  const [open, setOpen] = useState(false);
+  const [highlight, setHighlight] = useState(0);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   const q = query.trim().toLowerCase();
   const matches = useMemo(

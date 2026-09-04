@@ -88,7 +88,7 @@ export function SceneSelectionPage({
     null;
   // 新建库时可选场景 + 默认选中（按任务类型驱动；自定义任务类型已移除）
   let modalScenes = enabledScenes;
-  let lockedScene = false;
+  const lockedScene = false;
   let defaultSceneId = "";
   if (task) {
     if (task.taskType === "scene_type") {

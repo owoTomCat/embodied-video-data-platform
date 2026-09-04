@@ -397,8 +397,12 @@ export class PublicSiteService {
         statuses: ["scored", "review_pending"],
       })
       .andWhere(QUALITY_PASSED_SQL)
-      .groupBy("scene_id")
-      .addGroupBy("scene_summary")
+      .groupBy(
+        "COALESCE(quality.normalizedResult #>> '{detectedTask,scene_id}', '')",
+      )
+      .addGroupBy(
+        "COALESCE(quality.normalizedResult #>> '{detectedTask,task_summary}', '')",
+      )
       .orderBy("video_count", "DESC")
       .addOrderBy("scene_summary", "ASC")
       .limit(12)
