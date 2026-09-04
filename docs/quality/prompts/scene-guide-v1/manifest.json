@@ -7,5 +7,5 @@
     "taskCardSystemPrompt": "task-card-system.txt",
     "taskCardOutputExample": "task-card-output-example.json"
   },
-  "cardModel": "qwen3.7-plus"
+  "cardModel": "qwen3.8-flash"
 }
