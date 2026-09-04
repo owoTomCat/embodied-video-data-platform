@@ -1348,7 +1348,7 @@ button:disabled { cursor: not-allowed; opacity: .56; }
   flex: 1 1 auto;
 }
 .task-hall-grid {
-  grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(360px, 100%), 1fr));
   align-items: stretch;
 }
 .task-card {
@@ -3132,7 +3132,7 @@ button:disabled { cursor: not-allowed; opacity: .56; }
 
 /* Keep the task hall overrides after the legacy task-card rules above. */
 .task-hall-grid {
-  grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(360px, 100%), 1fr));
   align-items: stretch;
 }
 .task-card {
