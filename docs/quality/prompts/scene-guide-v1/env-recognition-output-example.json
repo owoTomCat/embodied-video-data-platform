@@ -1,0 +1,9 @@
+{
+  "objects": [
+    { "name": "冰箱", "category": "appliance", "confidence": 0.95 },
+    { "name": "灶台", "category": "appliance", "confidence": 0.9 },
+    { "name": "抹布", "category": "object", "confidence": 0.8 },
+    { "name": "厨房操作台", "category": "surface", "confidence": 0.75 }
+  ],
+  "scene_summary": "画面是一间家庭厨房，包含灶台、冰箱、操作台等，适合采集做饭相关的第一人称操作数据。"
+}

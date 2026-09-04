@@ -13,7 +13,11 @@ import { UserEntity } from "./user.entity.js";
 
 export type CollectionTaskStatus = "draft" | "published" | "paused" | "closed";
 export type TaskNormalizationStatus = "pending" | "ready" | "failed";
-export type CollectionTaskType = "generic" | "preset" | "custom";
+/**
+ * 任务类型：
+ * generic = 通用任务（不绑定场景，系统仅保留一条）；scene_type = 场景型任务（绑定计费大类 + 按场景目标时长）。
+ */
+export type CollectionTaskType = "generic" | "scene_type";
 
 export type NormalizedRequirementItem = {
   type: "hard" | "soft";
@@ -51,16 +55,21 @@ export class CollectionTaskEntity {
   @Column({ name: "scene_label_id", type: "varchar", length: 64, nullable: true })
   sceneLabelId: string | null = null;
 
-  /** 关联场景库场景 id（任务创建从场景库选时记录，用于任务维度场景归属） */
-  @Column({ name: "scene_library_id", type: "varchar", length: 64, nullable: true })
-  sceneLibraryId: string | null = null;
+  /** 补量任务绑定的计费大类 key（taskType=scene_type 使用） */
+  @Column({ name: "category_key", type: "varchar", length: 64, nullable: true })
+  categoryKey: string | null = null;
 
-  /**
-   * 任务类型：generic = 通用任务（不绑定场景）；preset = 预设场景任务；
-   * custom = 自定义场景任务。通用任务在任务大厅与创建页中作为最显眼的入口。
-   */
-  @Column({ name: "task_type", type: "varchar", length: 24, default: "custom" })
-  taskType: CollectionTaskType = "custom";
+  /** 任务类型：generic = 通用任务（系统仅一条）；scene_type = 场景型任务（补量）。 */
+  @Column({ name: "task_type", type: "varchar", length: 24, default: "scene_type" })
+  taskType: CollectionTaskType = "scene_type";
+
+  /** 场景型任务目标时长（秒）；用于场景存量均衡，空表示无目标 */
+  @Column({
+    name: "target_duration_seconds",
+    type: "bigint",
+    nullable: true,
+  })
+  targetDurationSeconds: string | null = null;
 
   /** 管理员自由填写的要求原文 */
   @Column({ name: "raw_requirements", type: "text" })
@@ -80,13 +89,13 @@ export class CollectionTaskEntity {
 
   /** 任务单价（元/小时）；空则回退全局默认单价规则 */
   @Column({
-    name: "price_points_per_minute",
+    name: "price_per_hour",
     type: "numeric",
     precision: 10,
     scale: 2,
     nullable: true,
   })
-  pricePointsPerMinute: string | null = null;
+  pricePerHour: string | null = null;
 
   @Column({ type: "varchar", length: 16, default: "draft" })
   status: CollectionTaskStatus = "draft";

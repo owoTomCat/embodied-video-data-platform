@@ -178,40 +178,22 @@ describe("tasks API with task type dimension", () => {
     ]);
   });
 
-  describe("GET /tasks/preset-scenes", () => {
-    it("returns the generic template and five preset scenes for admins", async () => {
+  describe("GET /tasks/task-type-catalog", () => {
+    it("returns the generic template for admins", async () => {
       const cookie = await login("stat-admin");
       const response = await request(app.getHttpServer())
-        .get("/api/v1/tasks/preset-scenes")
+        .get("/api/v1/tasks/task-type-catalog")
         .set("Cookie", cookie)
         .expect(200);
-      const { presetScenes, generic } = response.body;
-      expect(presetScenes.map((scene: { name: string }) => scene.name)).toEqual([
-        "家庭-厨房",
-        "家庭-客厅",
-        "家庭-卧室",
-        "办公室",
-        "工厂",
-      ]);
+      const { generic } = response.body;
       expect(generic.sceneName).toBe("通用");
       expect(generic.requirements.length).toBeGreaterThanOrEqual(4);
-      for (const scene of presetScenes as Array<{
-        defaultTitle: string;
-        description: string;
-        requirements: string[];
-        qualityNotes: string[];
-      }>) {
-        expect(scene.defaultTitle.length).toBeGreaterThan(0);
-        expect(scene.description.length).toBeGreaterThan(50);
-        expect(scene.requirements.length).toBeGreaterThanOrEqual(4);
-        expect(scene.qualityNotes.length).toBeGreaterThanOrEqual(2);
-      }
     });
 
     it("rejects non-admin roles", async () => {
       const cookie = await login("stat-collector");
       await request(app.getHttpServer())
-        .get("/api/v1/tasks/preset-scenes")
+        .get("/api/v1/tasks/task-type-catalog")
         .set("Cookie", cookie)
         .expect(403);
     });
@@ -239,9 +221,9 @@ describe("tasks API with task type dimension", () => {
       });
     });
 
-    it("creates a preset scene task with the preset scene name", async () => {
+    it("rejects the deprecated preset task type", async () => {
       const cookie = await login("stat-admin");
-      const response = await request(app.getHttpServer())
+      await request(app.getHttpServer())
         .post("/api/v1/tasks")
         .set("Origin", WEB_ORIGIN)
         .set("Cookie", cookie)
@@ -252,24 +234,25 @@ describe("tasks API with task type dimension", () => {
           taskType: "preset",
           rawRequirements: "必须使用第一人称视角拍摄。",
         })
-        .expect(201);
-      expect(response.body.task.taskType).toBe("preset");
+        .expect(400);
     });
 
-    it("defaults to custom when taskType is omitted", async () => {
+    it("defaults to scene_type when taskType is omitted", async () => {
       const cookie = await login("stat-admin");
       const response = await request(app.getHttpServer())
         .post("/api/v1/tasks")
         .set("Origin", WEB_ORIGIN)
         .set("Cookie", cookie)
         .send({
-          title: "自定义场景采集",
+          title: "场景型采集",
           description: "",
-          sceneName: "仓库库房",
+          sceneName: "家庭-厨房",
+          categoryKey: "family",
+          sceneTargets: [{ sceneId: "SC-001", targetDurationSeconds: 3600 }],
           rawRequirements: "必须第一人称拍摄。",
         })
         .expect(201);
-      expect(response.body.task.taskType).toBe("custom");
+      expect(response.body.task.taskType).toBe("scene_type");
     });
 
     it("rejects an invalid taskType", async () => {
@@ -298,7 +281,9 @@ describe("tasks API with task type dimension", () => {
           title: "类型调整任务",
           description: "",
           sceneName: "家庭-客厅",
-          taskType: "preset",
+          taskType: "scene_type",
+          categoryKey: "family",
+          sceneTargets: [{ sceneId: "SC-001", targetDurationSeconds: 3600 }],
           rawRequirements: "必须第一人称拍摄。",
         })
         .expect(201);
@@ -308,10 +293,15 @@ describe("tasks API with task type dimension", () => {
         .patch(`/api/v1/tasks/${id}`)
         .set("Origin", WEB_ORIGIN)
         .set("Cookie", cookie)
-        .send({ taskType: "custom", sceneName: "自定义展厅" })
+        .send({
+          taskType: "scene_type",
+          sceneName: "家庭-展厅",
+          categoryKey: "family",
+          sceneTargets: [{ sceneId: "SC-001", targetDurationSeconds: 7200 }],
+        })
         .expect(200);
-      expect(updated.body.task.taskType).toBe("custom");
-      expect(updated.body.task.sceneName).toBe("自定义展厅");
+      expect(updated.body.task.taskType).toBe("scene_type");
+      expect(updated.body.task.sceneName).toBe("家庭-展厅");
 
       const listed = await request(app.getHttpServer())
         .get("/api/v1/tasks/manage")
@@ -320,7 +310,58 @@ describe("tasks API with task type dimension", () => {
       const found = (listed.body.tasks as Array<{ id: string; taskType: string }>).find(
         (task) => task.id === id,
       );
-      expect(found?.taskType).toBe("custom");
+      expect(found?.taskType).toBe("scene_type");
+    });
+
+    it("exposes targetDurationSeconds and scene_type for a collector's task list", async () => {
+      const adminCookie = await login("stat-admin");
+      const created = await request(app.getHttpServer())
+        .post("/api/v1/tasks")
+        .set("Origin", WEB_ORIGIN)
+        .set("Cookie", adminCookie)
+        .send({
+          title: "家庭厨房场景型任务",
+          description: "平台补量",
+          sceneName: "家庭-厨房",
+          taskType: "scene_type",
+          categoryKey: "family",
+          sceneTargets: [{ sceneId: "SC-001", targetDurationSeconds: 3600 }],
+          rawRequirements: "必须第一人称拍摄。",
+        })
+        .expect(201);
+      const id = created.body.task.id as string;
+
+      await request(app.getHttpServer())
+        .post(`/api/v1/tasks/${id}/confirm-requirements`)
+        .set("Origin", WEB_ORIGIN)
+        .set("Cookie", adminCookie)
+        .send({
+          scene_description: "家庭厨房场景，第一人称双手操作。",
+          requirements: [
+            { type: "hard", content: "必须第一人称视角拍摄" },
+          ],
+          quality_notes: [],
+        })
+        .expect(201);
+
+      await request(app.getHttpServer())
+        .post(`/api/v1/tasks/${id}/publish`)
+        .set("Origin", WEB_ORIGIN)
+        .set("Cookie", adminCookie)
+        .expect(201);
+
+      const collectorCookie = await login("stat-collector");
+      const listed = await request(app.getHttpServer())
+        .get("/api/v1/tasks")
+        .set("Cookie", collectorCookie)
+        .expect(200);
+      const found = (listed.body.tasks as Array<{
+        id: string;
+        taskType: string;
+        targetDurationSeconds: number | null;
+      }>).find((task) => task.id === id);
+      expect(found?.taskType).toBe("scene_type");
+      expect(found?.targetDurationSeconds).toBe(3600);
     });
   });
 
@@ -380,10 +421,10 @@ describe("tasks API with task type dimension", () => {
       await dataSource.getRepository(CollectionTaskEntity).save([
         {
           id: "TASK-STAT-A",
-          title: "厨房预设任务",
+          title: "厨房任务",
           description: "",
           sceneName: "家庭-厨房",
-          taskType: "preset",
+          taskType: "scene_type",
           rawRequirements: "第一人称拍摄",
           normalizationStatus: "ready",
           status: "published",
@@ -397,7 +438,7 @@ describe("tasks API with task type dimension", () => {
           title: "办公室自定义任务",
           description: "",
           sceneName: "办公室",
-          taskType: "custom",
+          taskType: "scene_type",
           rawRequirements: "第一人称拍摄",
           normalizationStatus: "ready",
           status: "published",

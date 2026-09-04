@@ -2,16 +2,21 @@
 
 import {
   ClipboardList,
+  Eye,
+  MoreHorizontal,
   Pause,
   Play,
   Plus,
   RefreshCw,
+  Rocket,
+  RotateCcw,
   Search,
   Square,
   Trash2,
   WandSparkles,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Modal } from "../../components/Modal";
 import { StatusBadge } from "../../components/StatusBadge";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import { TaskTypeBadge } from "../../components/TaskTypeBadge";
@@ -32,6 +37,7 @@ import {
   listManageTasks,
   pauseTask,
   publishTask,
+  reopenTask,
   resumeTask,
   taskErrorMessage,
   updateTask,
@@ -64,6 +70,11 @@ function formatTime(timestamp: number): string {
   }).format(timestamp);
 }
 
+function fmtHours(seconds: number | null): string {
+  if (!seconds || seconds <= 0) return "0";
+  return String(Math.round((seconds / 3600) * 10) / 10);
+}
+
 export function TasksPage() {
   const { notify } = useInteractions();
   const { stats: taskStats } = useTaskStats();
@@ -79,10 +90,11 @@ export function TasksPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<CollectionTask>();
   const [normalizeTarget, setNormalizeTarget] = useState<CollectionTask>();
+  const [detailTarget, setDetailTarget] = useState<CollectionTask>();
   const [deleteTarget, setDeleteTarget] = useState<CollectionTask>();
   const [confirmTarget, setConfirmTarget] = useState<{
     task: CollectionTask;
-    action: "publish" | "close";
+    action: "publish" | "close" | "reopen";
   }>();
   const [actingId, setActingId] = useState<string>();
   const createTriggerRef = useRef<HTMLButtonElement>(null);
@@ -126,11 +138,25 @@ export function TasksPage() {
   }
 
   async function handleCreate(input: CreateTaskInput) {
-    const task = await createTask(input);
-    setTasks((current) => [task, ...current]);
+    const result = await createTask(input);
+    setTasks((current) => [result.task, ...current]);
     setTotal((current) => current + 1);
-    notify("success", "任务已创建，可进行 AI 要求规范化");
-    return task;
+    if (result.autoNormalized) {
+      const count =
+        result.task.normalizedRequirements?.requirements.length ?? 0;
+      notify(
+        "success",
+        `任务已创建，提示词已自动规范化（${count} 条要求），请核查后发布`,
+      );
+    } else if (result.normalizationFailed) {
+      notify(
+        "error",
+        "任务已创建，但提示词自动规范化失败，请手动点击「规范化」重试",
+      );
+    } else {
+      notify("success", "任务已创建");
+    }
+    return result.task;
   }
 
   async function handleUpdate(id: string, input: UpdateTaskInput) {
@@ -200,8 +226,17 @@ export function TasksPage() {
     const { task, action } = confirmTarget;
     const succeeded = await act(
       task.id,
-      () => (action === "publish" ? publishTask(task.id) : closeTask(task.id)),
-      action === "publish" ? "任务已发布" : "任务已关闭",
+      () =>
+        action === "publish"
+          ? publishTask(task.id)
+          : action === "close"
+            ? closeTask(task.id)
+            : reopenTask(task.id),
+      action === "publish"
+        ? "任务已发布"
+        : action === "close"
+          ? "任务已关闭"
+          : "任务已重新开启",
     );
     if (succeeded) setConfirmTarget(undefined);
   }
@@ -230,20 +265,12 @@ export function TasksPage() {
       .filter((stat) => stat.taskId !== null)
       .map((stat) => [stat.taskId as string, stat]),
   );
-
-  function taskStatCell(taskId: string) {
-    const stat = statByTask.get(taskId);
-    if (!stat) {
-      return <span className="muted">—</span>;
-    }
-    return (
-      <span className="task-stat-cell">
-        <span><em>提交</em><b>{stat.total}</b></span>
-        <span><em>通过率</em><b>{stat.passRate === null ? "—" : `${stat.passRate}%`}</b></span>
-        <span><em>锁定金额</em><b>{stat.lockedPoints.toFixed(2)}</b></span>
-      </span>
-    );
-  }
+  // 排序：通用任务置顶，已关闭任务统一置底
+  const sortedTasks = [...tasks].sort((a, b) => {
+    const weight = (t: CollectionTask) =>
+      (t.status === "closed" ? 10 : 0) + (t.taskType === "generic" ? 0 : 1);
+    return weight(a) - weight(b);
+  });
 
   return (
     <div className="page-stack">
@@ -304,209 +331,185 @@ export function TasksPage() {
           <span>正在读取任务…</span>
         </div>
       ) : (
-        <section className="content-card table-card">
-          <div className="card-heading">
-            <div>
-              <h2>采集任务</h2>
-              <p>共 {total} 个任务</p>
-            </div>
-          </div>
-          <div className="table-scroll">
-            <table className="data-table task-management-table">
-              <thead>
-                <tr>
-                  <th>任务</th>
-                  <th>类型</th>
-                  <th>场景</th>
-                  <th>任务数据</th>
-                  <th>单价</th>
-                  <th>状态</th>
-                  <th>规范化</th>
-                  <th>版本</th>
-                  <th>更新时间</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {tasks.map((task) => (
-                  <tr key={task.id}>
-                    <td className="task-title-cell">
-                      <strong>{task.title}</strong>
-                      <small className="row-sub">{task.id}</small>
-                    </td>
-                    <td className="nowrap-cell">
-                      <TaskTypeBadge type={task.taskType} />
-                    </td>
-                    <td>{task.sceneName}</td>
-                    <td className="nowrap-cell">{taskStatCell(task.id)}</td>
-                    <td className="nowrap-cell">
-                      {task.pricePointsPerMinute !== null ? (
-                        <span className="mono">
-                          {task.pricePointsPerMinute} 元/小时
-                        </span>
-                      ) : (
-                        <span className="muted">全局默认</span>
-                      )}
-                    </td>
-                    <td className="status-cell">
+        <>
+          <div className="task-admin-grid">
+            {sortedTasks.map((task) => {
+              const stat = statByTask.get(task.id);
+              return (
+                <article className="content-card task-card admin-task-card" key={task.id}>
+                  <div className="task-card-head">
+                    <div>
+                      <p className="task-card-eyebrow">
+                        <TaskTypeBadge type={task.taskType} />
+                      </p>
+                      <h2>{task.title}</h2>
+                    </div>
+                    <div className="task-card-head-actions">
                       <StatusBadge
                         label={statusLabel[task.status]}
                         tone={statusTone[task.status]}
                       />
-                    </td>
-                    <td className="nowrap-cell">
-                      {task.normalizationStatus === "ready" ? (
-                        <span className="ok-text">
-                          {task.normalizedRequirements?.requirements.length ?? 0} 条
-                        </span>
-                      ) : (
-                        <span className="muted">
-                          {task.normalizationStatus === "failed" ? "失败" : "待规范化"}
-                        </span>
+                      <details className="task-menu">
+                        <summary className="task-menu-btn" aria-label="更多操作">
+                          <MoreHorizontal size={18} />
+                        </summary>
+                        <div className="task-menu-popover">
+                          {task.status === "draft" && (
+                            <>
+                              <button
+                                className="danger"
+                                onClick={(event) => {
+                                  actionTriggerRef.current = event.currentTarget;
+                                  setDeleteTarget(task);
+                                }}
+                              >
+                                <Trash2 size={14} />删除
+                              </button>
+                            </>
+                          )}
+                          {task.status === "published" && (
+                            <>
+                              <button onClick={() => void pause(task.id)}>
+                                <Pause size={14} />暂停
+                              </button>
+                              <button
+                                className="danger"
+                                onClick={(event) => {
+                                  actionTriggerRef.current = event.currentTarget;
+                                  setConfirmTarget({ task, action: "close" });
+                                }}
+                              >
+                                <Square size={14} />结束
+                              </button>
+                            </>
+                          )}
+                          {task.status === "paused" && (
+                            <>
+                              <button onClick={() => void resume(task.id)}>
+                                <Play size={14} />恢复
+                              </button>
+                              <button
+                                className="danger"
+                                onClick={(event) => {
+                                  actionTriggerRef.current = event.currentTarget;
+                                  setConfirmTarget({ task, action: "close" });
+                                }}
+                              >
+                                <Square size={14} />结束
+                              </button>
+                            </>
+                          )}
+                          {task.status === "closed" && (
+                            <button
+                              onClick={(event) => {
+                                actionTriggerRef.current = event.currentTarget;
+                                setConfirmTarget({ task, action: "reopen" });
+                              }}
+                            >
+                              <RotateCcw size={14} />重新开启
+                            </button>
+                          )}
+                        </div>
+                      </details>
+                    </div>
+                  </div>
+
+                  <div className="task-card-stats">
+                    <span><em>提交</em><b>{stat?.total ?? "—"}</b></span>
+                    <span>
+                      <em>通过率</em>
+                      <b>{stat?.passRate == null ? "—" : `${stat.passRate}%`}</b>
+                    </span>
+                    <span>
+                      <em>平均得分</em>
+                      <b>{stat?.avgScore == null ? "—" : stat.avgScore}</b>
+                    </span>
+                  </div>
+
+                  <div className="task-card-duration">
+                    <span className="task-dur-label">数据时长</span>
+                    <span>
+                      已收集 {fmtHours((stat?.effectiveMinutes ?? 0) * 60)} 小时 / 目标{" "}
+                      {task.targetDurationSeconds
+                        ? fmtHours(task.targetDurationSeconds)
+                        : "无"}{" "}
+                      小时
+                    </span>
+                  </div>
+
+                  <div className="task-card-meta">
+                    <span>
+                      {task.pricePerHour !== null
+                        ? `${task.pricePerHour} 元/小时`
+                        : "全局默认"}
+                    </span>
+                    <span className="muted">{formatTime(task.updatedAt)}</span>
+                    <span className="muted">V{task.revision}</span>
+                  </div>
+
+                  <div className="task-card-foot">
+                    <button
+                      type="button"
+                      className="button button-ghost button-small"
+                      onClick={() => setDetailTarget(task)}
+                    >
+                      <Eye size={14} />查看详情
+                    </button>
+                    <div className="task-card-foot-actions">
+                      {task.status === "draft" && (
+                        <>
+                          <button
+                            type="button"
+                            className="button button-primary button-small"
+                            onClick={(event) => {
+                              actionTriggerRef.current = event.currentTarget;
+                              setConfirmTarget({ task, action: "publish" });
+                            }}
+                          >
+                            <Rocket size={14} />发布
+                          </button>
+                          <button
+                            type="button"
+                            className="button button-secondary button-small"
+                            onClick={(event) => {
+                              actionTriggerRef.current = event.currentTarget;
+                              setNormalizeTarget(task);
+                            }}
+                          >
+                            <WandSparkles size={14} />规范化
+                          </button>
+                        </>
                       )}
-                    </td>
-                    <td className="nowrap-cell">V{task.revision}</td>
-                    <td className="nowrap-cell">{formatTime(task.updatedAt)}</td>
-                    <td className="table-actions-cell">
-                      <span className="row-actions">
-                        {task.status === "draft" && (
-                          <>
-                            <button
-                              className="table-action"
-                              disabled={actingId === task.id}
-                              onClick={(event) => {
-                                actionTriggerRef.current = event.currentTarget;
-                                setEditTarget(task);
-                              }}
-                            >
-                              编辑
-                            </button>
-                            <button
-                              className="table-action"
-                              disabled={actingId === task.id}
-                              onClick={(event) => {
-                                actionTriggerRef.current = event.currentTarget;
-                                setNormalizeTarget(task);
-                              }}
-                            >
-                              <WandSparkles size={14} />
-                              规范化
-                            </button>
-                            <button
-                              className="table-action"
-                              disabled={actingId === task.id}
-                              onClick={(event) => {
-                                actionTriggerRef.current = event.currentTarget;
-                                setConfirmTarget({ task, action: "publish" });
-                              }}
-                            >
-                              发布
-                            </button>
-                            <button
-                              className="table-action danger"
-                              disabled={actingId === task.id}
-                              aria-label={`删除任务 ${task.title}`}
-                              onClick={(event) => {
-                                actionTriggerRef.current = event.currentTarget;
-                                setDeleteTarget(task);
-                              }}
-                            >
-                              <Trash2 size={14} />
-                              删除
-                            </button>
-                          </>
-                        )}
-                        {task.status === "published" && (
-                          <>
-                            <button
-                              className="table-action"
-                              disabled={actingId === task.id}
-                              onClick={(event) => {
-                                actionTriggerRef.current = event.currentTarget;
-                                setEditTarget(task);
-                              }}
-                            >
-                              编辑
-                            </button>
-                            <button
-                              className="table-action"
-                              disabled={actingId === task.id}
-                              onClick={() => void pause(task.id)}
-                            >
-                              <Pause size={14} />
-                              暂停
-                            </button>
-                            <button
-                              className="table-action danger"
-                              disabled={actingId === task.id}
-                              onClick={(event) => {
-                                actionTriggerRef.current = event.currentTarget;
-                                setConfirmTarget({ task, action: "close" });
-                              }}
-                            >
-                              <Square size={14} />
-                              关闭
-                            </button>
-                          </>
-                        )}
-                        {task.status === "paused" && (
-                          <>
-                            <button
-                              className="table-action"
-                              disabled={actingId === task.id}
-                              onClick={(event) => {
-                                actionTriggerRef.current = event.currentTarget;
-                                setEditTarget(task);
-                              }}
-                            >
-                              编辑
-                            </button>
-                            <button
-                              className="table-action"
-                              disabled={actingId === task.id}
-                              onClick={() => void resume(task.id)}
-                            >
-                              <Play size={14} />
-                              恢复
-                            </button>
-                            <button
-                              className="table-action danger"
-                              disabled={actingId === task.id}
-                              onClick={(event) => {
-                                actionTriggerRef.current = event.currentTarget;
-                                setConfirmTarget({ task, action: "close" });
-                              }}
-                            >
-                              <Square size={14} />
-                              关闭
-                            </button>
-                          </>
-                        )}
-                        {task.status === "closed" && (
-                          <span className="muted">已结束</span>
-                        )}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-                {tasks.length === 0 && (
-                  <tr>
-                    <td colSpan={10} className="empty-cell">
-                      暂无任务
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                      <button
+                        type="button"
+                        className={`button button-small ${task.status === "draft" ? "button-ghost" : "button-primary"}`}
+                        onClick={(event) => {
+                          actionTriggerRef.current = event.currentTarget;
+                          setEditTarget(task);
+                        }}
+                      >
+                        编辑
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+            {tasks.length === 0 && (
+              <div
+                className="empty-state"
+                style={{ gridColumn: "1 / -1" }}
+              >
+                暂无任务
+              </div>
+            )}
           </div>
           {totalPages > 1 && (
             <div className="pagination">
               <button
                 className="button button-secondary button-small"
                 disabled={page <= 1}
-                onClick={() => {
-                  setPage(page - 1);
-                }}
+                onClick={() => setPage(page - 1)}
               >
                 上一页
               </button>
@@ -516,15 +519,13 @@ export function TasksPage() {
               <button
                 className="button button-secondary button-small"
                 disabled={page >= totalPages}
-                onClick={() => {
-                  setPage(page + 1);
-                }}
+                onClick={() => setPage(page + 1)}
               >
                 下一页
               </button>
             </div>
           )}
-        </section>
+        </>
       )}
 
       {createOpen && (
@@ -578,19 +579,41 @@ export function TasksPage() {
       {confirmTarget && (
         <ConfirmModal
           open
-          title={confirmTarget.action === "publish" ? "发布采集任务" : "关闭采集任务"}
+          title={
+            confirmTarget.action === "publish"
+              ? "发布采集任务"
+              : confirmTarget.action === "close"
+                ? "关闭采集任务"
+                : "重新开启采集任务"
+          }
           heading={
             confirmTarget.action === "publish"
               ? `确认发布“${confirmTarget.task.title}”？`
-              : `确认关闭“${confirmTarget.task.title}”？`
+              : confirmTarget.action === "close"
+                ? `确认关闭“${confirmTarget.task.title}”？`
+                : `确认重新开启“${confirmTarget.task.title}”？`
           }
           description={
             confirmTarget.action === "publish"
               ? "发布后数采人员即可看到并提交此任务；新的场景名称会自动加入标签字典。"
-              : "关闭后任务不可恢复，也不再接受新提交；已经提交的数据仍会继续处理。"
+              : confirmTarget.action === "close"
+                ? "关闭后任务不再接受新提交；已经提交的数据仍会继续处理，如需继续收集可重新开启。"
+                : "重新开启后任务将恢复为发布状态，数采人员可继续提交；已提交的数据与统计记录会保留。"
           }
-          confirmLabel={confirmTarget.action === "publish" ? "确认发布" : "确认关闭"}
-          busyLabel={confirmTarget.action === "publish" ? "发布中…" : "关闭中…"}
+          confirmLabel={
+            confirmTarget.action === "publish"
+              ? "确认发布"
+              : confirmTarget.action === "close"
+                ? "确认关闭"
+                : "确认重新开启"
+          }
+          busyLabel={
+            confirmTarget.action === "publish"
+              ? "发布中…"
+              : confirmTarget.action === "close"
+                ? "关闭中…"
+                : "开启中…"
+          }
           tone={confirmTarget.action === "close" ? "danger" : "primary"}
           busy={actingId === confirmTarget.task.id}
           onClose={() => {
@@ -600,6 +623,87 @@ export function TasksPage() {
           returnFocusRef={actionTriggerRef}
         />
       )}
+      {detailTarget && (
+        <TaskDetailModal task={detailTarget} onClose={() => setDetailTarget(undefined)} />
+      )}
     </div>
+  );
+}
+
+function TaskDetailModal({
+  task,
+  onClose,
+}: {
+  task: CollectionTask;
+  onClose(): void;
+}) {
+  return (
+    <Modal open title={task.title} onClose={onClose}>
+      <div className="modal-form">
+        <div className="card-heading">
+          <div>
+            <h2>{task.title}</h2>
+            <p>
+              <TaskTypeBadge type={task.taskType} /> · {task.sceneName}
+              {task.pricePerHour !== null ? ` · ${task.pricePerHour} 元/小时` : ""}
+            </p>
+          </div>
+          <StatusBadge label={statusLabel[task.status]} tone={statusTone[task.status]} />
+        </div>
+
+        <label className="form-label">
+          <span>任务说明</span>
+          <p className="task-detail-block">{task.description || "（无说明）"}</p>
+        </label>
+        <label className="form-label">
+          <span>任务编号 / 版本</span>
+          <p className="task-detail-block">{task.id} · V{task.revision}</p>
+        </label>
+
+        {task.normalizedRequirements && (
+          <>
+            <label className="form-label">
+              <span>场景描述</span>
+              <p className="task-detail-block">
+                {task.normalizedRequirements.scene_description}
+              </p>
+            </label>
+            <label className="form-label">
+              <span>采集要求</span>
+              <ul className="check-list compact">
+                {task.normalizedRequirements.requirements.map((item, index) => (
+                  <li key={`${item.type}-${index}`}>
+                    <span>
+                      <strong>
+                        {item.type === "hard" ? "【硬性】" : "【一般】"}
+                        {item.content}
+                      </strong>
+                      {item.rationale ? <small>{item.rationale}</small> : null}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </label>
+          </>
+        )}
+
+        <label className="form-label">
+          <span>规范化状态</span>
+          <p className="task-detail-block">
+            {task.normalizationStatus === "ready"
+              ? `已完成（${task.normalizedRequirements?.requirements.length ?? 0} 条要求）`
+              : task.normalizationStatus === "failed"
+                ? "失败"
+                : "待规范化"}
+          </p>
+        </label>
+
+        <div className="modal-actions">
+          <button type="button" className="button button-primary" onClick={onClose}>
+            关闭
+          </button>
+        </div>
+      </div>
+    </Modal>
   );
 }

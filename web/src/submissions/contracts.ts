@@ -334,9 +334,9 @@ export type BackendSubmission = {
     title?: string;
     revision: number | null;
     sceneName: string;
-    taskType: "generic" | "preset" | "custom";
+    taskType: "generic" | "scene_type";
     requirements?: unknown;
-    pricePointsPerMinute: number | null;
+    pricePerHour: number | null;
   } | null;
   authorization?: {
     dataUsageAuthorized: boolean;
@@ -617,8 +617,10 @@ export interface SubmissionUploadApi {
     dataUsageAuthorized: boolean;
     privacyConfirmed: boolean;
     sensitiveContentConfirmed: boolean;
-    taskId: string;
+    taskId?: string;
     taskRequirementsConfirmed: boolean;
+    guideTaskId?: string;
+    sceneLibraryId?: string;
   }): Promise<CreateUploadResult>;
   presignParts(id: string, partNumbers: number[]): Promise<PresignedPart[]>;
   verifyResumeUpload(
@@ -637,7 +639,7 @@ export type BackendSubmissionTaskStat = {
   taskId: string | null;
   title: string;
   sceneName: string;
-  taskType: "generic" | "preset" | "custom" | "none";
+  taskType: "generic" | "scene_type" | "none";
   total: number;
   reviewed: number;
   passed: number;

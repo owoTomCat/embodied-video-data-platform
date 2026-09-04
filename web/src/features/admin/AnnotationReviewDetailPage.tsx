@@ -3,6 +3,7 @@
 import { FileVideo } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { BackButton } from "../../components/BackButton";
 import { ReviewDrawer } from "../../components/ReviewDrawer";
 import type { Submission } from "../../domain/types";
 import {
@@ -52,7 +53,7 @@ export function AnnotationReviewDetailPage({
       <div className="empty-state">
         <FileVideo size={28} />
         <strong>找不到这条标注 Run</strong>
-        <button className="text-button" onClick={() => navigate("/admin/ai")}>返回 AI 标注</button>
+        <BackButton label="返回 AI 标注" fallbackPath="/admin/ai" navigate={navigate} />
       </div>
     );
   }

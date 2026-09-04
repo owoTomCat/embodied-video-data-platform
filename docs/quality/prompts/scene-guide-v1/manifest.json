@@ -1,0 +1,11 @@
+{
+  "promptVersion": "scene_guide_v1",
+  "model": "qwen-vl-max",
+  "files": {
+    "envRecognitionSystemPrompt": "env-recognition-system.txt",
+    "envRecognitionOutputExample": "env-recognition-output-example.json",
+    "taskCardSystemPrompt": "task-card-system.txt",
+    "taskCardOutputExample": "task-card-output-example.json"
+  },
+  "cardModel": "qwen3.8-flash"
+}

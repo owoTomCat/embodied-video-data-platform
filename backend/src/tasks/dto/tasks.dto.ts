@@ -21,7 +21,27 @@ const MAX_SCENE_NAME_LENGTH = 120;
 const MAX_RAW_REQUIREMENTS_LENGTH = 20_000;
 const MAX_REQUIREMENT_ITEMS = 100;
 
-const TASK_TYPES = ["generic", "preset", "custom"] as const;
+// 任务类型：generic（通用，系统仅保留一条）/ scene_type（场景型补量）。
+const TASK_TYPES = ["generic", "scene_type"] as const;
+
+/** 场景型任务目标（按场景）：提供已有 sceneId，或提供新场景 sceneName（保存时新建场景+标签） */
+export class SceneTargetDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  sceneId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  sceneName?: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(1_000_000_000)
+  targetDurationSeconds!: number;
+}
 
 export class CreateTaskDto {
   @IsString()
@@ -39,16 +59,30 @@ export class CreateTaskDto {
   @MaxLength(MAX_SCENE_NAME_LENGTH, { message: "场景名称不能超过 120 个字符" })
   sceneName!: string;
 
-  /** 关联场景库场景 id（taskType=preset 从场景库选时携带；带出场景名称与类别定价） */
+  /** 关联场景库场景 id（已废弃：preset 任务类型不再新建，保留字段兼容历史） */
   @IsOptional()
   @IsString()
   @MaxLength(64)
   sceneLibraryId?: string | null;
 
-  /** 任务类型：generic=通用任务 / preset=场景库场景 / custom=自定义；缺省按 custom */
+  /** 任务类型：generic=通用 / scene_type=场景型（补量） / custom=自定义（preset 已废弃） */
   @IsOptional()
   @IsIn(TASK_TYPES, { message: "任务类型不合法" })
   taskType?: (typeof TASK_TYPES)[number];
+
+  /** 场景型任务绑定的计费大类（category_key） */
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  categoryKey?: string;
+
+  /** 场景型任务目标（按场景）；scene_type 使用 */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => SceneTargetDto)
+  sceneTargets?: SceneTargetDto[];
 
   @IsString()
   @MaxLength(MAX_RAW_REQUIREMENTS_LENGTH, {
@@ -60,7 +94,7 @@ export class CreateTaskDto {
   @IsNumber()
   @Min(0)
   @Max(10_000)
-  pricePointsPerMinute?: number | null;
+  pricePerHour?: number | null;
 }
 
 export class UpdateTaskDto {
@@ -82,13 +116,22 @@ export class UpdateTaskDto {
   sceneName?: string;
 
   @IsOptional()
-  @IsString()
-  @MaxLength(64)
-  sceneLibraryId?: string | null;
-
-  @IsOptional()
   @IsIn(TASK_TYPES, { message: "任务类型不合法" })
   taskType?: (typeof TASK_TYPES)[number];
+
+  /** 场景型任务绑定的计费大类（category_key） */
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  categoryKey?: string;
+
+  /** 场景型任务目标（按场景）；scene_type 使用 */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => SceneTargetDto)
+  sceneTargets?: SceneTargetDto[];
 
   @IsOptional()
   @IsString()
@@ -101,7 +144,7 @@ export class UpdateTaskDto {
   @IsNumber()
   @Min(0)
   @Max(10_000)
-  pricePointsPerMinute?: number | null;
+  pricePerHour?: number | null;
 }
 
 export class NormalizedRequirementItemDto {

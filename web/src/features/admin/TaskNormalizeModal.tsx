@@ -189,7 +189,7 @@ export function TaskNormalizeModal({
                     <option value="soft">一般</option>
                   </select>
                   <div className="normalize-item-fields">
-                    <input
+                    <textarea
                       aria-label={`第 ${index + 1} 条要求内容`}
                       value={item.content}
                       onChange={(event) =>
@@ -197,8 +197,10 @@ export function TaskNormalizeModal({
                       }
                       placeholder="要求内容"
                       maxLength={2000}
+                      rows={2}
+                      className="normalize-item-text"
                     />
-                    <input
+                    <textarea
                       aria-label={`第 ${index + 1} 条判定依据`}
                       value={item.rationale ?? ""}
                       onChange={(event) =>
@@ -206,6 +208,8 @@ export function TaskNormalizeModal({
                       }
                       placeholder="判定依据（可选）"
                       maxLength={2000}
+                      rows={2}
+                      className="normalize-item-text"
                     />
                   </div>
                   <button

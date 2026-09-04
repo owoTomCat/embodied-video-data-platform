@@ -51,10 +51,10 @@ export class TasksController {
     });
   }
 
-  /** 管理员：任务类型选择器使用的预设场景目录（注意：必须声明在 :id 之前） */
-  @Get("preset-scenes")
-  async presetScenes(@CurrentUser() actor: PublicUser) {
-    return await this.tasks.listPresetScenes(actor);
+  /** 管理员：任务类型选择器使用的通用任务模板（注意：必须声明在 :id 之前） */
+  @Get("task-type-catalog")
+  async taskTypeCatalog(@CurrentUser() actor: PublicUser) {
+    return await this.tasks.listTaskTypeCatalog(actor);
   }
 
   @Get(":id")
@@ -68,7 +68,8 @@ export class TasksController {
     @CurrentUser() actor: PublicUser,
     @Body() input: CreateTaskDto,
   ) {
-    return { task: await this.tasks.create(actor, input) };
+    // create 返回 { task, autoNormalized, normalizationFailed }，直接透传
+    return await this.tasks.create(actor, input);
   }
 
   @Patch(":id")
@@ -138,5 +139,11 @@ export class TasksController {
   @UseGuards(AllowedOriginGuard)
   async close(@CurrentUser() actor: PublicUser, @Param("id") id: string) {
     return { task: await this.tasks.close(actor, id) };
+  }
+
+  @Post(":id/reopen")
+  @UseGuards(AllowedOriginGuard)
+  async reopen(@CurrentUser() actor: PublicUser, @Param("id") id: string) {
+    return { task: await this.tasks.reopen(actor, id) };
   }
 }

@@ -325,8 +325,8 @@ export interface Submission {
     title?: string;
     revision: number | null;
     sceneName: string;
-    taskType: "generic" | "preset" | "custom";
-    pricePointsPerMinute: number | null;
+    taskType: "generic" | "scene_type";
+    pricePerHour: number | null;
   } | null;
   createdAt: string;
   completedAt?: string;

@@ -171,7 +171,7 @@ export function taskContributions(submissions: Submission[]) {
       taskId: string | null;
       title: string;
       sceneName: string;
-      taskType: "generic" | "preset" | "custom";
+      taskType: "generic" | "scene_type" | "none";
       uploads: number;
       effectiveSeconds: number;
       reviewed: number;
@@ -184,7 +184,7 @@ export function taskContributions(submissions: Submission[]) {
       taskId: submission.task?.taskId ?? null,
       title: submission.task?.title ?? "未关联任务",
       sceneName: submission.task?.sceneName ?? "",
-      taskType: submission.task?.taskType ?? "custom",
+      taskType: submission.task?.taskType ?? "none",
       uploads: 0,
       effectiveSeconds: 0,
       reviewed: 0,

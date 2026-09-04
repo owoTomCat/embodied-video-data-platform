@@ -6,6 +6,12 @@ export type PresignedUploadPart = {
   expiresAt: Date;
 };
 
+export type PresignedUpload = {
+  objectKey: string;
+  url: string;
+  expiresAt: Date;
+};
+
 export type PresignedDownload = {
   url: string;
   expiresAt: Date;
@@ -39,6 +45,16 @@ export interface ObjectStoragePort {
     objectKey: string;
     expiresInSeconds: number;
   }): Promise<PresignedDownload>;
+  /** 单对象预签名上传（小文件，如场景指导照片），客户端直接 PUT。 */
+  presignUploadObject?(input: {
+    objectKey: string;
+    contentType: string;
+    expiresInSeconds: number;
+  }): Promise<PresignedUpload>;
+  /** 读取对象字节（用于把照片转 dataUrl 提交给视觉模型）。 */
+  getObjectBytes?(input: {
+    objectKey: string;
+  }): Promise<Buffer>;
   deleteObject(input: {
     objectKey: string;
   }): Promise<void>;

@@ -141,12 +141,18 @@ describe("task segment adaptive-cut migration", () => {
       completedAt: new Date(),
     });
 
-    await dataSource.undoLastMigration(); // Search projection follows Segment JSON publication.
-    await dataSource.undoLastMigration(); // Segment JSON publication follows adaptive cut.
-    const latest = (await dataSource.query(
-      "SELECT name FROM migrations ORDER BY id DESC LIMIT 1",
-    )) as Array<{ name: string }>;
-    expect(latest[0]?.name).toBe("TaskSegmentAdaptiveCut2026090600001");
+    // Down to the adaptive-cut migration: any migrations added after it
+    // (segment JSON publication, asset projection, scene binding, price field
+    // rename, FK cascade, ... variants) must be undone first so that
+    // adaptive-cut becomes the latest applied migration.
+    const ADAPTIVE_CUT_MIGRATION = "TaskSegmentAdaptiveCut2026090600001";
+    for (;;) {
+      const latest = (await dataSource.query(
+        "SELECT name FROM migrations ORDER BY id DESC LIMIT 1",
+      )) as Array<{ name: string }>;
+      if (latest[0]?.name === ADAPTIVE_CUT_MIGRATION) break;
+      await dataSource.undoLastMigration();
+    }
     await dataSource.undoLastMigration();
     const afterDown = (await dataSource.query(`
       SELECT column_name

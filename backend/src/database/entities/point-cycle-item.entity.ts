@@ -74,13 +74,13 @@ export class PointCycleItemEntity {
 
   /** 快照：任务单价（元/小时）；空表示按全局默认单价规则 */
   @Column({
-    name: "price_points_per_minute",
+    name: "price_per_hour",
     type: "numeric",
     precision: 10,
     scale: 2,
     nullable: true,
   })
-  taskPricePointsPerMinute: string | null = null;
+  taskPricePerHour: string | null = null;
 
   @Column({ name: "final_score", type: "numeric", precision: 6, scale: 1 })
   finalScore!: string;

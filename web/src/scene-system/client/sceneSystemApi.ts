@@ -1,14 +1,9 @@
 import { resolveApiBaseUrl } from "../../lib/api-base";
 import type {
-  CreateSceneClassificationInput,
-  CreateSceneLevel1Input,
-  CreateSceneLibraryInput,
-  Level1Scene,
-  SceneClassification,
+  CreateSceneInput,
+  Scene,
   SceneLibraryItem,
-  UpdateSceneClassificationInput,
-  UpdateSceneLevel1Input,
-  UpdateSceneLibraryInput,
+  UpdateSceneInput,
 } from "../contracts";
 
 export class SceneSystemApiError extends Error {
@@ -59,76 +54,52 @@ async function requestJson<T>(
   return payload as T;
 }
 
-export async function listLevel1Scenes(): Promise<Level1Scene[]> {
-  const result = await requestJson<{ level1: Level1Scene[] }>(
-    "/scene-system/meta",
+/** 场景存量/目标/缺口（各场景，管理员看板） */
+export type SceneInventoryItem = {
+  sceneName: string;
+  type: "scene_type" | "measured";
+  currentSeconds: number;
+  targetSeconds: number;
+  shortfallSeconds: number;
+  taskCount: number;
+};
+
+export async function getSceneInventory(): Promise<SceneInventoryItem[]> {
+  const result = await requestJson<{ items: SceneInventoryItem[] }>(
+    "/scene-system/inventory",
   );
-  return result.level1;
+  return result.items;
 }
 
-export async function createSceneLevel1(
-  input: CreateSceneLevel1Input,
-): Promise<Level1Scene> {
-  const result = await requestJson<{ item: Level1Scene }>(
-    "/scene-system/level1",
-    { method: "POST", body: JSON.stringify(input) },
+export async function listScenes(): Promise<Scene[]> {
+  const result = await requestJson<{ scenes: Scene[] }>(
+    "/scene-system/scenes",
   );
+  return result.scenes;
+}
+
+export async function createScene(input: CreateSceneInput): Promise<Scene> {
+  const result = await requestJson<{ item: Scene }>("/scene-system/scenes", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
   return result.item;
 }
 
-export async function updateSceneLevel1(
+export async function updateScene(
   id: string,
-  input: UpdateSceneLevel1Input,
-): Promise<Level1Scene> {
-  const result = await requestJson<{ item: Level1Scene }>(
-    `/scene-system/level1/${encodeURIComponent(id)}`,
+  input: UpdateSceneInput,
+): Promise<Scene> {
+  const result = await requestJson<{ item: Scene }>(
+    `/scene-system/scenes/${encodeURIComponent(id)}`,
     { method: "PUT", body: JSON.stringify(input) },
   );
   return result.item;
 }
 
-export async function deleteSceneLevel1(id: string): Promise<void> {
+export async function deleteScene(id: string): Promise<void> {
   await requestJson<{ deleted: boolean }>(
-    `/scene-system/level1/${encodeURIComponent(id)}`,
-    { method: "DELETE" },
-  );
-}
-
-export async function listSceneClassification(): Promise<
-  SceneClassification[]
-> {
-  const result = await requestJson<{
-    classification: SceneClassification[];
-  }>("/scene-system/classification");
-  return result.classification;
-}
-
-export async function createSceneClassification(
-  input: CreateSceneClassificationInput,
-): Promise<SceneClassification> {
-  const result = await requestJson<{ item: SceneClassification }>(
-    "/scene-system/classification",
-    { method: "POST", body: JSON.stringify(input) },
-  );
-  return result.item;
-}
-
-export async function updateSceneClassification(
-  id: string,
-  input: UpdateSceneClassificationInput,
-): Promise<SceneClassification> {
-  const result = await requestJson<{ item: SceneClassification }>(
-    `/scene-system/classification/${encodeURIComponent(id)}`,
-    { method: "PUT", body: JSON.stringify(input) },
-  );
-  return result.item;
-}
-
-export async function deleteSceneClassification(
-  id: string,
-): Promise<void> {
-  await requestJson<{ deleted: boolean }>(
-    `/scene-system/classification/${encodeURIComponent(id)}`,
+    `/scene-system/scenes/${encodeURIComponent(id)}`,
     { method: "DELETE" },
   );
 }
@@ -138,32 +109,4 @@ export async function listSceneLibrary(): Promise<SceneLibraryItem[]> {
     "/scene-system/library",
   );
   return result.library;
-}
-
-export async function createSceneLibrary(
-  input: CreateSceneLibraryInput,
-): Promise<SceneLibraryItem> {
-  const result = await requestJson<{ item: SceneLibraryItem }>(
-    "/scene-system/library",
-    { method: "POST", body: JSON.stringify(input) },
-  );
-  return result.item;
-}
-
-export async function updateSceneLibrary(
-  id: string,
-  input: UpdateSceneLibraryInput,
-): Promise<SceneLibraryItem> {
-  const result = await requestJson<{ item: SceneLibraryItem }>(
-    `/scene-system/library/${encodeURIComponent(id)}`,
-    { method: "PUT", body: JSON.stringify(input) },
-  );
-  return result.item;
-}
-
-export async function deleteSceneLibrary(id: string): Promise<void> {
-  await requestJson<{ deleted: boolean }>(
-    `/scene-system/library/${encodeURIComponent(id)}`,
-    { method: "DELETE" },
-  );
 }

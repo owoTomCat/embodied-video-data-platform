@@ -57,17 +57,26 @@ async function requestJson<T>(
   }
 
   if (!response.ok) {
-    const errorPayload =
-      payload && typeof payload === "object"
-        ? (payload as { error?: unknown; code?: unknown })
-        : {};
-    const message =
-      typeof errorPayload.error === "string"
-        ? errorPayload.error
-        : `请求失败（HTTP ${response.status}）`;
-    const code =
-      typeof errorPayload.code === "string" ? errorPayload.code : undefined;
-    throw new TaskApiError(response.status, message, code);
+    const error = payload as {
+      code?: unknown;
+      error?: unknown;
+      message?: unknown;
+    };
+    const validationMessage = Array.isArray(error.message)
+      ? error.message.filter((item): item is string => typeof item === "string").join("；")
+      : typeof error.message === "string"
+        ? error.message
+        : undefined;
+    const publicMessage =
+      validationMessage ||
+      (typeof error.error === "string" && error.error !== "Bad Request"
+        ? error.error
+        : "任务请求失败（HTTP " + response.status + "）");
+    throw new TaskApiError(
+      response.status,
+      publicMessage,
+      typeof error.code === "string" ? error.code : undefined,
+    );
   }
   return payload as T;
 }
@@ -89,9 +98,19 @@ export async function listTasksForCollector(): Promise<
   return payload.tasks;
 }
 
-/** 任务类型选择器数据源：预设场景目录 + 通用任务模板（管理员） */
+/** 数采：查看单个采集任务（含可选场景目标） */
+export async function getCollectorTask(
+  id: string,
+): Promise<CollectionTaskForCollector> {
+  const payload = await requestJson<{ task: CollectionTaskForCollector }>(
+    `tasks/${encodeURIComponent(id)}`,
+  );
+  return payload.task;
+}
+
+/** 任务类型选择器数据源：通用任务模板（管理员） */
 export async function listTaskTypeCatalog(): Promise<TaskTypeCatalog> {
-  return requestJson<TaskTypeCatalog>("tasks/preset-scenes");
+  return requestJson<TaskTypeCatalog>("tasks/task-type-catalog");
 }
 
 export async function listManageTasks(
@@ -112,13 +131,16 @@ export async function getTask(id: string): Promise<CollectionTask> {
   return requestJson<{ task: CollectionTask }>(`tasks/${id}`).then(taskFrom);
 }
 
+/** 创建任务结果：任务 + 自动规范化信息（创建后后台已自动规范化，需人工核查） */
+export type CreateTaskResult = UpdateTaskResult;
+
 export async function createTask(
   input: CreateTaskInput,
-): Promise<CollectionTask> {
-  return requestJson<{ task: CollectionTask }>("tasks", {
+): Promise<CreateTaskResult> {
+  return requestJson<CreateTaskResult>("tasks", {
     method: "POST",
     body: JSON.stringify(input),
-  }).then(taskFrom);
+  });
 }
 
 /** 编辑任务结果：任务 + 自动规范化信息（供前端同步提示词规范化状态） */
@@ -186,6 +208,12 @@ export async function resumeTask(id: string): Promise<CollectionTask> {
 
 export async function closeTask(id: string): Promise<CollectionTask> {
   return requestJson<{ task: CollectionTask }>(`tasks/${id}/close`, {
+    method: "POST",
+  }).then(taskFrom);
+}
+
+export async function reopenTask(id: string): Promise<CollectionTask> {
+  return requestJson<{ task: CollectionTask }>(`tasks/${id}/reopen`, {
     method: "POST",
   }).then(taskFrom);
 }

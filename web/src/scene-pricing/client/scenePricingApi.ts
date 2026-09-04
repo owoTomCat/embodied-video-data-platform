@@ -1,5 +1,6 @@
 import { resolveApiBaseUrl } from "../../lib/api-base";
 import type {
+  CreateSceneCategoryPriceInput,
   SceneCategoryPricing,
   UpdateSceneCategoryPriceInput,
 } from "../contracts";
@@ -73,4 +74,23 @@ export async function updateSceneCategoryPrice(
     },
   );
   return result.category;
+}
+
+export async function createSceneCategoryPrice(
+  input: CreateSceneCategoryPriceInput,
+): Promise<SceneCategoryPricing> {
+  const result = await requestJson<{ category: SceneCategoryPricing }>(
+    "/scene-pricing",
+    { method: "POST", body: JSON.stringify(input) },
+  );
+  return result.category;
+}
+
+export async function deleteSceneCategoryPrice(
+  categoryKey: string,
+): Promise<void> {
+  await requestJson<{ deleted: boolean }>(
+    `/scene-pricing/${encodeURIComponent(categoryKey)}`,
+    { method: "DELETE" },
+  );
 }

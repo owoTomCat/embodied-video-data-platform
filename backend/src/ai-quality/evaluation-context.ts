@@ -17,7 +17,9 @@ function cleanString(value: unknown, maxLength: number): string {
 
 /**
  * 解析提交时锁定的任务要求快照（submissions.task_requirements_snapshot）。
- * 快照结构：{ scene_name, scene_description, requirements: [{type, content, rationale?}], quality_notes }。
+ * 快照两种形态：
+ * - 任务流：{ scene_name, scene_description, requirements: [{type, content, rationale?}], quality_notes }
+ * - guide 流（任务卡）：{ scene_name, scene_id, category_key, task_card: { success_criteria, fail_criteria, steps, end_condition } }
  * 非法结构返回 null（按无任务模式处理），不抛错。
  */
 export function parseTaskRequirementsSnapshot(
@@ -41,6 +43,32 @@ export function parseTaskRequirementsSnapshot(
           : {}),
       });
       if (requirements.length >= 100) break;
+    }
+  } else if (isRecord(value.task_card)) {
+    // guide 流：从 AI 任务卡派生硬性/一般要求（成功/失败判定=硬性，步骤/结束条件=一般）
+    const card = value.task_card;
+    if (Array.isArray(card.success_criteria)) {
+      for (const item of card.success_criteria) {
+        const content = cleanString(item, 2_000);
+        if (content) requirements.push({ type: "hard", content: `成功判定：${content}` });
+        if (requirements.length >= 100) break;
+      }
+    }
+    if (Array.isArray(card.fail_criteria)) {
+      for (const item of card.fail_criteria) {
+        const content = cleanString(item, 2_000);
+        if (content) requirements.push({ type: "hard", content: `失败判定：${content}` });
+        if (requirements.length >= 100) break;
+      }
+    }
+    const endCondition = cleanString(card.end_condition, 2_000);
+    if (endCondition) requirements.push({ type: "soft", content: `结束条件：${endCondition}` });
+    if (Array.isArray(card.steps)) {
+      for (const item of card.steps) {
+        const content = cleanString(item, 2_000);
+        if (content) requirements.push({ type: "soft", content: `操作步骤：${content}` });
+        if (requirements.length >= 100) break;
+      }
     }
   }
   if (requirements.length === 0) return null;

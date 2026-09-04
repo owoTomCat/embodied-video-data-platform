@@ -31,13 +31,21 @@ export class SceneLibraryEntity {
   @Column({ name: "category_key", type: "varchar", length: 64 })
   categoryKey!: string;
 
-  /** 该场景包含的子场景：scene_classification.id 列表 */
-  @Column({
-    name: "sub_scene_ids",
-    type: "jsonb",
-    default: () => "'[]'::jsonb",
-  })
-  subSceneIds: string[] = [];
+  /** 单场景（强制单场景）：scene.id */
+  @Column({ name: "scene_id", type: "varchar", length: 64, nullable: true })
+  sceneId: string | null = null;
+
+  /** 显式关联大场景任务（collection_tasks.id，task_type='scene_type'） */
+  @Column({ name: "collection_task_id", type: "varchar", length: 64, nullable: true })
+  collectionTaskId: string | null = null;
+
+  /** 建库时拍摄的环境照片（MinIO 对象），首张用作场景库卡片封面 + 供 AI 识别生成任务卡 */
+  @Column({ name: "photo_refs", type: "jsonb", default: () => "'[]'::jsonb" })
+  photoRefs: Array<{ objectKey: string; contentType?: string; name?: string }> = [];
+
+  /** 场景库卡片封面对象 key（= 首张照片），便于数采快速分辨 */
+  @Column({ name: "cover_object_key", type: "varchar", length: 512, nullable: true })
+  coverObjectKey: string | null = null;
 
   @Column({ type: "text", default: "" })
   description = "";
@@ -54,6 +62,15 @@ export class SceneLibraryEntity {
 
   @Column({ name: "created_by_name", type: "varchar", length: 120 })
   createdByName!: string;
+
+  /** 归属数采人员（场景库所有者）：数采个人场景库有值；管理员统一管理的场景库为 null */
+  @Index("idx_scene_library_owner", ["ownerAccountId"])
+  @Column({ name: "owner_account_id", type: "varchar", length: 64, nullable: true })
+  ownerAccountId: string | null = null;
+
+  @ManyToOne(() => UserEntity, { onDelete: "CASCADE" })
+  @JoinColumn({ name: "owner_account_id" })
+  owner?: Relation<UserEntity> | null;
 
   @CreateDateColumn({ name: "created_at", type: "timestamptz" })
   createdAt!: Date;

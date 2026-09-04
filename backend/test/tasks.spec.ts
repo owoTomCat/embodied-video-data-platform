@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import { shapeNormalizedOutput } from "../src/tasks/requirement-normalizer.service.js";
 import {
   assertTaskCanBeDeleted,
-  assertTaskReadyForPublication,
   numericOrNull,
   publicTask,
 } from "../src/tasks/tasks.service.js";
@@ -94,30 +93,6 @@ describe("assertTaskCanBeDeleted", () => {
   });
 });
 
-describe("assertTaskReadyForPublication", () => {
-  it("blocks publishing or resuming unconfirmed requirements", () => {
-    expect(() =>
-      assertTaskReadyForPublication({
-        normalizationStatus: "pending",
-        normalizedRequirements: null,
-      }),
-    ).toThrowError(/先完成 AI 要求规范化并确认/u);
-  });
-
-  it("accepts confirmed normalized requirements", () => {
-    expect(() =>
-      assertTaskReadyForPublication({
-        normalizationStatus: "ready",
-        normalizedRequirements: {
-          scene_description: "通用采集",
-          requirements: [{ type: "hard", content: "保持第一人称视角" }],
-          quality_notes: [],
-        },
-      }),
-    ).not.toThrow();
-  });
-});
-
 describe("publicTask serializer", () => {
   it("serializes a draft task with nullable numeric price", () => {
     const task = new CollectionTaskEntity();
@@ -130,7 +105,7 @@ describe("publicTask serializer", () => {
       rawRequirements: "原始要求",
       normalizedRequirements: null,
       normalizationStatus: "pending",
-      pricePointsPerMinute: null,
+      pricePerHour: null,
       status: "draft",
       revision: 1,
       createdByAccountId: "u1",
@@ -143,11 +118,11 @@ describe("publicTask serializer", () => {
     });
     const serialized = publicTask(task);
     expect(serialized.id).toBe("TASK-abc123");
-    expect(serialized.pricePointsPerMinute).toBeNull();
+    expect(serialized.pricePerHour).toBeNull();
     expect(serialized.normalizationStatus).toBe("pending");
     expect(serialized.status).toBe("draft");
     expect(serialized.publishedAt).toBeNull();
-    expect(serialized.taskType).toBe("custom");
+    expect(serialized.taskType).toBe("scene_type");
     expect(serialized.createdAt).toBe(
       new Date("2026-08-24T00:00:00Z").getTime(),
     );
@@ -168,7 +143,7 @@ describe("publicTask serializer", () => {
         quality_notes: [],
       },
       normalizationStatus: "ready",
-      pricePointsPerMinute: "15.00",
+      pricePerHour: "15.00",
       status: "published",
       revision: 1,
       createdByAccountId: "u1",
@@ -180,10 +155,10 @@ describe("publicTask serializer", () => {
       updatedAt: new Date("2026-08-24T08:00:00Z"),
     });
     const serialized = publicTask(task);
-    expect(serialized.pricePointsPerMinute).toBe(15);
+    expect(serialized.pricePerHour).toBe(15);
     expect(serialized.status).toBe("published");
     expect(serialized.sceneLabelId).toBe("SCENE-002");
-    expect(serialized.taskType).toBe("custom");
+    expect(serialized.taskType).toBe("scene_type");
     expect(serialized.normalizedRequirements?.requirements).toHaveLength(1);
   });
 });

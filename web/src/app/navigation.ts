@@ -2,6 +2,7 @@ import {
   Archive,
   BadgeCheck,
   BarChart3,
+  Camera,
   CircleDollarSign,
   ClipboardCheck,
   ClipboardList,

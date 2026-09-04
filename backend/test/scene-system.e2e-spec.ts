@@ -102,250 +102,251 @@ describe("scene system API", () => {
     }
   });
 
-  it("exposes level-1 scene constants and seeded classification", async () => {
-    const adminCookie = await login("scene-admin");
-    const meta = await request(app.getHttpServer())
-      .get("/api/v1/scene-system/meta")
-      .set("Cookie", adminCookie)
-      .expect(200);
-    expect(meta.body.level1).toHaveLength(4);
-    expect(meta.body.level1.map((item: { code: string }) => item.code)).toEqual([
-      "F01",
-      "O01",
-      "W01",
-      "G01",
-    ]);
-
-    const list = await request(app.getHttpServer())
-      .get("/api/v1/scene-system/classification")
-      .set("Cookie", adminCookie)
-      .expect(200);
-    const items = list.body.classification as Array<{
-      id: string;
-      level1Code: string;
-      level2Name: string;
-    }>;
-    expect(items).toHaveLength(14);
-    const family = items.filter((item) => item.level1Code === "F01");
-    expect(family.length).toBeGreaterThanOrEqual(3);
-    expect(family.map((item) => item.level2Name)).toContain("厨房");
-  });
-
-  it("requires authentication to read the scene system", async () => {
+  it("requires authentication to list scenes", async () => {
     await request(app.getHttpServer())
-      .get("/api/v1/scene-system/classification")
+      .get("/api/v1/scene-system/scenes")
       .expect(401);
   });
 
-  it("creates a second-level scene under an existing level-1 code", async () => {
+  it("lists single-layer scenes seeded by the migration", async () => {
     const adminCookie = await login("scene-admin");
-    const created = await request(app.getHttpServer())
-      .post("/api/v1/scene-system/classification")
-      .set("Origin", WEB_ORIGIN)
+    const res = await request(app.getHttpServer())
+      .get("/api/v1/scene-system/scenes")
       .set("Cookie", adminCookie)
-      .send({ level1Code: "F01", level2Name: "玄关", description: "入户换鞋、收纳整理等操作。" })
-      .expect(201);
-    expect(created.body.item).toMatchObject({
-      level1Code: "F01",
-      level1Name: "家庭",
-      level2Name: "玄关",
+      .expect(200);
+    expect(Array.isArray(res.body.scenes)).toBe(true);
+    const scenes = res.body.scenes as Array<{
+      id: string;
+      name: string;
+      categoryKey: string;
+      description: string;
+      enabled: boolean;
+      updatedAt: number;
+    }>;
+    // 迁移 seed 的全部场景仍以单层 scene 形态存在
+    expect(scenes.length).toBeGreaterThanOrEqual(14);
+
+    // 厨房（SC-001）归入 family 大类
+    const kitchen = scenes.find((item) => item.id === "SC-001");
+    expect(kitchen).toMatchObject({
+      name: "厨房",
+      categoryKey: "family",
+      enabled: true,
     });
-    // 同一级下二级重名冲突
-    await request(app.getHttpServer())
-      .post("/api/v1/scene-system/classification")
-      .set("Origin", WEB_ORIGIN)
-      .set("Cookie", adminCookie)
-      .send({ level1Code: "F01", level2Name: "玄关" })
-      .expect(409);
-    // 非法一级编码
-    await request(app.getHttpServer())
-      .post("/api/v1/scene-system/classification")
-      .set("Origin", WEB_ORIGIN)
-      .set("Cookie", adminCookie)
-      .send({ level1Code: "X99", level2Name: "未知" })
-      .expect(400);
+    expect(Number.isFinite(kitchen?.updatedAt)).toBe(true);
+
+    // 工位（SC-006）归入 office 大类
+    const workstation = scenes.find((item) => item.id === "SC-006");
+    expect(workstation).toMatchObject({
+      name: "工位",
+      categoryKey: "office",
+      enabled: true,
+    });
+
+    // 其余种子：车间工坊 → factory，桌面台面操作 → generic
+    expect(scenes.find((item) => item.id === "SC-009")).toMatchObject({
+      name: "车间工坊",
+      categoryKey: "factory",
+    });
+    expect(scenes.find((item) => item.id === "SC-012")).toMatchObject({
+      name: "桌面台面操作",
+      categoryKey: "generic",
+    });
+
+    // 每种计费大类都有对应场景
+    const keys = new Set(scenes.map((item) => item.categoryKey));
+    for (const key of ["family", "office", "factory", "generic"]) {
+      expect(keys.has(key)).toBe(true);
+    }
   });
 
-  it("updates and disables a second-level scene", async () => {
+  it("creates a single-layer scene under an existing category", async () => {
     const adminCookie = await login("scene-admin");
-    const updated = await request(app.getHttpServer())
-      .put("/api/v1/scene-system/classification/SC-001")
+    const created = await request(app.getHttpServer())
+      .post("/api/v1/scene-system/scenes")
       .set("Origin", WEB_ORIGIN)
       .set("Cookie", adminCookie)
-      .send({ description: "更新后的厨房描述", enabled: false })
+      .send({
+        name: "玄关",
+        categoryKey: "family",
+        description: "入户换鞋、收纳整理等操作。",
+      })
+      .expect(201);
+    expect(created.body.item).toMatchObject({
+      name: "玄关",
+      categoryKey: "family",
+      description: "入户换鞋、收纳整理等操作。",
+      enabled: true,
+    });
+    expect(created.body.item.id).toMatch(/^SC-[A-F0-9]{8}$/);
+
+    // 同大类下重名 → 409
+    const duplicate = await request(app.getHttpServer())
+      .post("/api/v1/scene-system/scenes")
+      .set("Origin", WEB_ORIGIN)
+      .set("Cookie", adminCookie)
+      .send({ name: "玄关", categoryKey: "family" })
+      .expect(409);
+    expect(duplicate.body.code).toBe("CONFLICT");
+    expect(duplicate.body.error).toContain("已存在场景");
+
+    // 同类名可跨大类存在（唯一约束为 (category_key, name)）
+    const crossCategory = await request(app.getHttpServer())
+      .post("/api/v1/scene-system/scenes")
+      .set("Origin", WEB_ORIGIN)
+      .set("Cookie", adminCookie)
+      .send({ name: "玄关", categoryKey: "office" })
+      .expect(201);
+    expect(crossCategory.body.item).toMatchObject({
+      name: "玄关",
+      categoryKey: "office",
+    });
+
+    // 计费大类不存在 → 400
+    const badCategory = await request(app.getHttpServer())
+      .post("/api/v1/scene-system/scenes")
+      .set("Origin", WEB_ORIGIN)
+      .set("Cookie", adminCookie)
+      .send({ name: "未知场景", categoryKey: "hobby" })
+      .expect(400);
+    expect(badCategory.body.error).toBe("计费大类不存在");
+
+    // 空名称 → 400
+    const emptyName = await request(app.getHttpServer())
+      .post("/api/v1/scene-system/scenes")
+      .set("Origin", WEB_ORIGIN)
+      .set("Cookie", adminCookie)
+      .send({ name: "   ", categoryKey: "family" })
+      .expect(400);
+    expect(emptyName.body.error).toBe("请填写场景名称");
+  });
+
+  it("updates and disables a single-layer scene", async () => {
+    const adminCookie = await login("scene-admin");
+    const created = await request(app.getHttpServer())
+      .post("/api/v1/scene-system/scenes")
+      .set("Origin", WEB_ORIGIN)
+      .set("Cookie", adminCookie)
+      .send({ name: "更新测试场景", categoryKey: "office", description: "初始描述" })
+      .expect(201);
+    const id = created.body.item.id as string;
+    expect(id).toMatch(/^SC-[A-F0-9]{8}$/);
+
+    const updated = await request(app.getHttpServer())
+      .put(`/api/v1/scene-system/scenes/${id}`)
+      .set("Origin", WEB_ORIGIN)
+      .set("Cookie", adminCookie)
+      .send({ description: "更新后的描述", enabled: false })
       .expect(200);
     expect(updated.body.item).toMatchObject({
-      id: "SC-001",
-      description: "更新后的厨房描述",
+      id,
+      description: "更新后的描述",
       enabled: false,
     });
-    await request(app.getHttpServer())
-      .put("/api/v1/scene-system/classification/SC-001")
+
+    // 重新启用
+    const reEnabled = await request(app.getHttpServer())
+      .put(`/api/v1/scene-system/scenes/${id}`)
       .set("Origin", WEB_ORIGIN)
       .set("Cookie", adminCookie)
       .send({ enabled: true })
       .expect(200);
+    expect(reEnabled.body.item.enabled).toBe(true);
+
+    // 更新的场景不存在 → 404
+    const missing = await request(app.getHttpServer())
+      .put("/api/v1/scene-system/scenes/SC-NOPE")
+      .set("Origin", WEB_ORIGIN)
+      .set("Cookie", adminCookie)
+      .send({ description: "x" })
+      .expect(404);
+    expect(missing.body.code).toBe("NOT_FOUND");
   });
 
-  it("creates library scenes with category and sub-scenes", async () => {
+  it("deletes an unreferenced scene and blocks referenced ones", async () => {
     const adminCookie = await login("scene-admin");
     const created = await request(app.getHttpServer())
-      .post("/api/v1/scene-system/library")
+      .post("/api/v1/scene-system/scenes")
       .set("Origin", WEB_ORIGIN)
       .set("Cookie", adminCookie)
-      .send({
-        name: "采集员A家",
-        categoryKey: "family",
-        subSceneIds: ["SC-001", "SC-002", "SC-003"],
-        description: "采集员A的家庭场景",
-      })
+      .send({ name: "删除测试场景", categoryKey: "factory" })
       .expect(201);
-    expect(created.body.item).toMatchObject({
-      name: "采集员A家",
-      categoryKey: "family",
-      categoryName: "家庭",
-    });
-    expect(created.body.item.subScenes.map((item: { level2Name: string }) => item.level2Name)).toEqual(
-      ["厨房", "客厅", "卧室"],
-    );
+    const id = created.body.item.id as string;
 
-    // 子场景不属于所选一级
-    await request(app.getHttpServer())
-      .post("/api/v1/scene-system/library")
+    // 未引用的场景可删除
+    const deleted = await request(app.getHttpServer())
+      .delete(`/api/v1/scene-system/scenes/${id}`)
       .set("Origin", WEB_ORIGIN)
-      .set("Cookie", adminCookie)
-      .send({
-        name: "错配场景",
-        categoryKey: "office",
-        subSceneIds: ["SC-001"],
-      })
-      .expect(400);
-    // 不存在的子场景
-    await request(app.getHttpServer())
-      .post("/api/v1/scene-system/library")
-      .set("Origin", WEB_ORIGIN)
-      .set("Cookie", adminCookie)
-      .send({
-        name: "空场景",
-        categoryKey: "family",
-        subSceneIds: ["SC-999"],
-      })
-      .expect(400);
-  });
-
-  it("lists and deletes library scenes, blocking deletion of referenced classification", async () => {
-    const adminCookie = await login("scene-admin");
-    const list = await request(app.getHttpServer())
-      .get("/api/v1/scene-system/library")
       .set("Cookie", adminCookie)
       .expect(200);
-    expect(list.body.library).toHaveLength(1);
-    const libraryId = list.body.library[0].id as string;
+    expect(deleted.body).toEqual({ deleted: true });
 
-    // 被场景库引用的二级场景不可删除
-    await request(app.getHttpServer())
-      .delete("/api/v1/scene-system/classification/SC-001")
+    // 已删除 / 不存在的场景 → 404
+    const missing = await request(app.getHttpServer())
+      .delete(`/api/v1/scene-system/scenes/${id}`)
+      .set("Origin", WEB_ORIGIN)
+      .set("Cookie", adminCookie)
+      .expect(404);
+    expect(missing.body.code).toBe("NOT_FOUND");
+
+    // 被场景库引用（scene_library.scene_id）→ 409
+    await dataSource.query(
+      `INSERT INTO scene_library (id, name, category_key, scene_id, created_by_account_id, created_by_name)
+       VALUES ('LIB-SS-REF-01', '测试场景库', 'family', 'SC-001', 'U-SS-ADMIN', '场景管理员')`,
+    );
+    const referenced = await request(app.getHttpServer())
+      .delete("/api/v1/scene-system/scenes/SC-001")
       .set("Origin", WEB_ORIGIN)
       .set("Cookie", adminCookie)
       .expect(409);
-
-    await request(app.getHttpServer())
-      .delete(`/api/v1/scene-system/library/${libraryId}`)
-      .set("Origin", WEB_ORIGIN)
-      .set("Cookie", adminCookie)
-      .expect(200);
-    // 解除引用后可删除二级场景
-    await request(app.getHttpServer())
-      .delete("/api/v1/scene-system/classification/SC-001")
-      .set("Origin", WEB_ORIGIN)
-      .set("Cookie", adminCookie)
-      .expect(200);
+    expect(referenced.body.code).toBe("IN_USE");
+    expect(referenced.body.error).toContain("场景库引用");
   });
 
-  it("manages level-1 scenes and auto-creates pricing rows", async () => {
-    const adminCookie = await login("scene-admin");
-
-    // 新增一级场景 → 自动创建计费行（默认 20 元/小时）
-    const created = await request(app.getHttpServer())
-      .post("/api/v1/scene-system/level1")
-      .set("Origin", WEB_ORIGIN)
-      .set("Cookie", adminCookie)
-      .send({ code: "H01", name: "医院", description: "医院场景", sortOrder: 50 })
-      .expect(201);
-    expect(created.body.item).toMatchObject({
-      code: "H01",
-      name: "医院",
-      categoryKey: "h01",
-    });
-    const pricing = await dataSource.query(
-      `SELECT category_key, price_per_hour, name FROM scene_category_pricing WHERE category_key = 'h01'`,
-    );
-    expect(pricing).toHaveLength(1);
-    expect(Number(pricing[0].price_per_hour)).toBe(20);
-    expect(pricing[0].name).toBe("医院");
-
-    // meta 包含新一级场景
-    const meta = await request(app.getHttpServer())
-      .get("/api/v1/scene-system/meta")
-      .set("Cookie", adminCookie)
-      .expect(200);
-    expect(meta.body.level1.map((item: { code: string }) => item.code)).toContain("H01");
-
-    // 编码冲突
-    await request(app.getHttpServer())
-      .post("/api/v1/scene-system/level1")
-      .set("Origin", WEB_ORIGIN)
-      .set("Cookie", adminCookie)
-      .send({ code: "H01", name: "医院二院" })
-      .expect(409);
-
-    // 改名并停用（同步计费行名称）
-    const updated = await request(app.getHttpServer())
-      .put(`/api/v1/scene-system/level1/${created.body.item.id}`)
-      .set("Origin", WEB_ORIGIN)
-      .set("Cookie", adminCookie)
-      .send({ name: "医院诊所", enabled: false })
-      .expect(200);
-    expect(updated.body.item).toMatchObject({ name: "医院诊所", enabled: false });
-    const pricingAfter = await dataSource.query(
-      `SELECT name FROM scene_category_pricing WHERE category_key = 'h01'`,
-    );
-    expect(pricingAfter[0].name).toBe("医院诊所");
-
-    // 删除：无二级/场景库引用时可删，计费行一并删除
-    await request(app.getHttpServer())
-      .delete(`/api/v1/scene-system/level1/${created.body.item.id}`)
-      .set("Origin", WEB_ORIGIN)
-      .set("Cookie", adminCookie)
-      .expect(200);
-    const pricingAfterDelete = await dataSource.query(
-      `SELECT count(*)::int AS cnt FROM scene_category_pricing WHERE category_key = 'h01'`,
-    );
-    expect(pricingAfterDelete[0].cnt).toBe(0);
-  });
-
-  it("blocks deleting a level-1 scene that still has second-level scenes", async () => {
-    const adminCookie = await login("scene-admin");
-    await request(app.getHttpServer())
-      .delete("/api/v1/scene-system/level1/L1-F01")
-      .set("Origin", WEB_ORIGIN)
-      .set("Cookie", adminCookie)
-      .expect(409);
-  });
-
-  it("rejects non-admin scene system mutations", async () => {
+  it("rejects non-admin scene mutations", async () => {
     const collectorCookie = await login("scene-collector");
     await request(app.getHttpServer())
-      .post("/api/v1/scene-system/classification")
+      .post("/api/v1/scene-system/scenes")
       .set("Origin", WEB_ORIGIN)
       .set("Cookie", collectorCookie)
-      .send({ level1Code: "F01", level2Name: "走廊" })
+      .send({ name: "违规场景", categoryKey: "family" })
       .expect(403);
     await request(app.getHttpServer())
-      .post("/api/v1/scene-system/library")
+      .put("/api/v1/scene-system/scenes/SC-001")
       .set("Origin", WEB_ORIGIN)
       .set("Cookie", collectorCookie)
-      .send({ name: "违规场景", categoryKey: "family", subSceneIds: [] })
+      .send({ description: "x" })
       .expect(403);
+    await request(app.getHttpServer())
+      .delete("/api/v1/scene-system/scenes/SC-001")
+      .set("Origin", WEB_ORIGIN)
+      .set("Cookie", collectorCookie)
+      .expect(403);
+  });
+
+  it("keeps inventory admin-only but exposes progress to active collectors", async () => {
+    const adminCookie = await login("scene-admin");
+    const collectorCookie = await login("scene-collector");
+
+    // 管理端存量看板：管理员可读
+    const inventoryAsAdmin = await request(app.getHttpServer())
+      .get("/api/v1/scene-system/inventory")
+      .set("Cookie", adminCookie)
+      .expect(200);
+    expect(Array.isArray(inventoryAsAdmin.body.items)).toBe(true);
+
+    // 数采读取存量返回空（controller 对非 admin 返回空数组）
+    const inventoryAsCollector = await request(app.getHttpServer())
+      .get("/api/v1/scene-system/inventory")
+      .set("Cookie", collectorCookie)
+      .expect(200);
+    expect(inventoryAsCollector.body.items).toEqual([]);
+
+    // 数采端进度接口：任意激活用户可读
+    const progress = await request(app.getHttpServer())
+      .get("/api/v1/scene-system/progress")
+      .set("Cookie", collectorCookie)
+      .expect(200);
+    expect(Array.isArray(progress.body.items)).toBe(true);
   });
 });

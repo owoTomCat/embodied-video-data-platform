@@ -45,12 +45,25 @@ export class CreateUploadDto {
   @IsBoolean()
   sensitiveContentConfirmed!: boolean;
 
+  @IsOptional()
   @IsString()
   @MaxLength(64, { message: "任务编号无效" })
-  taskId!: string;
+  taskId?: string;
 
   @IsBoolean()
   taskRequirementsConfirmed!: boolean;
+
+  /** 从 AI 任务卡进入提交：关联任务卡（guide_tasks） */
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  guideTaskId?: string;
+
+  /** 从 AI 任务卡进入提交：所属数采个人场景库（场景大类计费） */
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  sceneLibraryId?: string;
 }
 
 export class PresignPartsDto {

@@ -1,0 +1,1 @@
+export const SCENE_GUIDE_PROVIDER = Symbol("SCENE_GUIDE_PROVIDER");

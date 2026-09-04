@@ -9,6 +9,7 @@ import { AnnotationRunEntity } from "./entities/annotation-run.entity.js";
 import { AuditLogEntity } from "./entities/audit-log.entity.js";
 import { CollectionTaskEntity } from "./entities/collection-task.entity.js";
 import { DeliveryArchiveTaskEntity } from "./entities/delivery-archive-task.entity.js";
+import { GuideTaskEntity } from "./entities/guide-task.entity.js";
 import { DeliveryPackageEntity } from "./entities/delivery-package.entity.js";
 import { DeliveryPackageItemEntity } from "./entities/delivery-package-item.entity.js";
 import { JobOutboxEntity } from "./entities/job-outbox.entity.js";
@@ -24,9 +25,9 @@ import { PublicSiteSnapshotEntity } from "./entities/public-site-snapshot.entity
 import { ScarcityConfigEntity } from "./entities/scarcity-config.entity.js";
 import { QualityRuleVersionEntity } from "./entities/quality-rule-version.entity.js";
 import { SceneCategoryPricingEntity } from "./entities/scene-category-pricing.entity.js";
-import { SceneClassificationEntity } from "./entities/scene-classification.entity.js";
+import { SceneEntity } from "./entities/scene.entity.js";
 import { SceneLibraryEntity } from "./entities/scene-library.entity.js";
-import { SceneLevel1Entity } from "./entities/scene-level1.entity.js";
+import { SceneTaskTargetEntity } from "./entities/scene-task-target.entity.js";
 import { SessionEntity } from "./entities/session.entity.js";
 import { SubmissionDuplicateCandidateEntity } from "./entities/submission-duplicate-candidate.entity.js";
 import { SubmissionEntity } from "./entities/submission.entity.js";
@@ -79,11 +80,20 @@ import { SceneCategoryPricing2026090100001 } from "./migrations/202609010001-sce
 import { SceneSystem2026090200001 } from "./migrations/202609020001-scene-system.js";
 import { SceneLevel1Table2026090300001 } from "./migrations/202609030001-scene-level1.js";
 import { AddDedupIndexes2026090400001 } from "./migrations/202609040001-add-dedup-indexes.js";
+import { SceneTypeTask2026090500001 } from "./migrations/202609050001-scene-type-task.js";
+import { GuideTasks2026090600001 } from "./migrations/202609060001-guide-tasks.js";
+import { SceneLibraryOwner2026091000001 } from "./migrations/202609100001-scene-library-owner.js";
+import { GuideTaskSceneLibrary2026091000002 } from "./migrations/202609100002-guide-task-scene-library.js";
+import { UnifiedSceneManagement2026091100001 } from "./migrations/202609110001-unified-scene-management.js";
 import { WalletAndSettlement2026083100001 } from "./migrations/202608310001-wallet-and-settlement.js";
 import { TaskSegmentAssets2026090300001 } from "./migrations/202609030001-task-segment-assets.js";
 import { TaskBoundaryRefinements2026090500001 } from "./migrations/202609050001-task-boundary-refinements.js";
 import { TaskSegmentAdaptiveCut2026090600001 } from "./migrations/202609060001-task-segment-adaptive-cut.js";
 import { TaskSegmentAnnotationPublication2026091200001 } from "./migrations/202609120001-task-segment-annotation-publication.js";
+import { SceneSingleLayer2026091500001 } from "./migrations/202609150001-scene-single-layer.js";
+import { TaskSceneBinding2026091600001 } from "./migrations/202609160001-task-scene-binding.js";
+import { PriceFieldRename2026091800001 } from "./migrations/202609180001-price-field-rename.js";
+import { TaskSegmentFkCascade2026091900001 } from "./migrations/202609190001-task-segment-fk-cascade.js";
 
 export const identityEntities = [
   TeamEntity,
@@ -117,13 +127,14 @@ export const identityEntities = [
   WalletBalanceEntity,
   WalletTransactionEntity,
   SceneCategoryPricingEntity,
-  SceneClassificationEntity,
+  SceneEntity,
   SceneLibraryEntity,
-  SceneLevel1Entity,
+  SceneTaskTargetEntity,
   TaskSegmentAssetEntity,
   TaskSegmentAnnotationRevisionEntity,
   TaskSegmentAssetProjectionEntity,
   TaskBoundaryRefinementEntity,
+  GuideTaskEntity,
 ];
 
 export function createDataSource(
@@ -179,9 +190,18 @@ export function createDataSource(
       TaskSegmentAssets2026090300001,
       AddDedupIndexes2026090400001,
       TaskBoundaryRefinements2026090500001,
+      SceneTypeTask2026090500001,
       TaskSegmentAdaptiveCut2026090600001,
+      GuideTasks2026090600001,
       TaskSegmentAnnotationPublication2026091200001,
+      SceneLibraryOwner2026091000001,
+      GuideTaskSceneLibrary2026091000002,
+      UnifiedSceneManagement2026091100001,
       TaskAssetProjection2026091300001,
+      SceneSingleLayer2026091500001,
+      TaskSceneBinding2026091600001,
+      PriceFieldRename2026091800001,
+      TaskSegmentFkCascade2026091900001,
     ],
     synchronize: false,
     logging: false,

@@ -14,19 +14,17 @@ import {
   type NormalizedTaskRequirements,
 } from "../database/entities/collection-task.entity.js";
 import { SubmissionEntity } from "../database/entities/submission.entity.js";
-import {
-  GENERIC_TASK_TEMPLATE,
-  presetSceneSummaries,
-  type PresetScene,
-} from "./preset-scenes.js";
+import { SceneEntity } from "../database/entities/scene.entity.js";
+import { SceneTaskTargetEntity } from "../database/entities/scene-task-target.entity.js";
+import { GENERIC_TASK_TEMPLATE } from "./generic-task-template.js";
 import { TaskFailure } from "./tasks.failure.js";
 import { TasksPolicy } from "./tasks.policy.js";
 import { RequirementNormalizerService } from "./requirement-normalizer.service.js";
 import { ScenePricingService } from "../scene-pricing/scene-pricing.service.js";
-import { SceneSystemService } from "../scene-system/scene-system.service.js";
 import type {
   ConfirmNormalizedRequirementsDto,
   CreateTaskDto,
+  SceneTargetDto,
   UpdateTaskDto,
 } from "./dto/tasks.dto.js";
 
@@ -36,12 +34,14 @@ export type PublicTask = {
   description: string;
   sceneName: string;
   sceneLabelId: string | null;
-  sceneLibraryId: string | null;
   taskType: CollectionTaskType;
+  categoryKey: string | null;
+  targetDurationSeconds: number | null;
+  sceneTargets: Array<{ sceneId: string; targetDurationSeconds: number }>;
   rawRequirements: string;
   normalizedRequirements: NormalizedTaskRequirements | null;
   normalizationStatus: string;
-  pricePointsPerMinute: number | null;
+  pricePerHour: number | null;
   status: CollectionTaskStatus;
   revision: number;
   createdByName: string;
@@ -58,28 +58,38 @@ export type PublicTaskForCollector = {
   description: string;
   sceneName: string;
   sceneLabelId: string | null;
-  sceneLibraryId: string | null;
   taskType: CollectionTaskType;
+  categoryKey: string | null;
+  targetDurationSeconds: number | null;
+  /** 已收集的合格有效时长（秒），用于任务大厅补量进度条 */
+  currentDurationSeconds: number;
+  /** 场景型任务的可选场景目标（scene_type 用；custom/generic 为空） */
+  sceneTargets: Array<{ sceneId: string; targetDurationSeconds: number }>;
   normalizedRequirements: NormalizedTaskRequirements | null;
-  pricePointsPerMinute: number | null;
+  pricePerHour: number | null;
   status: CollectionTaskStatus;
   revision: number;
   publishedAt: number | null;
 };
 
-export function publicTask(task: CollectionTaskEntity): PublicTask {
+export function publicTask(
+  task: CollectionTaskEntity,
+  sceneTargets: Array<{ sceneId: string; targetDurationSeconds: number }> = [],
+): PublicTask {
   return {
     id: task.id,
     title: task.title,
     description: task.description,
     sceneName: task.sceneName,
     sceneLabelId: task.sceneLabelId,
-    sceneLibraryId: task.sceneLibraryId,
     taskType: task.taskType,
+    categoryKey: task.categoryKey,
+    targetDurationSeconds: numericOrNull(task.targetDurationSeconds),
+    sceneTargets,
     rawRequirements: task.rawRequirements,
     normalizedRequirements: task.normalizedRequirements,
     normalizationStatus: task.normalizationStatus,
-    pricePointsPerMinute: numericOrNull(task.pricePointsPerMinute),
+    pricePerHour: numericOrNull(task.pricePerHour),
     status: task.status,
     revision: task.revision,
     createdByName: task.createdByName,
@@ -93,6 +103,8 @@ export function publicTask(task: CollectionTaskEntity): PublicTask {
 
 export function publicTaskForCollector(
   task: CollectionTaskEntity,
+  currentDurationSeconds = 0,
+  sceneTargets: Array<{ sceneId: string; targetDurationSeconds: number }> = [],
 ): PublicTaskForCollector {
   return {
     id: task.id,
@@ -100,10 +112,13 @@ export function publicTaskForCollector(
     description: task.description,
     sceneName: task.sceneName,
     sceneLabelId: task.sceneLabelId,
-    sceneLibraryId: task.sceneLibraryId,
     taskType: task.taskType,
+    categoryKey: task.categoryKey,
+    targetDurationSeconds: numericOrNull(task.targetDurationSeconds),
+    currentDurationSeconds,
+    sceneTargets,
     normalizedRequirements: task.normalizedRequirements,
-    pricePointsPerMinute: numericOrNull(task.pricePointsPerMinute),
+    pricePerHour: numericOrNull(task.pricePerHour),
     status: task.status,
     revision: task.revision,
     publishedAt: task.publishedAt?.getTime() ?? null,
@@ -138,21 +153,6 @@ export function assertTaskCanBeDeleted(
   }
 }
 
-export function assertTaskReadyForPublication(
-  task: Pick<
-    CollectionTaskEntity,
-    "normalizationStatus" | "normalizedRequirements"
-  >,
-): void {
-  if (task.normalizationStatus !== "ready" || !task.normalizedRequirements) {
-    throw new TaskFailure(
-      "TASK_REQUIREMENTS_NOT_READY",
-      "请先完成 AI 要求规范化并确认后再发布任务",
-      409,
-    );
-  }
-}
-
 const COLLECTOR_VISIBLE_STATUSES: CollectionTaskStatus[] = [
   "published",
   "paused",
@@ -169,7 +169,10 @@ export class TasksService {
     private readonly labelSets: LabelSetService,
     private readonly normalizer: RequirementNormalizerService,
     private readonly scenePricing: ScenePricingService,
-    private readonly sceneSystem: SceneSystemService,
+    @InjectRepository(SceneEntity)
+    private readonly scenes: Repository<SceneEntity>,
+    @InjectRepository(SceneTaskTargetEntity)
+    private readonly sceneTargets: Repository<SceneTaskTargetEntity>,
   ) {}
 
   /** 数采人员 / 团长：任务大厅（published + paused） */
@@ -185,20 +188,51 @@ export class TasksService {
       where: { status: "paused" },
       order: { pausedAt: "DESC", createdAt: "DESC" },
     });
+    const currentByTask = await this.currentDurationByTask();
+    const all = [...rows, ...paused];
+    const targetsByTask = await this.loadSceneTargets(all.map((task) => task.id));
     return {
-      tasks: [...rows, ...paused].map(publicTaskForCollector),
+      tasks: all.map((task) =>
+        publicTaskForCollector(
+          task,
+          currentByTask.get(task.id) ?? 0,
+          targetsByTask.get(task.id) ?? [],
+        ),
+      ),
     };
   }
 
-  /** 管理员：任务类型选择器使用的预设场景目录（含默认模板内容） */
-  async listPresetScenes(
+  /** 各任务已收集的合格有效时长（秒）：按 task_id 或 collection_task_id 归口，供补量进度条 */
+  private async currentDurationByTask(): Promise<Map<string, number>> {
+    const rows = await this.dataSource.query<Array<{
+      task_id: string;
+      current_ms: string;
+    }>>(
+      `SELECT COALESCE(submission.task_id, submission.collection_task_id) AS task_id,
+              COALESCE(SUM(
+                COALESCE(quality.manual_billable_duration_ms, quality.billable_duration_ms, 0)
+              ), 0)::float AS current_ms
+         FROM submissions submission
+         LEFT JOIN video_quality_results quality ON quality.submission_id = submission.id
+        WHERE COALESCE(submission.task_id, submission.collection_task_id) IS NOT NULL
+          AND quality.passed = true
+          AND quality.status IN ('scored', 'review_pending')
+        GROUP BY 1`,
+    );
+    return new Map(
+      rows.map((row) => [
+        row.task_id,
+        Math.round((Number(row.current_ms) || 0) / 1000),
+      ]),
+    );
+  }
+
+  /** 管理员：任务类型选择器使用的通用任务模板 */
+  async listTaskTypeCatalog(
     actor: PublicUser,
-  ): Promise<{ presetScenes: PresetScene[]; generic: typeof GENERIC_TASK_TEMPLATE }> {
+  ): Promise<{ generic: typeof GENERIC_TASK_TEMPLATE }> {
     this.policy.requireManage(actor);
-    return {
-      presetScenes: presetSceneSummaries(),
-      generic: GENERIC_TASK_TEMPLATE,
-    };
+    return { generic: GENERIC_TASK_TEMPLATE };
   }
 
   /** 管理员：任务管理列表（状态筛选 + 关键词 + 分页） */
@@ -230,8 +264,9 @@ export class TasksService {
       .skip((page - 1) * pageSize)
       .take(pageSize)
       .getMany();
+    const targetsByTask = await this.loadSceneTargets(rows.map((row) => row.id));
     return {
-      tasks: rows.map(publicTask),
+      tasks: rows.map((task) => publicTask(task, targetsByTask.get(task.id) ?? [])),
       pagination: {
         page,
         pageSize,
@@ -247,7 +282,10 @@ export class TasksService {
   ): Promise<PublicTask | PublicTaskForCollector> {
     this.policy.requireRead(actor);
     const task = await this.findEntity(id);
-    if (actor.role === "admin") return publicTask(task);
+    if (actor.role === "admin") {
+      const targetsByTask = await this.loadSceneTargets([id]);
+      return publicTask(task, targetsByTask.get(id) ?? []);
+    }
     if (!COLLECTOR_VISIBLE_STATUSES.includes(task.status)) {
       throw new TaskFailure(
         "TASK_NOT_VISIBLE",
@@ -255,60 +293,63 @@ export class TasksService {
         404,
       );
     }
-    return publicTaskForCollector(task);
+    const currentByTask = await this.currentDurationByTask();
+    const targetsByTask = await this.loadSceneTargets([id]);
+    return publicTaskForCollector(
+      task,
+      currentByTask.get(task.id) ?? 0,
+      targetsByTask.get(id) ?? [],
+    );
   }
 
-  /** 管理员：创建任务（draft） */
+  /** 管理员：创建任务（draft）；创建成功后自动后台规范化，需人工核查 */
   async create(
     actor: PublicUser,
     input: CreateTaskDto,
-  ): Promise<PublicTask> {
+  ): Promise<{
+    task: PublicTask;
+    autoNormalized: boolean;
+    normalizationFailed: boolean;
+  }> {
     this.policy.requireManage(actor);
-    // 场景库场景：任务从场景库选时，场景名取场景库名称，单价自动带出该场景类别的定价（元/小时）
-    let sceneName = input.sceneName.trim();
-    let sceneLibraryId: string | null = input.sceneLibraryId ?? null;
-    let categoryPrice: number | null = null;
-    if (input.sceneLibraryId) {
-      const libraryItem = await this.sceneSystem.getLibraryById(
-        input.sceneLibraryId,
-      );
-      if (!libraryItem || !libraryItem.enabled) {
-        throw new TaskFailure(
-          "SCENE_LIBRARY_NOT_FOUND",
-          "场景库场景不存在或已停用",
-          400,
-        );
-      }
-      sceneName = libraryItem.name;
-      sceneLibraryId = libraryItem.id;
-      categoryPrice =
-        (await this.scenePricing.get(libraryItem.categoryKey))?.pricePerHour ??
-        null;
-    }
+    const sceneName = input.sceneName.trim();
     const explicitPrice =
-      input.pricePointsPerMinute === null ||
-      input.pricePointsPerMinute === undefined
+      input.pricePerHour === null ||
+      input.pricePerHour === undefined
         ? null
-        : input.pricePointsPerMinute;
-    const price =
-      explicitPrice ??
-      categoryPrice ??
-      (input.taskType === "preset"
-        ? await this.scenePricing.pricePerHourForSceneName(sceneName)
-        : null);
+        : input.pricePerHour;
+    const price = explicitPrice ?? null;
+    // 场景型任务：绑定计费大类 + 按场景目标
+    let categoryKey: string | null = null;
+    let totalTargetSeconds: string | null = null;
+    let resolvedSceneTargets: Array<{
+      sceneId: string;
+      targetDurationSeconds: number;
+    }> = [];
+    if (input.taskType === "scene_type") {
+      const resolved = await this.resolveSceneTypeTargets(
+        actor,
+        input.categoryKey,
+        input.sceneTargets ?? [],
+      );
+      categoryKey = resolved.categoryKey;
+      totalTargetSeconds = resolved.totalTargetSeconds;
+      resolvedSceneTargets = resolved.resolvedTargets;
+    }
     const task = await this.tasks.save(
       this.tasks.create({
         id: `TASK-${randomUUID().slice(0, 8)}`,
         title: input.title.trim(),
         description: input.description?.trim() ?? "",
         sceneName,
-        taskType: input.taskType ?? "custom",
+        taskType: input.taskType ?? "scene_type",
         sceneLabelId: null,
-        sceneLibraryId,
+        categoryKey,
+        targetDurationSeconds: totalTargetSeconds,
         rawRequirements: input.rawRequirements.trim(),
         normalizedRequirements: null,
         normalizationStatus: "pending",
-        pricePointsPerMinute: price === null ? null : price.toFixed(2),
+        pricePerHour: price === null ? null : price.toFixed(2),
         status: "draft",
         revision: 1,
         createdByAccountId: actor.id,
@@ -322,9 +363,33 @@ export class TasksService {
       { id: task.id, name: task.title },
       `创建采集任务 ${task.title}（场景：${sceneName}）`,
       null,
-      { id: task.id, title: task.title, sceneName, sceneLibraryId },
+      { id: task.id, title: task.title, sceneName },
     );
-    return publicTask(task);
+    if (input.taskType === "scene_type") {
+      await this.saveSceneTargets(task.id, resolvedSceneTargets);
+    }
+    // 创建成功后自动在后台进行 AI 规范化，结果直接落库，管理员只需核查一遍
+    const normalized = await this.runAutoNormalize(task, actor);
+    const final = await this.tasks.save(task);
+    await this.audit.record(
+      this.dataSource.manager,
+      actor,
+      "task_auto_normalize",
+      { id: final.id, name: final.title },
+      normalized.autoNormalized
+        ? `创建后自动规范化提示词：${final.normalizedRequirements?.requirements.length ?? 0} 条要求（硬性 ${final.normalizedRequirements?.requirements.filter((item) => item.type === "hard").length ?? 0} 条）`
+        : "创建后自动规范化提示词失败（任务已创建，可手动重试）",
+      null,
+      {
+        id: final.id,
+        normalizationStatus: final.normalizationStatus,
+        ...normalized,
+      },
+    );
+    return {
+      task: publicTask(final, resolvedSceneTargets),
+      ...normalized,
+    };
   }
 
   /**
@@ -361,39 +426,21 @@ export class TasksService {
       // 场景变化后，已确认的规范化要求可能不再适用，需要重新规范化
       task.normalizationStatus = "pending";
     }
-    if (input.sceneLibraryId !== undefined) {
-      if (input.sceneLibraryId === null) {
-        task.sceneLibraryId = null;
-      } else {
-        const libraryItem = await this.sceneSystem.getLibraryById(
-          input.sceneLibraryId,
-        );
-        if (!libraryItem || !libraryItem.enabled) {
-          throw new TaskFailure(
-            "SCENE_LIBRARY_NOT_FOUND",
-            "场景库场景不存在或已停用",
-            400,
-          );
-        }
-        task.sceneLibraryId = libraryItem.id;
-        if (input.sceneName === undefined) {
-          task.sceneName = libraryItem.name;
-          task.normalizationStatus = "pending";
-        }
-      }
-    }
     if (input.taskType !== undefined) {
       task.taskType = input.taskType;
+    }
+    if (input.categoryKey !== undefined) {
+      task.categoryKey = input.categoryKey;
     }
     if (input.rawRequirements !== undefined) {
       task.rawRequirements = input.rawRequirements.trim();
       task.normalizationStatus = "pending";
     }
-    if (input.pricePointsPerMinute !== undefined) {
-      task.pricePointsPerMinute =
-        input.pricePointsPerMinute === null
+    if (input.pricePerHour !== undefined) {
+      task.pricePerHour =
+        input.pricePerHour === null
           ? null
-          : input.pricePointsPerMinute.toFixed(2);
+          : input.pricePerHour.toFixed(2);
     }
     const saved = await this.tasks.save(task);
     await this.audit.record(
@@ -410,6 +457,31 @@ export class TasksService {
       },
     );
 
+    let savedSceneTargets: Array<{
+      sceneId: string;
+      targetDurationSeconds: number;
+    }> = [];
+    if (saved.taskType === "scene_type") {
+      // 仅在客户端携带非空场景目标时才校验并覆写目标，避免编辑旧任务时因
+      // 现有目标缺失（空数组）被误报“至少设置一个场景目标”。空 / 未定义则保留现有目标。
+      const existing =
+        (await this.loadSceneTargets([saved.id])).get(saved.id) ?? [];
+      if (input.sceneTargets !== undefined && input.sceneTargets.length > 0) {
+        const resolved = await this.resolveSceneTypeTargets(
+          actor,
+          saved.categoryKey ?? undefined,
+          input.sceneTargets,
+        );
+        saved.categoryKey = resolved.categoryKey;
+        saved.targetDurationSeconds = resolved.totalTargetSeconds;
+        await this.tasks.save(saved);
+        await this.saveSceneTargets(saved.id, resolved.resolvedTargets);
+        savedSceneTargets = resolved.resolvedTargets;
+      } else {
+        savedSceneTargets = existing;
+      }
+    }
+
     // 提示词相关内容是否变化（场景名 / 说明 / 原始要求）
     const promptChanged =
       saved.sceneName !== before.sceneName ||
@@ -418,7 +490,7 @@ export class TasksService {
 
     if (!promptChanged) {
       return {
-        task: publicTask(saved),
+        task: publicTask(saved, savedSceneTargets),
         autoNormalized: false,
         normalizationFailed: false,
       };
@@ -463,10 +535,38 @@ export class TasksService {
       },
     );
     return {
-      task: publicTask(final),
+      task: publicTask(final, savedSceneTargets),
       autoNormalized,
       normalizationFailed,
     };
+  }
+
+  /** 后台 AI 要求规范化：成功 → ready（结果落库），失败 → failed（不阻断，可重试） */
+  private async runAutoNormalize(
+    task: CollectionTaskEntity,
+    _actor: PublicUser,
+  ): Promise<{ autoNormalized: boolean; normalizationFailed: boolean }> {
+    let autoNormalized = false;
+    let normalizationFailed = false;
+    try {
+      const normalized = await this.normalizer.normalize({
+        sceneName: task.sceneName,
+        description: task.description,
+        rawRequirements: task.rawRequirements,
+      });
+      if (normalized.requirements.length > 0) {
+        task.normalizedRequirements = normalized;
+        task.normalizationStatus = "ready";
+        autoNormalized = true;
+      } else {
+        task.normalizationStatus = "failed";
+        normalizationFailed = true;
+      }
+    } catch {
+      task.normalizationStatus = "failed";
+      normalizationFailed = true;
+    }
+    return { autoNormalized, normalizationFailed };
   }
 
   /** 管理员：仅删除尚未发布的草稿，避免破坏任务与已提交数据的追溯关系。 */
@@ -589,8 +689,22 @@ export class TasksService {
         409,
       );
     }
-    const { sceneLabelId, previousRevision } =
-      await this.prepareTaskForPublication(actor, task);
+    if (task.normalizationStatus !== "ready" || !task.normalizedRequirements) {
+      throw new TaskFailure(
+        "TASK_REQUIREMENTS_NOT_READY",
+        "请先完成 AI 要求规范化并确认后再发布任务",
+        409,
+      );
+    }
+    // 通用任务与场景型任务不写自由文本场景标签字典（结构化场景不走标签字典）
+    const sceneLabelId = null as string | null;
+    const previouslyPublished = task.publishedAt !== null;
+    task.sceneLabelId = sceneLabelId;
+    task.status = "published";
+    task.publishedAt = task.publishedAt ?? new Date();
+    task.pausedAt = null;
+    task.closedAt = null;
+    if (previouslyPublished) task.revision += 1;
     const saved = await this.tasks.save(task);
     await this.audit.record(
       this.dataSource.manager,
@@ -598,7 +712,7 @@ export class TasksService {
       "task_publish",
       { id: task.id, name: task.title },
       `发布采集任务 ${task.title}（场景：${task.sceneName}，版本 V${saved.revision}）`,
-      { revision: previousRevision },
+      { revision: task.revision - (previouslyPublished ? 1 : 0) },
       { revision: saved.revision, status: saved.status, sceneLabelId },
     );
     return publicTask(saved);
@@ -639,8 +753,19 @@ export class TasksService {
         409,
       );
     }
-    const { sceneLabelId, previousRevision } =
-      await this.prepareTaskForPublication(actor, task);
+    // 恢复时复用发布校验：要求 AI 要求规范化已就绪，不能绕过发布条件恢复
+    if (task.normalizationStatus !== "ready" || !task.normalizedRequirements) {
+      throw new TaskFailure(
+        "TASK_REQUIREMENTS_NOT_READY",
+        "请先完成 AI 要求规范化并确认后再发布任务",
+        409,
+      );
+    }
+    task.status = "published";
+    task.pausedAt = null;
+    task.closedAt = null;
+    task.publishedAt = task.publishedAt ?? new Date();
+    task.revision += 1;
     const saved = await this.tasks.save(task);
     await this.audit.record(
       this.dataSource.manager,
@@ -648,12 +773,8 @@ export class TasksService {
       "task_resume",
       { id: task.id, name: task.title },
       `恢复采集任务 ${task.title}（版本 V${saved.revision}）`,
-      { status: "paused", revision: previousRevision },
-      {
-        status: "published",
-        revision: saved.revision,
-        sceneLabelId,
-      },
+      { status: "paused" },
+      { status: "published", revision: saved.revision },
     );
     return publicTask(saved);
   }
@@ -683,24 +804,174 @@ export class TasksService {
     return publicTask(saved);
   }
 
-  private async prepareTaskForPublication(
-    actor: PublicUser,
-    task: CollectionTaskEntity,
-  ): Promise<{ sceneLabelId: string | null; previousRevision: number }> {
-    assertTaskReadyForPublication(task);
-    const sceneLabelId =
-      task.taskType === "generic"
-        ? null
-        : await this.resolveSceneLabelId(actor, task);
-    const previouslyPublished = task.publishedAt !== null;
-    const previousRevision = task.revision;
-    task.sceneLabelId = sceneLabelId;
+  /** 重新开启已结束的任务：恢复为发布状态，保留全部历史（提交/统计/场景目标），并记录审计 */
+  async reopen(actor: PublicUser, id: string): Promise<PublicTask> {
+    this.policy.requireManage(actor);
+    const task = await this.findEntity(id);
+    if (task.status !== "closed") {
+      throw new TaskFailure(
+        "TASK_NOT_REOPENABLE",
+        "只有已结束的任务可以重新开启",
+        409,
+      );
+    }
     task.status = "published";
-    task.publishedAt = task.publishedAt ?? new Date();
-    task.pausedAt = null;
     task.closedAt = null;
-    if (previouslyPublished) task.revision += 1;
-    return { sceneLabelId, previousRevision };
+    task.pausedAt = null;
+    const saved = await this.tasks.save(task);
+    await this.audit.record(
+      this.dataSource.manager,
+      actor,
+      "task_reopen",
+      { id: task.id, name: task.title },
+      `重新开启采集任务 ${task.title}（可继续提交）`,
+      { status: "closed" },
+      { status: "published" },
+    );
+    return publicTask(saved);
+  }
+
+  /** 校验并归一化场景型任务的计费大类 + 按场景目标 */
+  private async resolveSceneTypeTargets(
+    actor: PublicUser,
+    categoryKeyInput: string | undefined,
+    sceneTargets: SceneTargetDto[],
+  ): Promise<{
+    categoryKey: string;
+    totalTargetSeconds: string;
+    resolvedTargets: Array<{ sceneId: string; targetDurationSeconds: number }>;
+  }> {
+    if (!categoryKeyInput) {
+      throw new TaskFailure("VALIDATION", "场景型任务请选择计费大类", 400);
+    }
+    const pricing = await this.scenePricing.get(categoryKeyInput);
+    if (!pricing) {
+      throw new TaskFailure("VALIDATION", "计费大类不存在", 400);
+    }
+    if (sceneTargets.length === 0) {
+      throw new TaskFailure(
+        "VALIDATION",
+        "场景型任务请至少设置一个场景目标",
+        400,
+      );
+    }
+    const resolvedTargets: Array<{
+      sceneId: string;
+      targetDurationSeconds: number;
+    }> = [];
+    let total = 0;
+    for (const target of sceneTargets) {
+      let sceneId = target.sceneId;
+      if (!sceneId) {
+        // 新场景：按场景名新建（同分类复用，跨分类拒绝，名称不允许重复）
+        const name = target.sceneName?.trim();
+        if (!name) {
+          throw new TaskFailure(
+            "VALIDATION",
+            "请提供现有场景或填写新场景名称",
+            400,
+          );
+        }
+        sceneId = await this.ensureScene(actor, categoryKeyInput, name);
+      }
+      const scene = await this.scenes.findOneBy({ id: sceneId });
+      if (!scene || !scene.enabled) {
+        throw new TaskFailure("VALIDATION", "包含不存在或已停用的场景", 400);
+      }
+      if (scene.categoryKey !== categoryKeyInput) {
+        throw new TaskFailure(
+          "VALIDATION",
+          `场景「${scene.name}」不属于所选计费大类`,
+          400,
+        );
+      }
+      total += target.targetDurationSeconds;
+      resolvedTargets.push({
+        sceneId,
+        targetDurationSeconds: target.targetDurationSeconds,
+      });
+    }
+    return {
+      categoryKey: categoryKeyInput,
+      totalTargetSeconds: String(total),
+      resolvedTargets,
+    };
+  }
+
+  /** 解析/新建场景：场景名不允许重复；新建场景（入库、立即出现在场景管理）并同步新增对应标签 */
+  private async ensureScene(
+    actor: PublicUser,
+    categoryKey: string,
+    name: string,
+  ): Promise<string> {
+    const existing = await this.scenes.findOneBy({ name });
+    if (existing) {
+      if (existing.categoryKey !== categoryKey) {
+        throw new TaskFailure(
+          "VALIDATION",
+          `场景「${name}」已存在于计费大类「${existing.categoryKey}」，场景名不允许重复`,
+          400,
+        );
+      }
+      return existing.id; // 同分类下复用已有场景
+    }
+    const scene = await this.scenes.save(
+      this.scenes.create({
+        id: `SC-${randomUUID().slice(0, 8).toUpperCase()}`,
+        name,
+        categoryKey,
+        description: "",
+        enabled: true,
+      }),
+    );
+    // 同步新增对应标签（type=scene）；标签已存在则复用
+    try {
+      await this.labelSets.createLabel(actor, { name, type: "scene" });
+    } catch {
+      // 同名标签已存在则忽略
+    }
+    return scene.id;
+  }
+
+  /** 保存场景型任务的按场景目标 */
+  private async saveSceneTargets(
+    taskId: string,
+    sceneTargets: SceneTargetDto[],
+  ): Promise<void> {
+    await this.sceneTargets.delete({ taskId });
+    const rows = sceneTargets.map((target) =>
+      this.sceneTargets.create({
+        id: `STT-${randomUUID().slice(0, 8).toUpperCase()}`,
+        taskId,
+        sceneId: target.sceneId,
+        targetDurationSeconds: String(target.targetDurationSeconds),
+      }),
+    );
+    await this.sceneTargets.save(rows);
+  }
+
+  /** 批量读取若干任务的按场景目标，按 taskId 分组（无目标的返回空数组） */
+  private async loadSceneTargets(
+    taskIds: string[],
+  ): Promise<Map<string, Array<{ sceneId: string; targetDurationSeconds: number }>>> {
+    const result = new Map<
+      string,
+      Array<{ sceneId: string; targetDurationSeconds: number }>
+    >();
+    if (taskIds.length === 0) return result;
+    const rows = await this.sceneTargets
+      .createQueryBuilder("st")
+      .where("st.taskId IN (:...ids)", { ids: taskIds })
+      .getMany();
+    for (const row of rows) {
+      const list = result.get(row.taskId) ?? [];
+      list.push({
+        sceneId: row.sceneId,
+        targetDurationSeconds: numericOrNull(row.targetDurationSeconds) ?? 0,
+      });
+      result.set(row.taskId, list);
+    }
+    return result;
   }
 
   private async findEntity(id: string): Promise<CollectionTaskEntity> {
@@ -718,7 +989,7 @@ export class TasksService {
   private async resolveSceneLabelId(
     actor: PublicUser,
     task: CollectionTaskEntity,
-  ): Promise<string> {
+  ): Promise<string | null> {
     const active = await this.labelSets.getActiveLabelSetForWorker();
     const existing = active?.labels.find(
       (label) =>
@@ -734,7 +1005,7 @@ export class TasksService {
         (label) =>
           label.type === "scene" && label.name === task.sceneName,
       );
-      if (created) return created.id;
+      return created?.id ?? null;
     } catch {
       // 并发发布冲突：重新读取激活版本，避免重复创建同名场景
       const refreshed = await this.labelSets.getActiveLabelSetForWorker();
@@ -742,12 +1013,7 @@ export class TasksService {
         (label) =>
           label.type === "scene" && label.name === task.sceneName,
       );
-      if (found) return found.id;
+      return found?.id ?? null;
     }
-    throw new TaskFailure(
-      "TASK_SCENE_LABEL_NOT_READY",
-      "任务场景无法同步到标签字典，请稍后重试",
-      503,
-    );
   }
 }

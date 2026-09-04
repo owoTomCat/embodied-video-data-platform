@@ -92,7 +92,7 @@ const publishedTask = {
     ],
     quality_notes: [],
   },
-  pricePointsPerMinute: 15.5,
+  pricePerHour: 15.5,
   status: "published",
   revision: 1,
   publishedAt: Date.now(),
@@ -560,7 +560,11 @@ async function confirmAllUploadRequirements(
   user: ReturnType<typeof userEvent.setup>,
 ) {
   await selectUploadTask(user);
+  // 步骤 1 → 步骤 2
+  await user.click(screen.getByRole("button", { name: "下一步" }));
   await confirmUploadAuthorization(user);
+  // 步骤 2 → 步骤 3
+  await user.click(screen.getByRole("button", { name: "下一步" }));
 }
 
 describe("collector journey", () => {
@@ -645,8 +649,10 @@ describe("collector journey", () => {
     const user = userEvent.setup();
     renderCollector("/collector/upload");
 
+    // 切到第 3 步「上传文件」，完成前两步前上传按钮应禁用
+    await user.click(screen.getByRole("tab", { name: /上传文件/ }));
     expect(
-      screen.getByRole("button", { name: /请先完成上方三项授权确认/ }),
+      screen.getByRole("button", { name: /请先确认任务与授权规范/ }),
     ).toBeDisabled();
 
     // 未选择任务时给出明确提示
@@ -657,8 +663,11 @@ describe("collector journey", () => {
     expect(screen.getByText("请先选择采集任务")).toBeVisible();
     expect(uploadVideo).not.toHaveBeenCalled();
 
-    // 已选任务但未确认授权时仍阻断
+    // 回到第 1 步选任务
+    await user.click(screen.getByRole("tab", { name: /任务卡操作提示/ }));
     await selectUploadTask(user);
+    // 回到第 3 步，仍未确认授权时阻断
+    await user.click(screen.getByRole("tab", { name: /上传文件/ }));
     await user.upload(
       screen.getByLabelText("选择视频文件"),
       new File(["a"], "kitchen.mp4", { type: "video/mp4" }),
@@ -697,6 +706,8 @@ describe("collector journey", () => {
     ]);
     renderCollector("/collector/upload");
 
+    // 切到第 3 步「上传文件」查看可恢复上传
+    await user.click(screen.getByRole("tab", { name: /上传文件/ }));
     expect(await screen.findByText("可恢复上传")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "继续上传" }));
     await user.upload(
@@ -834,8 +845,8 @@ describe("collector journey", () => {
             title: "厨房数据采集",
             revision: 1,
             sceneName: "家庭厨房",
-            taskType: "custom",
-            pricePointsPerMinute: 15.5,
+            taskType: "scene_type",
+            pricePerHour: 15.5,
           },
         }),
       ],

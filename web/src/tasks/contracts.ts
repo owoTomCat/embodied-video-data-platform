@@ -1,22 +1,9 @@
 export type CollectionTaskStatus = "draft" | "published" | "paused" | "closed";
 export type TaskNormalizationStatus = "pending" | "ready" | "failed";
-export type CollectionTaskType = "generic" | "preset" | "custom";
+export type CollectionTaskType = "generic" | "scene_type";
 
-export type PresetScene = {
-  key: string;
-  /** 所属场景大类（定价按大类设置，细分场景共用同一价格） */
-  categoryKey: string;
-  name: string;
-  tagline: string;
-  defaultTitle: string;
-  description: string;
-  requirements: string[];
-  qualityNotes: string[];
-};
-
-/** 任务类型选择器数据源：预设场景目录 + 通用任务模板 */
+/** 任务类型选择器数据源：通用任务模板 */
 export type TaskTypeCatalog = {
-  presetScenes: PresetScene[];
   generic: {
     sceneName: string;
     defaultTitle: string;
@@ -38,18 +25,28 @@ export type NormalizedTaskRequirements = {
   quality_notes: string[];
 };
 
+export type SceneTargetInput = {
+  /** 已有场景 id；新建场景时缺省，改用 sceneName */
+  sceneId?: string;
+  /** 新建场景名（保存时创建场景+标签） */
+  sceneName?: string;
+  targetDurationSeconds: number;
+};
+
 export type CollectionTask = {
   id: string;
   title: string;
   description: string;
   sceneName: string;
   sceneLabelId: string | null;
-  sceneLibraryId: string | null;
   taskType: CollectionTaskType;
+  categoryKey: string | null;
+  targetDurationSeconds: number | null;
+  sceneTargets: SceneTargetInput[];
   rawRequirements: string;
   normalizedRequirements: NormalizedTaskRequirements | null;
   normalizationStatus: TaskNormalizationStatus;
-  pricePointsPerMinute: number | null;
+  pricePerHour: number | null;
   status: CollectionTaskStatus;
   revision: number;
   createdByName: string;
@@ -66,10 +63,14 @@ export type CollectionTaskForCollector = {
   description: string;
   sceneName: string;
   sceneLabelId: string | null;
-  sceneLibraryId: string | null;
   taskType: CollectionTaskType;
+  categoryKey: string | null;
+  targetDurationSeconds: number | null;
+  currentDurationSeconds: number;
+  /** 场景型任务的可选场景目标（scene_type 用；custom/generic 为空） */
+  sceneTargets: SceneTargetInput[];
   normalizedRequirements: NormalizedTaskRequirements | null;
-  pricePointsPerMinute: number | null;
+  pricePerHour: number | null;
   status: CollectionTaskStatus;
   revision: number;
   publishedAt: number | null;
@@ -81,8 +82,9 @@ export type CreateTaskInput = {
   sceneName: string;
   taskType?: CollectionTaskType;
   rawRequirements: string;
-  sceneLibraryId?: string | null;
-  pricePointsPerMinute?: number | null;
+  categoryKey?: string;
+  sceneTargets?: SceneTargetInput[];
+  pricePerHour?: number | null;
 };
 
 export type UpdateTaskInput = Partial<CreateTaskInput>;

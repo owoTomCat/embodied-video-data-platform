@@ -7,9 +7,9 @@ import { TaskDimensionStats } from "./TaskDimensionStats";
 const stats: BackendSubmissionTaskStat[] = [
   {
     taskId: "TASK-1",
-    title: "厨房预设任务",
+    title: "厨房任务",
     sceneName: "家庭-厨房",
-    taskType: "preset",
+    taskType: "scene_type",
     total: 5,
     reviewed: 4,
     passed: 3,
@@ -58,11 +58,11 @@ describe("TaskDimensionStats", () => {
       <TaskDimensionStats stats={stats} active="all" onSelect={vi.fn()} />,
     );
     expect(screen.getByText("全部任务")).toBeInTheDocument();
-    expect(screen.getByText("厨房预设任务")).toBeInTheDocument();
+    expect(screen.getByText("厨房任务")).toBeInTheDocument();
     expect(screen.getByText("通用综合采集")).toBeInTheDocument();
     expect(screen.getByText("未关联任务")).toBeInTheDocument();
     // 类型徽标
-    expect(screen.getByText("预设")).toBeInTheDocument();
+    expect(screen.getByText("场景型")).toBeInTheDocument();
     expect(screen.getAllByText("通用").length).toBeGreaterThan(0);
     // 汇总提交数
     expect(screen.getByText("8")).toBeInTheDocument();
@@ -73,7 +73,7 @@ describe("TaskDimensionStats", () => {
     render(
       <TaskDimensionStats stats={stats} active="all" onSelect={onSelect} />,
     );
-    fireEvent.click(screen.getByText("厨房预设任务"));
+    fireEvent.click(screen.getByText("厨房任务"));
     expect(onSelect).toHaveBeenCalledWith("TASK-1");
 
     fireEvent.click(screen.getByText("未关联任务"));

@@ -1,124 +1,27 @@
-import { IsArray, IsBoolean, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from "class-validator";
+import { IsBoolean, IsOptional, IsString, MaxLength } from "class-validator";
 
-export class CreateSceneLevel1Dto {
-  /** 一级编码（2-8 位大写字母或数字，如 F02），创建后不可修改 */
+export class CreateSceneDto {
+  /** 场景名称（如 厨房 / 工位 / 装配区） */
   @IsString()
-  @MinLength(2)
-  @MaxLength(8)
-  code!: string;
-
-  @IsString()
-  @MinLength(1)
-  @MaxLength(40)
+  @MaxLength(80)
   name!: string;
 
-  @IsOptional()
+  /** 计费大类 key（scene_category_pricing.category_key） */
   @IsString()
-  @MaxLength(2_000)
-  description?: string;
-
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  @Max(10_000)
-  sortOrder?: number;
-}
-
-export class UpdateSceneLevel1Dto {
-  @IsOptional()
-  @IsString()
-  @MinLength(1)
-  @MaxLength(40)
-  name?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(2_000)
-  description?: string;
-
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  @Max(10_000)
-  sortOrder?: number;
-
-  @IsOptional()
-  @IsBoolean()
-  enabled?: boolean;
-}
-
-export class CreateSceneClassificationDto {
-  /** 一级编码：F01 家庭 / O01 办公室 / W01 工厂 / G01 通用 / 自定义 */
-  @IsString()
-  @MinLength(1)
-  @MaxLength(16)
-  level1Code!: string;
-
-  @IsString()
-  @MinLength(1)
-  @MaxLength(80)
-  level2Name!: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(2_000)
-  description?: string;
-}
-
-export class UpdateSceneClassificationDto {
-  @IsOptional()
-  @IsString()
-  @MinLength(1)
-  @MaxLength(80)
-  level2Name?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(2_000)
-  description?: string;
-
-  @IsOptional()
-  @IsBoolean()
-  enabled?: boolean;
-}
-
-export class CreateSceneLibraryDto {
-  /** 场景名称（如「采集员A家」） */
-  @IsString()
-  @MinLength(1)
-  @MaxLength(120)
-  name!: string;
-
-  /** 场景类别（一级）：family / office / factory / generic */
-  @IsString()
+  @MaxLength(64)
   categoryKey!: string;
 
-  /** 包含的子场景：scene_classification.id 列表 */
-  @IsArray()
-  @IsString({ each: true })
-  subSceneIds: string[] = [];
-
   @IsOptional()
   @IsString()
   @MaxLength(2_000)
   description?: string;
 }
 
-export class UpdateSceneLibraryDto {
+export class UpdateSceneDto {
   @IsOptional()
   @IsString()
-  @MinLength(1)
-  @MaxLength(120)
+  @MaxLength(80)
   name?: string;
-
-  @IsOptional()
-  @IsString()
-  categoryKey?: string;
-
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  subSceneIds?: string[];
 
   @IsOptional()
   @IsString()
