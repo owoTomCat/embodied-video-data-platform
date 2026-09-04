@@ -283,7 +283,7 @@ describe("TasksPage", () => {
     await screen.findByText("厨房数据采集");
 
     // 卡片右上角「...」菜单 → 删除
-    const card = screen.getByText("厨房数据采集").closest(".admin-task-card")!;
+    const card = screen.getByText("厨房数据采集").closest(".admin-task-card") as HTMLElement;
     const summary = card.querySelector(".task-menu-btn") as HTMLElement;
     await user.click(summary);
     await user.click(within(card).getByRole("button", { name: "删除" }));

@@ -3661,3 +3661,46 @@ button:disabled { cursor: not-allowed; opacity: .56; }
   border-color: #8eaaed;
   box-shadow: 0 0 0 3px rgb(52 104 245 / 10%);
 }
+
+/* —— 任务大厅卡片（数采）—— */
+.task-hall-category { margin-bottom: 28px; }
+.task-hall-toolbar-title { display: flex; align-items: baseline; gap: 8px; margin-bottom: 12px; }
+.task-hall-toolbar-title strong { font-size: 15px; color: var(--ink); }
+.task-hall-toolbar-title span { font-size: 12px; color: var(--ink-2); }
+.task-card-progress { margin: 10px 0 12px; }
+.task-progress-text { display: flex; align-items: baseline; gap: 4px; font-size: 12px; color: var(--ink-2); }
+.task-progress-text strong { margin-left: auto; color: #2563eb; font-size: 14px; }
+.progress-track { position: relative; height: 6px; border-radius: 9999px; background: var(--line); overflow: hidden; margin-top: 6px; }
+.progress-fill { height: 100%; border-radius: 9999px; background: linear-gradient(90deg, #2f74f5, #2563eb); transition: width .3s ease; }
+.task-progress-summary { margin-top: 8px; font-size: 13px; color: var(--ink-2); }
+.task-detail-block { margin: 0; font-size: 13px; color: var(--ink); white-space: pre-wrap; }
+
+/* —— 场景选择页（数采）—— */
+.scene-create-card { display: flex; align-items: center; justify-content: center; border: 1.5px dashed var(--line); min-height: 180px; cursor: pointer; transition: border-color .15s ease, background .15s ease; }
+.scene-create-card:hover { border-color: #2f74f5; background: var(--blue-bg); }
+.scene-create-inner { display: flex; flex-direction: column; align-items: center; gap: 6px; color: var(--ink-2); }
+.scene-create-inner svg { color: #2f74f5; }
+.scene-create-inner span { font-weight: 600; color: var(--ink); }
+.scene-create-inner small { font-size: 12px; color: var(--ink-2); }
+
+/* —— 管理员任务卡片 —— */
+.task-admin-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+.admin-task-card { position: relative; display: flex; flex-direction: column; gap: 10px; }
+.task-card-head-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.task-menu { position: relative; }
+.task-menu-btn { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 8px; color: var(--ink-2); cursor: pointer; list-style: none; }
+.task-menu-btn:hover { background: var(--blue-bg); }
+.task-menu-btn::-webkit-details-marker { display: none; }
+.task-menu-btn::marker { content: ""; }
+.task-menu-popover { position: absolute; top: 34px; right: 0; z-index: 40; min-width: 150px; padding: 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgb(0 0 0 / 14%); }
+.task-menu-popover button { display: flex; align-items: center; gap: 6px; width: 100%; padding: 8px 10px; font-size: 13px; text-align: left; border-radius: 6px; color: var(--ink); background: transparent; }
+.task-menu-popover button:hover { background: var(--blue-bg); }
+.task-menu-popover button.danger { color: #c85550; }
+.task-menu-popover .muted { display: block; padding: 8px 10px; }
+.task-card-stats { display: flex; gap: 18px; padding: 8px 0; border-block: 1px solid var(--line); }
+.task-card-stats > span { display: flex; flex-direction: column; gap: 2px; }
+.task-card-stats em { font-style: normal; font-size: 11px; color: var(--ink-2); }
+.task-card-stats b { font-size: 16px; color: var(--ink); }
+.task-card-duration { display: flex; flex-direction: column; gap: 2px; font-size: 13px; color: var(--ink); }
+.task-dur-label { font-size: 11px; color: var(--ink-2); }
+.task-card-meta { display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--ink-2); margin-top: auto; }

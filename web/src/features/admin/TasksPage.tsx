@@ -253,6 +253,12 @@ export function TasksPage() {
       .filter((stat) => stat.taskId !== null)
       .map((stat) => [stat.taskId as string, stat]),
   );
+  // 排序：通用任务置顶，已关闭任务统一置底
+  const sortedTasks = [...tasks].sort((a, b) => {
+    const weight = (t: CollectionTask) =>
+      (t.status === "closed" ? 10 : 0) + (t.taskType === "generic" ? 0 : 1);
+    return weight(a) - weight(b);
+  });
 
   return (
     <div className="page-stack">
@@ -315,84 +321,10 @@ export function TasksPage() {
       ) : (
         <>
           <div className="task-admin-grid">
-            {tasks.map((task) => {
+            {sortedTasks.map((task) => {
               const stat = statByTask.get(task.id);
               return (
                 <article className="content-card task-card admin-task-card" key={task.id}>
-                  <div className="task-card-menu">
-                    <details className="task-menu">
-                      <summary className="task-menu-btn" aria-label="更多操作">
-                        <MoreHorizontal size={18} />
-                      </summary>
-                      <div className="task-menu-popover">
-                        {task.status === "draft" && (
-                          <>
-                            <button
-                              onClick={(event) => {
-                                actionTriggerRef.current = event.currentTarget;
-                                setConfirmTarget({ task, action: "publish" });
-                              }}
-                            >
-                              发布
-                            </button>
-                            <button
-                              onClick={(event) => {
-                                actionTriggerRef.current = event.currentTarget;
-                                setNormalizeTarget(task);
-                              }}
-                            >
-                              <WandSparkles size={14} />规范化
-                            </button>
-                            <button
-                              className="danger"
-                              onClick={(event) => {
-                                actionTriggerRef.current = event.currentTarget;
-                                setDeleteTarget(task);
-                              }}
-                            >
-                              <Trash2 size={14} />删除
-                            </button>
-                          </>
-                        )}
-                        {task.status === "published" && (
-                          <>
-                            <button onClick={() => void pause(task.id)}>
-                              <Pause size={14} />暂停
-                            </button>
-                            <button
-                              className="danger"
-                              onClick={(event) => {
-                                actionTriggerRef.current = event.currentTarget;
-                                setConfirmTarget({ task, action: "close" });
-                              }}
-                            >
-                              <Square size={14} />结束
-                            </button>
-                          </>
-                        )}
-                        {task.status === "paused" && (
-                          <>
-                            <button onClick={() => void resume(task.id)}>
-                              <Play size={14} />恢复
-                            </button>
-                            <button
-                              className="danger"
-                              onClick={(event) => {
-                                actionTriggerRef.current = event.currentTarget;
-                                setConfirmTarget({ task, action: "close" });
-                              }}
-                            >
-                              <Square size={14} />结束
-                            </button>
-                          </>
-                        )}
-                        {task.status === "closed" && (
-                          <span className="muted">已结束</span>
-                        )}
-                      </div>
-                    </details>
-                  </div>
-
                   <div className="task-card-head">
                     <div>
                       <p className="task-card-eyebrow">
@@ -400,10 +332,83 @@ export function TasksPage() {
                       </p>
                       <h2>{task.title}</h2>
                     </div>
-                    <StatusBadge
-                      label={statusLabel[task.status]}
-                      tone={statusTone[task.status]}
-                    />
+                    <div className="task-card-head-actions">
+                      <StatusBadge
+                        label={statusLabel[task.status]}
+                        tone={statusTone[task.status]}
+                      />
+                      <details className="task-menu">
+                        <summary className="task-menu-btn" aria-label="更多操作">
+                          <MoreHorizontal size={18} />
+                        </summary>
+                        <div className="task-menu-popover">
+                          {task.status === "draft" && (
+                            <>
+                              <button
+                                onClick={(event) => {
+                                  actionTriggerRef.current = event.currentTarget;
+                                  setConfirmTarget({ task, action: "publish" });
+                                }}
+                              >
+                                发布
+                              </button>
+                              <button
+                                onClick={(event) => {
+                                  actionTriggerRef.current = event.currentTarget;
+                                  setNormalizeTarget(task);
+                                }}
+                              >
+                                <WandSparkles size={14} />规范化
+                              </button>
+                              <button
+                                className="danger"
+                                onClick={(event) => {
+                                  actionTriggerRef.current = event.currentTarget;
+                                  setDeleteTarget(task);
+                                }}
+                              >
+                                <Trash2 size={14} />删除
+                              </button>
+                            </>
+                          )}
+                          {task.status === "published" && (
+                            <>
+                              <button onClick={() => void pause(task.id)}>
+                                <Pause size={14} />暂停
+                              </button>
+                              <button
+                                className="danger"
+                                onClick={(event) => {
+                                  actionTriggerRef.current = event.currentTarget;
+                                  setConfirmTarget({ task, action: "close" });
+                                }}
+                              >
+                                <Square size={14} />结束
+                              </button>
+                            </>
+                          )}
+                          {task.status === "paused" && (
+                            <>
+                              <button onClick={() => void resume(task.id)}>
+                                <Play size={14} />恢复
+                              </button>
+                              <button
+                                className="danger"
+                                onClick={(event) => {
+                                  actionTriggerRef.current = event.currentTarget;
+                                  setConfirmTarget({ task, action: "close" });
+                                }}
+                              >
+                                <Square size={14} />结束
+                              </button>
+                            </>
+                          )}
+                          {task.status === "closed" && (
+                            <span className="muted">已结束</span>
+                          )}
+                        </div>
+                      </details>
+                    </div>
                   </div>
 
                   <div className="task-card-stats">

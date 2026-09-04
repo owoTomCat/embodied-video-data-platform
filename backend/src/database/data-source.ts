@@ -93,6 +93,7 @@ import { TaskSegmentAnnotationPublication2026091200001 } from "./migrations/2026
 import { SceneSingleLayer2026091500001 } from "./migrations/202609150001-scene-single-layer.js";
 import { TaskSceneBinding2026091600001 } from "./migrations/202609160001-task-scene-binding.js";
 import { PriceFieldRename2026091800001 } from "./migrations/202609180001-price-field-rename.js";
+import { TaskSegmentFkCascade2026091900001 } from "./migrations/202609190001-task-segment-fk-cascade.js";
 
 export const identityEntities = [
   TeamEntity,
@@ -200,6 +201,7 @@ export function createDataSource(
       SceneSingleLayer2026091500001,
       TaskSceneBinding2026091600001,
       PriceFieldRename2026091800001,
+      TaskSegmentFkCascade2026091900001,
     ],
     synchronize: false,
     logging: false,
