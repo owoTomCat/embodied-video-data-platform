@@ -38,6 +38,7 @@ function submission(
     createdAt,
     tags: [],
     issues: [],
+    invalidIssues: [],
     audit: [],
   };
 }

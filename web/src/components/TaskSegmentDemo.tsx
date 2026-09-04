@@ -171,9 +171,10 @@ export function TaskSegmentDemo({
     return () => window.clearInterval(timer);
   }, [hasActiveAssets, load]);
 
-  const displayedAssets = structured
-    ? [...assets].sort((left, right) => left.taskIndex - right.taskIndex || left.clipStartMs - right.clipStartMs)
-    : assets;
+  const displayedAssets = [...assets].sort(
+    (left, right) =>
+      left.taskIndex - right.taskIndex || left.clipStartMs - right.clipStartMs,
+  );
 
   async function generate() {
     try {

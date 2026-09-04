@@ -55,7 +55,7 @@ function resolveDateRange(range: string): {
 }
 
 function backendStatus(status: string, qualityOnly: boolean): string {
-  if (qualityOnly && status === "all") return "reviewed";
+  if (qualityOnly && status === "all") return "quality_results";
   return status;
 }
 

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { shapeNormalizedOutput } from "../src/tasks/requirement-normalizer.service.js";
 import {
   assertTaskCanBeDeleted,
+  assertTaskReadyForPublication,
   numericOrNull,
   publicTask,
 } from "../src/tasks/tasks.service.js";
@@ -90,6 +91,30 @@ describe("assertTaskCanBeDeleted", () => {
     expect(() =>
       assertTaskCanBeDeleted({ status: "draft" }, 1),
     ).toThrowError(/已有提交数据/u);
+  });
+});
+
+describe("assertTaskReadyForPublication", () => {
+  it("blocks publishing or resuming unconfirmed requirements", () => {
+    expect(() =>
+      assertTaskReadyForPublication({
+        normalizationStatus: "pending",
+        normalizedRequirements: null,
+      }),
+    ).toThrowError(/先完成 AI 要求规范化并确认/u);
+  });
+
+  it("accepts confirmed normalized requirements", () => {
+    expect(() =>
+      assertTaskReadyForPublication({
+        normalizationStatus: "ready",
+        normalizedRequirements: {
+          scene_description: "通用采集",
+          requirements: [{ type: "hard", content: "保持第一人称视角" }],
+          quality_notes: [],
+        },
+      }),
+    ).not.toThrow();
   });
 });
 

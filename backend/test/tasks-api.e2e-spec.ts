@@ -324,6 +324,57 @@ describe("tasks API with task type dimension", () => {
     });
   });
 
+  describe("POST /tasks/:id/resume", () => {
+    it("enforces publication requirements and publishes a new revision", async () => {
+      const cookie = await login("stat-admin");
+      const repository = dataSource.getRepository(CollectionTaskEntity);
+      const task = await repository.save({
+        id: "TASK-RESUME",
+        title: "恢复校验任务",
+        description: "",
+        sceneName: "通用",
+        taskType: "generic",
+        rawRequirements: "必须第一人称拍摄",
+        normalizedRequirements: null,
+        normalizationStatus: "pending",
+        status: "paused",
+        revision: 1,
+        createdByAccountId: "U-STAT-ADMIN",
+        createdByName: "统计管理员",
+        publishedAt: new Date("2026-08-24T08:00:00Z"),
+        pausedAt: new Date("2026-08-24T09:00:00Z"),
+      });
+
+      const blocked = await request(app.getHttpServer())
+        .post(`/api/v1/tasks/${task.id}/resume`)
+        .set("Origin", WEB_ORIGIN)
+        .set("Cookie", cookie)
+        .expect(409);
+      expect(blocked.body.code).toBe("TASK_REQUIREMENTS_NOT_READY");
+
+      await repository.update(task.id, {
+        normalizationStatus: "ready",
+        normalizedRequirements: {
+          scene_description: "通用采集",
+          requirements: [{ type: "hard", content: "必须第一人称拍摄" }],
+          quality_notes: [],
+        },
+      });
+
+      const resumed = await request(app.getHttpServer())
+        .post(`/api/v1/tasks/${task.id}/resume`)
+        .set("Origin", WEB_ORIGIN)
+        .set("Cookie", cookie)
+        .expect(201);
+      expect(resumed.body.task).toMatchObject({
+        status: "published",
+        revision: 2,
+        sceneLabelId: null,
+        pausedAt: null,
+      });
+    });
+  });
+
   describe("GET /submissions/task-stats", () => {
     async function seedTasksAndSubmissions() {
       await dataSource.getRepository(CollectionTaskEntity).save([

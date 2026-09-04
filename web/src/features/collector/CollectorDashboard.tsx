@@ -17,6 +17,7 @@ import { getPointRule } from "../../points/client/pointCycleApi";
 import type { BackendPointRule } from "../../points/contracts";
 import { loadAllSubmissions } from "../../submissions/client/submissionApi";
 import { backendSubmissionToDomain } from "../../submissions/submissionMapper";
+import { submissionStatus } from "../../submissions/submissionStatus";
 import {
   formatDuration,
   formatRate,
@@ -34,23 +35,6 @@ function greeting(): string {
   return "晚上好";
 }
 
-function statusOf(item: Submission): {
-  label: string;
-  tone: "success" | "danger" | "warning" | "info";
-} {
-  if (item.qualityStatus === "passed") return { label: "质量通过", tone: "success" };
-  if (item.qualityStatus === "failed") return { label: "需要返工", tone: "danger" };
-  if (item.qualityResult?.status === "stuck" || item.pipelineStage === "stuck") {
-    return { label: "任务卡住", tone: "danger" };
-  }
-  if (item.qualityResult?.status === "system_failed") {
-    return { label: "质检异常", tone: "danger" };
-  }
-  if (item.pipelineStage === "probing") return { label: "媒体分析中", tone: "info" };
-  if (item.pipelineStage === "ai_processing") return { label: "AI 质检中", tone: "info" };
-  if (item.pipelineStage === "awaiting_ai") return { label: "等待 AI 质检", tone: "warning" };
-  return { label: "等待处理", tone: "warning" };
-}
 
 export function CollectorDashboard({
   navigate,
@@ -68,19 +52,27 @@ export function CollectorDashboard({
 
   useEffect(() => {
     let active = true;
-    Promise.all([loadAllSubmissions({ status: "all" }), getPointRule()])
-      .then(([result, rule]) => {
+    loadAllSubmissions({ status: "all" })
+      .then((result) => {
         if (!active) return;
         setSubmissions(result.map(backendSubmissionToDomain));
-        setPointRule(rule);
-        setPointRuleState("ready");
         setMode("live");
       })
       .catch(() => {
         if (!active) return;
         setSubmissions([]);
-        setPointRuleState("unavailable");
         setMode("unavailable");
+      });
+    getPointRule()
+      .then((rule) => {
+        if (!active) return;
+        setPointRule(rule);
+        setPointRuleState("ready");
+      })
+      .catch(() => {
+        if (!active) return;
+        setPointRule(null);
+        setPointRuleState("unavailable");
       });
     return () => {
       active = false;
@@ -105,7 +97,7 @@ export function CollectorDashboard({
     0,
   );
   const pendingPoints =
-    pointRuleState === "ready" && pointRule
+    mode === "live" && pointRuleState === "ready" && pointRule
       ? passed
           .filter(
             (item) =>
@@ -127,11 +119,15 @@ export function CollectorDashboard({
           )
       : null;
   const pointsLabel =
-    pointRuleState === "loading"
-      ? "规则读取中"
-      : pendingPoints === null
-        ? "规则不可用"
-        : `${pendingPoints.toFixed(2)} 分`;
+    mode !== "live"
+      ? "—"
+      : pointRuleState === "loading"
+        ? "规则读取中"
+        : pendingPoints === null
+          ? "规则不可用"
+          : `${pendingPoints.toFixed(2)} 分`;
+  const unavailableDetail =
+    mode === "loading" ? "数据读取中" : "数据暂不可用";
   const recent = useMemo(
     () =>
       [...submissions]
@@ -151,7 +147,9 @@ export function CollectorDashboard({
           <p className="page-kicker">今天也是好数据的一天</p>
           <h1 suppressHydrationWarning>{greeting()}，{currentAccount.displayName}</h1>
           <span>
-            本月已上传 {month.length} 条 · 今日 {today.length} 条
+            {mode === "live"
+              ? `本月已上传 ${month.length} 条 · 今日 ${today.length} 条`
+              : unavailableDetail}
           </span>
         </div>
         <div className="button-row">
@@ -174,28 +172,40 @@ export function CollectorDashboard({
       <div className="metric-grid">
         <MetricCard
           label="本月上传"
-          value={`${month.length} 条`}
-          detail={`近 30 日 · 今日 ${today.length} 条`}
+          value={mode === "live" ? `${month.length} 条` : "—"}
+          detail={
+            mode === "live"
+              ? `近 30 日 · 今日 ${today.length} 条`
+              : unavailableDetail
+          }
           icon={FileVideo}
         />
         <MetricCard
           label="有效时长"
-          value={formatDuration(effectiveSeconds)}
-          detail="已通过数据的有效时长"
+          value={mode === "live" ? formatDuration(effectiveSeconds) : "—"}
+          detail={mode === "live" ? "已通过数据的有效时长" : unavailableDetail}
           icon={Clock3}
           tone="violet"
         />
         <MetricCard
           label="质量通过率"
-          value={formatRate(passRate)}
-          detail={`${reviewed.length} 条已有终态质检`}
+          value={mode === "live" ? formatRate(passRate) : "—"}
+          detail={
+            mode === "live"
+              ? `${reviewed.length} 条已有终态质检`
+              : unavailableDetail
+          }
           icon={BadgeCheck}
           tone="green"
         />
         <MetricCard
           label="待锁定金额"
           value={pointsLabel}
-          detail="通过且未进入结算周期"
+          detail={
+            mode === "live"
+              ? "通过且未进入结算周期"
+              : unavailableDetail
+          }
           icon={Wallet}
           tone="amber"
         />
@@ -208,8 +218,8 @@ export function CollectorDashboard({
               <p>跟踪你的视频处理和质检进度</p>
             </div>
             <button
-              className="text-button"
               onClick={() => navigate("/collector/submissions")}
+              className="text-button"
             >
               查看全部
             </button>
@@ -217,7 +227,7 @@ export function CollectorDashboard({
           {recent.length > 0 ? (
             <div className="record-list">
               {recent.map((item) => {
-                const status = statusOf(item);
+                const status = submissionStatus(item);
                 return (
                   <div key={item.id}>
                     <span>
@@ -245,7 +255,9 @@ export function CollectorDashboard({
             <div className="empty-inline">
               {mode === "loading"
                 ? "正在读取数据"
-                : "暂无数据，去上传第一条视频吧"}
+                : mode === "unavailable"
+                  ? "数据暂不可用"
+                  : "暂无数据，去上传第一条视频吧"}
             </div>
           )}
         </section>

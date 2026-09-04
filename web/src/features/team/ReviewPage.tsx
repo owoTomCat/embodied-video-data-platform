@@ -36,7 +36,7 @@ export function ReviewPage({
       totalPages: 1,
     });
 
-  const backendStatus = admin ? "review_queue" : "unsettled";
+  const backendStatus = admin ? "review_queue" : "quality_results";
 
   useEffect(() => {
     let active = true;

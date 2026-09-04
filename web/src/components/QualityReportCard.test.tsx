@@ -24,6 +24,7 @@ function makeSubmission(overrides: Partial<Submission>): Submission {
     aiScore: 86.5,
     finalScore: 86.5,
     issues: [],
+    invalidIssues: [],
     qualityResult: {
       status: "scored",
       summary: "质量通过",

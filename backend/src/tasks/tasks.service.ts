@@ -138,6 +138,21 @@ export function assertTaskCanBeDeleted(
   }
 }
 
+export function assertTaskReadyForPublication(
+  task: Pick<
+    CollectionTaskEntity,
+    "normalizationStatus" | "normalizedRequirements"
+  >,
+): void {
+  if (task.normalizationStatus !== "ready" || !task.normalizedRequirements) {
+    throw new TaskFailure(
+      "TASK_REQUIREMENTS_NOT_READY",
+      "请先完成 AI 要求规范化并确认后再发布任务",
+      409,
+    );
+  }
+}
+
 const COLLECTOR_VISIBLE_STATUSES: CollectionTaskStatus[] = [
   "published",
   "paused",
@@ -574,25 +589,8 @@ export class TasksService {
         409,
       );
     }
-    if (task.normalizationStatus !== "ready" || !task.normalizedRequirements) {
-      throw new TaskFailure(
-        "TASK_REQUIREMENTS_NOT_READY",
-        "请先完成 AI 要求规范化并确认后再发布任务",
-        409,
-      );
-    }
-    // 通用任务不绑定具体场景，跳过场景标签解析，避免向标签字典写入「通用」占位标签
-    const sceneLabelId =
-      task.taskType === "generic"
-        ? null
-        : await this.resolveSceneLabelId(actor, task);
-    const previouslyPublished = task.publishedAt !== null;
-    task.sceneLabelId = sceneLabelId;
-    task.status = "published";
-    task.publishedAt = task.publishedAt ?? new Date();
-    task.pausedAt = null;
-    task.closedAt = null;
-    if (previouslyPublished) task.revision += 1;
+    const { sceneLabelId, previousRevision } =
+      await this.prepareTaskForPublication(actor, task);
     const saved = await this.tasks.save(task);
     await this.audit.record(
       this.dataSource.manager,
@@ -600,7 +598,7 @@ export class TasksService {
       "task_publish",
       { id: task.id, name: task.title },
       `发布采集任务 ${task.title}（场景：${task.sceneName}，版本 V${saved.revision}）`,
-      { revision: task.revision - (previouslyPublished ? 1 : 0) },
+      { revision: previousRevision },
       { revision: saved.revision, status: saved.status, sceneLabelId },
     );
     return publicTask(saved);
@@ -641,17 +639,21 @@ export class TasksService {
         409,
       );
     }
-    task.status = "published";
-    task.pausedAt = null;
+    const { sceneLabelId, previousRevision } =
+      await this.prepareTaskForPublication(actor, task);
     const saved = await this.tasks.save(task);
     await this.audit.record(
       this.dataSource.manager,
       actor,
       "task_resume",
       { id: task.id, name: task.title },
-      `恢复采集任务 ${task.title}`,
-      { status: "paused" },
-      { status: "published" },
+      `恢复采集任务 ${task.title}（版本 V${saved.revision}）`,
+      { status: "paused", revision: previousRevision },
+      {
+        status: "published",
+        revision: saved.revision,
+        sceneLabelId,
+      },
     );
     return publicTask(saved);
   }
@@ -681,6 +683,26 @@ export class TasksService {
     return publicTask(saved);
   }
 
+  private async prepareTaskForPublication(
+    actor: PublicUser,
+    task: CollectionTaskEntity,
+  ): Promise<{ sceneLabelId: string | null; previousRevision: number }> {
+    assertTaskReadyForPublication(task);
+    const sceneLabelId =
+      task.taskType === "generic"
+        ? null
+        : await this.resolveSceneLabelId(actor, task);
+    const previouslyPublished = task.publishedAt !== null;
+    const previousRevision = task.revision;
+    task.sceneLabelId = sceneLabelId;
+    task.status = "published";
+    task.publishedAt = task.publishedAt ?? new Date();
+    task.pausedAt = null;
+    task.closedAt = null;
+    if (previouslyPublished) task.revision += 1;
+    return { sceneLabelId, previousRevision };
+  }
+
   private async findEntity(id: string): Promise<CollectionTaskEntity> {
     const task = await this.tasks.findOneBy({ id });
     if (!task) {
@@ -696,7 +718,7 @@ export class TasksService {
   private async resolveSceneLabelId(
     actor: PublicUser,
     task: CollectionTaskEntity,
-  ): Promise<string | null> {
+  ): Promise<string> {
     const active = await this.labelSets.getActiveLabelSetForWorker();
     const existing = active?.labels.find(
       (label) =>
@@ -712,7 +734,7 @@ export class TasksService {
         (label) =>
           label.type === "scene" && label.name === task.sceneName,
       );
-      return created?.id ?? null;
+      if (created) return created.id;
     } catch {
       // 并发发布冲突：重新读取激活版本，避免重复创建同名场景
       const refreshed = await this.labelSets.getActiveLabelSetForWorker();
@@ -720,7 +742,12 @@ export class TasksService {
         (label) =>
           label.type === "scene" && label.name === task.sceneName,
       );
-      return found?.id ?? null;
+      if (found) return found.id;
     }
+    throw new TaskFailure(
+      "TASK_SCENE_LABEL_NOT_READY",
+      "任务场景无法同步到标签字典，请稍后重试",
+      503,
+    );
   }
 }

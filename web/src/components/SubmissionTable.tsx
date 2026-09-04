@@ -1,27 +1,10 @@
 import { CopyCheck, Eye, FileVideo, ShieldAlert } from "lucide-react";
 import type { ReactNode } from "react";
 import type { Submission } from "../domain/types";
+import { submissionStatus } from "../submissions/submissionStatus";
 import { QualityScore } from "./QualityScore";
 import { StatusBadge } from "./StatusBadge";
 
-const processingLabel = {
-  uploading: ["上传中", "info"],
-  queued: ["AI 排队", "warning"],
-  processing: ["分析中", "info"],
-  completed: ["处理完成", "success"],
-  stuck: ["任务卡住", "danger"],
-  failed: ["处理失败", "danger"],
-} as const;
-
-function processingBadge(item: Submission) {
-  if (item.pipelineStage === "queued") return ["等待媒体分析", "warning"] as const;
-  if (item.pipelineStage === "probing") return ["媒体分析中", "info"] as const;
-  if (item.pipelineStage === "awaiting_ai") return ["等待 AI 质检", "warning"] as const;
-  if (item.pipelineStage === "ai_processing") return ["AI 质检中", "info"] as const;
-  if (item.pipelineStage === "stuck") return ["任务卡住", "danger"] as const;
-  if (item.pipelineStage === "system_failed") return ["处理失败", "danger"] as const;
-  return processingLabel[item.processingStatus];
-}
 
 function formatDuration(seconds: number, item: Submission) {
   if (!seconds) {
@@ -82,7 +65,7 @@ export function SubmissionTable({
         <thead><tr><th>视频提交</th>{showOwner && <th>成员 / 团队</th>}{showTaskSource && <th>任务来源</th>}{showSubmittedAt && <th>提交时间</th>}<th>场景与动作</th><th>时长</th><th>处理状态</th><th>质量评分</th><th /></tr></thead>
         <tbody>
           {submissions.map((item) => {
-            const [label, tone] = processingBadge(item);
+            const { label, tone } = submissionStatus(item);
             return (
               <tr key={item.id}>
                 <td><div className="file-cell">{item.thumbnailUrl ? <img className="file-thumb" src={item.thumbnailUrl} alt={`${item.fileName} 缩略图`} loading="lazy" /> : <span><FileVideo size={17} /></span>}<div><strong>{item.fileName}</strong><small>{item.id}{showSubmittedAt ? "" : ` · ${item.createdAt}`}</small>{item.assetStatus === "quarantined" && <em><ShieldAlert size={12} />敏感隔离</em>}{item.duplicateCandidates?.some((candidate) => candidate.status === "candidate") && <em className="warning-tag"><CopyCheck size={12} />疑似重复</em>}</div></div></td>

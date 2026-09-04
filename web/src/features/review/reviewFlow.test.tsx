@@ -313,7 +313,7 @@ describe("review workflows", () => {
     await user.click((await screen.findAllByRole("button", { name: "查看" }))[0]);
 
     expect(searchSubmissions).toHaveBeenCalledWith({
-      status: "unsettled",
+      status: "quality_results",
       page: 1,
       pageSize: 20,
       includeThumbnails: true,
@@ -322,6 +322,46 @@ describe("review workflows", () => {
     expect(screen.getByRole("region", { name: "最终质检结果" })).toBeVisible();
     expect(screen.queryByLabelText("最终评分")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "确认放行（视频有用）" })).not.toBeInTheDocument();
+  });
+
+  it("does not convert quality deductions into invalid duration", async () => {
+    const user = userEvent.setup();
+    const submission = backendSubmission({
+      quality: {
+        ...backendSubmission().quality!,
+        finalScore: 70.4,
+        invalidDurationMs: 0,
+        billableDurationMs: 10_000,
+        deductions: [
+          {
+            reason_code: "LOW_RESOLUTION",
+            description: "分辨率偏低",
+            start_ms: 0,
+            end_ms: 10_000,
+          },
+        ],
+        invalidSegments: [],
+      },
+    });
+    vi.mocked(reviewSubmissionQuality).mockResolvedValue(submission);
+    renderAdminWithSubmissions([submission]);
+
+    await user.click(await screen.findByRole("button", { name: "复核" }));
+    const scoreInput = screen.getByLabelText("最终评分");
+    expect(scoreInput).toHaveAttribute("step", "0.1");
+    expect(scoreInput).toBeValid();
+
+    expect(screen.getByText("10 秒")).toBeVisible();
+    expect(screen.queryByText(/无效时长 10 秒/u)).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText("调整原因"), "人工确认视频内容有效");
+    await user.click(screen.getByRole("button", { name: "确认放行（视频有用）" }));
+
+    await waitFor(() =>
+      expect(reviewSubmissionQuality).toHaveBeenCalledWith(
+        submission.id,
+        expect.objectContaining({ issues: [] }),
+      ),
+    );
   });
 
   it("saves backend quality review and refreshes the visible submission", async () => {

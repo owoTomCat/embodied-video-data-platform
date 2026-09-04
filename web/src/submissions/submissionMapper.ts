@@ -111,6 +111,26 @@ function aiIssues(source: BackendSubmission): Submission["issues"] {
   return [...invalid, ...deductions];
 }
 
+function invalidIssues(source: BackendSubmission): Submission["invalidIssues"] {
+  if (source.quality?.manualReview) {
+    return source.quality.manualIssues ?? source.quality.manualReview.issues;
+  }
+  if (source.quality) {
+    return source.quality.invalidSegments.map((segment) => ({
+      label: segment.reasonCode,
+      start: Math.round(segment.startMs) / 1_000,
+      end: Math.round(segment.endMs) / 1_000,
+    }));
+  }
+  return source.segments
+    .filter((segment) => segment.invalid)
+    .map((segment) => ({
+      label: segment.type === "black" ? "黑屏" : "画面冻结",
+      start: segment.startSeconds,
+      end: segment.endSeconds,
+    }));
+}
+
 export function backendSubmissionToDomain(
   source: BackendSubmission,
 ): Submission {
@@ -269,6 +289,7 @@ export function backendSubmissionToDomain(
             start: segment.startSeconds,
             end: segment.endSeconds,
           })),
+    invalidIssues: invalidIssues(source),
     audit:
       source.audit?.map((record) => ({
         ...record,

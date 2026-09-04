@@ -854,6 +854,15 @@ describe("operations API", () => {
   });
 
   it("returns role-scoped live notifications and navigation badges", async () => {
+    await dataSource.getRepository(WorkerHeartbeatEntity).save({
+      id: "ai_quality-historical-idle",
+      kind: "ai_quality",
+      hostName: "old-test-host",
+      processId: 41,
+      status: "idle",
+      startedAt: new Date(Date.now() - 10 * 60_000),
+      lastSeenAt: new Date(Date.now() - 5 * 60_000),
+    });
     const adminCookie = await login("ops-admin");
     const admin = await request(app.getHttpServer())
       .get("/api/v1/operations/status")
@@ -867,6 +876,7 @@ describe("operations API", () => {
       unsettledEligible: 0,
       pendingJobs: 1,
     });
+    expect(admin.body.summary.workerAlerts).toBe(0);
     expect(admin.body.navigationBadges).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ path: "/admin/ai", count: 1, label: "1" }),

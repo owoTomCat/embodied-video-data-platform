@@ -168,4 +168,22 @@ describe("TeamDashboard", () => {
       status: "all",
     });
   });
+
+  it("renders unavailable metrics as unknown instead of zero", async () => {
+    loadAllSubmissionsMock.mockRejectedValue(new Error("提交接口不可用"));
+
+    renderPage();
+
+    expect((await screen.findAllByText("数据暂不可用")).length).toBeGreaterThan(0);
+    for (const label of [
+      "上传视频数",
+      "上传总时长",
+      "视频平均分",
+      "高分有效时长",
+    ]) {
+      expect(screen.getByText(label).closest("article")).toHaveTextContent("—");
+    }
+    expect(screen.queryByText("0 条数据待关注")).not.toBeInTheDocument();
+    expect(screen.queryByText("0 个系统任务失败")).not.toBeInTheDocument();
+  });
 });

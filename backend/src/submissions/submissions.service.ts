@@ -153,6 +153,7 @@ type SubmissionListStatus =
   | "passed"
   | "reviewed"
   | "review_queue"
+  | "quality_results"
   | "unsettled";
 type SubmissionListQuery = {
   q?: string;
@@ -214,6 +215,7 @@ function listStatus(value: string | undefined): SubmissionListStatus {
     "passed",
     "reviewed",
     "review_queue",
+    "quality_results",
     "unsettled",
   ]);
   return supported.has(value as SubmissionListStatus)
@@ -2388,6 +2390,25 @@ export class SubmissionsService {
       );
       return;
     }
+    if (status === "quality_results") {
+      query.andWhere(
+        new Brackets((builder) => {
+          builder
+            .where("quality.status IN (:...qualityResultStatuses)", {
+              qualityResultStatuses: [
+                "scored",
+                "hard_reject",
+                "review_pending",
+                "system_failed",
+              ],
+            })
+            .orWhere("submission.processingStatus = :systemFailed", {
+              systemFailed: "system_failed",
+            });
+        }),
+      );
+      return;
+    }
     if (status === "unsettled") {
       query
         .andWhere("submission.processingStatus = :completed", {
@@ -2422,12 +2443,24 @@ export class SubmissionsService {
           availableStorage: "available",
         })
         .andWhere(
-          `quality.status IN (:...passedStatuses) AND ${QUALITY_PASSED_SQL}`,
-          {
-            passedStatuses: ["scored", "review_pending"],
-          },
+          new Brackets((builder) => {
+            builder
+              .where(
+                "quality.status = :reviewPending AND quality.manualFinalScore IS NULL",
+                { reviewPending: "review_pending" },
+              )
+              .orWhere(
+                new Brackets((eligible) => {
+                  eligible
+                    .where(
+                      `quality.status IN (:...passedStatuses) AND ${QUALITY_PASSED_SQL}`,
+                      { passedStatuses: ["scored", "review_pending"] },
+                    )
+                    .andWhere(POINT_RULE_ELIGIBLE_SQL);
+                }),
+              );
+          }),
         )
-        .andWhere(POINT_RULE_ELIGIBLE_SQL)
         .andWhere("pointCycleItem.id IS NULL");
       return;
     }

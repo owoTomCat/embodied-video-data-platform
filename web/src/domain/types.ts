@@ -332,6 +332,7 @@ export interface Submission {
   completedAt?: string;
   tags: string[];
   issues: Array<{ label: string; start: number; end: number }>;
+  invalidIssues: Array<{ label: string; start: number; end: number }>;
   audit: AuditRecord[];
 }
 

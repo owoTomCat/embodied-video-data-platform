@@ -3,3 +3,6 @@ allowBuilds:
   sharp: true
   unrs-resolver: true
   workerd: true
+overrides:
+  sharp: 0.35.0
+  postcss: 8.5.25

@@ -12,7 +12,10 @@ import { PointCycleItemEntity } from "../database/entities/point-cycle-item.enti
 import { SubmissionEntity } from "../database/entities/submission.entity.js";
 import { VideoQualityResultEntity } from "../database/entities/video-quality-result.entity.js";
 import { OperationsFailure } from "./operations-failure.js";
-import { WorkerHeartbeatService } from "./worker-heartbeat.service.js";
+import {
+  WorkerHeartbeatService,
+  type PublicWorkerHeartbeat,
+} from "./worker-heartbeat.service.js";
 import { enqueueAnnotationRun } from "../video-annotation/annotation-run.queue.js";
 import type {
   AnnotationOperationsQueryDto,
@@ -96,6 +99,23 @@ function assertActive(actor: PublicUser): void {
   if (actor.status !== "active") {
     throw new OperationsFailure("FORBIDDEN", "账号已停用", 403);
   }
+}
+
+export function countActionableWorkerAlerts(
+  workers: PublicWorkerHeartbeat[],
+): number {
+  const activeKinds = new Set(
+    workers
+      .filter((worker) => worker.status !== "stopped" && !worker.stale)
+      .map((worker) => worker.kind),
+  );
+  return workers.filter(
+    (worker) =>
+      worker.runningTooLong ||
+      (worker.stale &&
+        worker.status !== "stopped" &&
+        (worker.status !== "idle" || !activeKinds.has(worker.kind))),
+  ).length;
 }
 
 function publicJob(job: JobOutboxEntity) {
@@ -613,9 +633,7 @@ export class OperationsService {
 
     const workers =
       actor.role === "admin" ? await this.workerHeartbeats.listAll() : [];
-    const workerAlerts = workers.filter(
-      (worker) => worker.stale || worker.runningTooLong,
-    ).length;
+    const workerAlerts = countActionableWorkerAlerts(workers);
     const navigationBadges: NavigationBadge[] = [];
     const notifications: OperationsNotification[] = [];
     const now = Date.now();

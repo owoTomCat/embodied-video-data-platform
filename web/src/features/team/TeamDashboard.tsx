@@ -77,6 +77,9 @@ export function TeamDashboard({
   const pendingReview = countPendingReview(teamSubmissions);
   const failedTasks = countFailedTasks(teamSubmissions);
   const totalUploads = trend.reduce((total, record) => total + record.uploads, 0);
+  const metricsAvailable = mode === "live";
+  const unavailableDetail =
+    mode === "loading" ? "数据读取中" : "数据暂不可用";
 
   return (
     <div className="page-stack">
@@ -86,7 +89,9 @@ export function TeamDashboard({
           <h1>{currentTeam?.name ?? "团队工作台"}</h1>
           <span>
             当前 {members.filter((member) => member.status === "active").length} 个启用账号，
-            {pendingReview} 条数据需要人工关注
+            {metricsAvailable
+              ? `${pendingReview} 条数据需要人工关注`
+              : unavailableDetail}
           </span>
         </div>
         <div className="button-row">
@@ -115,29 +120,53 @@ export function TeamDashboard({
       <div className="metric-grid">
         <MetricCard
           label="上传视频数"
-          value={`${monthMetrics.uploads} 条`}
-          detail={`近 30 日 · 今日 ${today.length} 条`}
+          value={metricsAvailable ? `${monthMetrics.uploads} 条` : "—"}
+          detail={
+            metricsAvailable
+              ? `近 30 日 · 今日 ${today.length} 条`
+              : unavailableDetail
+          }
           icon={FileVideo}
           tone="violet"
         />
         <MetricCard
           label="上传总时长"
-          value={formatDuration(monthMetrics.totalSeconds)}
-          detail={`近 30 日 · 有效 ${formatDuration(monthMetrics.effectiveSeconds)}`}
+          value={metricsAvailable ? formatDuration(monthMetrics.totalSeconds) : "—"}
+          detail={
+            metricsAvailable
+              ? `近 30 日 · 有效 ${formatDuration(monthMetrics.effectiveSeconds)}`
+              : unavailableDetail
+          }
           icon={Clock3}
           tone="amber"
         />
         <MetricCard
           label="视频平均分"
-          value={monthMetrics.averageScore === null ? "—" : monthMetrics.averageScore.toFixed(1)}
-          detail={`${monthMetrics.reviewed} 条已有终态质检`}
+          value={
+            metricsAvailable && monthMetrics.averageScore !== null
+              ? monthMetrics.averageScore.toFixed(1)
+              : "—"
+          }
+          detail={
+            metricsAvailable
+              ? `${monthMetrics.reviewed} 条已有终态质检`
+              : unavailableDetail
+          }
           icon={BadgeCheck}
           tone="green"
         />
         <MetricCard
           label="高分有效时长"
-          value={formatDuration(monthMetrics.highScoreEffectiveSeconds)}
-          detail={`80 分及以上 · 通过率 ${formatRate(monthMetrics.passRate)}`}
+          value={
+            metricsAvailable
+              ? formatDuration(monthMetrics.highScoreEffectiveSeconds)
+              : "—"
+          }
+          detail={
+            metricsAvailable
+              ? `80 分及以上 · 通过率 ${formatRate(monthMetrics.passRate)}`
+              : unavailableDetail
+          }
           icon={Timer}
         />
       </div>
@@ -150,7 +179,9 @@ export function TeamDashboard({
             </div>
           </div>
           <div className="large-chart-placeholder" aria-label="近 7 日上传趋势">
-            {totalUploads === 0 ? (
+            {!metricsAvailable ? (
+              <span className="chart-empty-hint">{unavailableDetail}</span>
+            ) : totalUploads === 0 ? (
               <span className="chart-empty-hint">近 7 日暂无上传数据</span>
             ) : (
               trend.map((record) => (
@@ -173,11 +204,17 @@ export function TeamDashboard({
           <div className="todo-list">
             <div>
               <span className="dot dot-red" />
-              <p><strong>{pendingReview} 条数据待关注</strong><small>AI 已标记需要人工复核</small></p>
+              <p>
+                <strong>{metricsAvailable ? `${pendingReview} 条数据待关注` : "—"}</strong>
+                <small>{metricsAvailable ? "AI 已标记需要人工复核" : unavailableDetail}</small>
+              </p>
             </div>
             <div>
               <span className="dot dot-amber" />
-              <p><strong>{failedTasks} 个系统任务失败</strong><small>可联系平台管理员排查或重跑</small></p>
+              <p>
+                <strong>{metricsAvailable ? `${failedTasks} 个系统任务失败` : "—"}</strong>
+                <small>{metricsAvailable ? "可联系平台管理员排查或重跑" : unavailableDetail}</small>
+              </p>
             </div>
           </div>
         </aside>

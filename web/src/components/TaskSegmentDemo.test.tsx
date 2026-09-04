@@ -245,8 +245,8 @@ describe("TaskSegmentDemo", () => {
       expect(cards[0]).toHaveAccessibleName("任务 1 1.0s～2.5s 打开冰箱");
       expect(cards[1]).toHaveAccessibleName("任务 2 1.0s～2.5s 关闭冰箱");
     } else {
-      expect(cards[0]).toHaveAccessibleName("Task #1 · 关闭冰箱");
-      expect(cards[1]).toHaveAccessibleName("Task #0 · 打开冰箱");
+      expect(cards[0]).toHaveAccessibleName("Task #0 · 打开冰箱");
+      expect(cards[1]).toHaveAccessibleName("Task #1 · 关闭冰箱");
     }
     expect(assets.map((asset) => asset.id)).toEqual(["TSA-FAILED", "TSA-READY"]);
     await user.click(screen.getByRole("button", { name: "播放片段" }));

@@ -991,6 +991,23 @@ describe("submission multipart upload API", () => {
         expect(response.body.pagination.total).toBe(0);
       }
 
+      const leaderCookie = await login("upload-leader");
+      const adminCookie = await login("upload-admin");
+      for (const [cookie, status] of [
+        [collectorCookie, "quality_results"],
+        [leaderCookie, "quality_results"],
+        [adminCookie, "review_queue"],
+      ] as const) {
+        const response = await request(app.getHttpServer())
+          .get("/api/v1/submissions")
+          .query({ q: "strict-review-pending", status, page: 1, pageSize: 10 })
+          .set("Cookie", cookie)
+          .expect(200);
+        expect(response.body.submissions.map((item: { id: string }) => item.id)).toEqual([
+          submissionId,
+        ]);
+      }
+
       const passed = await request(app.getHttpServer())
         .get("/api/v1/submissions")
         .query({ q: "zero-point-passed", status: "passed", page: 1, pageSize: 10 })

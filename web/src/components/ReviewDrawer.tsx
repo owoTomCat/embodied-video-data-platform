@@ -74,7 +74,7 @@ function unionSeconds(issues: IssueDraft[]): number {
 }
 
 function initialIssueDrafts(submission: Submission): IssueDraft[] {
-  return submission.issues.map((issue, index) => ({
+  return submission.invalidIssues.map((issue, index) => ({
     id: `${submission.id}-${index}`,
     label: issue.label,
     start: String(issue.start),
@@ -443,7 +443,7 @@ export function ReviewDrawer({
             <li><b>解除重复标记</b>：近似重复若是误报，可在上方解除，解除后进入正常流程。</li>
           </ul>
         </div>
-        <label><span>最终评分</span><input aria-label="最终评分" min="0" max="100" type="number" value={score} onChange={(event) => setScore(event.target.value)} /><small className="field-hint">AI 原始分 {submission.aiScore}，可调整为 0–100 的整数或一位小数</small></label>
+        <label><span>最终评分</span><input aria-label="最终评分" min="0" max="100" step="0.1" type="number" value={score} onChange={(event) => setScore(event.target.value)} /><small className="field-hint">AI 原始分 {submission.aiScore}，可调整为 0–100 的整数或一位小数</small></label>
         <div className="review-derived">
           <div><span>最终结论</span><strong className={qualityStatus(finalScore, passThreshold) === "passed" ? "success-text" : "danger-text"}>{qualityStatus(finalScore, passThreshold) === "passed" ? "通过" : "未通过"}</strong></div>
           <div><span>质量系数</span><strong>{coefficient === null ? unavailableEstimateLabel : coefficient.toFixed(2)}</strong></div>
@@ -484,7 +484,7 @@ export function ReviewDrawer({
         </div>
         <label><span>调整原因</span><textarea aria-label="调整原因" value={reason} onChange={(event) => setReason(event.target.value)} placeholder="请说明人工复核依据，必填" rows={3} /><small className="field-hint">必填，将写入审计记录留痕</small></label>
         <label className="checkbox-line"><input type="checkbox" checked={quarantine} onChange={(event) => setQuarantine(event.target.checked)} />敏感内容隔离，不进入普通资产和交付候选</label>
-        {submission.issues.length > 0 && <div className="review-issues"><AlertTriangle size={15} /><span>AI 标记 {submission.issues.length} 个问题区间，人工确认无效时长 {finalInvalidSeconds} 秒</span></div>}
+        {issues.length > 0 && <div className="review-issues"><AlertTriangle size={15} /><span>当前有 {issues.length} 个无效区间，人工确认无效时长 {finalInvalidSeconds} 秒</span></div>}
         {error && <p className="form-message error">{error}</p>}
         <button className="button button-primary" disabled={saving} type="submit"><CheckCircle2 size={16} />{saving ? "保存中" : quarantine ? "确认隔离（视频无用）" : "确认放行（视频有用）"}</button>
       </form>}

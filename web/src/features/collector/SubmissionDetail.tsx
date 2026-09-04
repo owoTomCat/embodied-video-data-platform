@@ -22,6 +22,7 @@ import type {
   BackendSubmissionPreview,
 } from "../../submissions/contracts";
 import { backendSubmissionToDomain } from "../../submissions/submissionMapper";
+import { submissionStatus } from "../../submissions/submissionStatus";
 
 type AdminTaskTimelineItem = {
   actions: string[];
@@ -392,28 +393,7 @@ export function SubmissionDetail({
       frame,
     ]),
   );
-  const label = item.qualityStatus === "passed"
-    ? "质量通过"
-    : item.qualityStatus === "failed"
-      ? "需要返工"
-      : item.qualityResult?.status === "review_pending"
-        ? "等待人工复核"
-        : item.qualityResult?.status === "scored"
-          ? "质检完成"
-          : item.qualityResult?.status === "stuck" || item.pipelineStage === "stuck"
-            ? "质检卡住"
-            : item.qualityResult?.status === "system_failed"
-              ? "质检异常"
-              : "等待质检";
-  const tone = item.qualityStatus === "passed"
-    ? "success"
-    : item.qualityStatus === "failed" ||
-        item.qualityResult?.status === "system_failed" ||
-        item.qualityResult?.status === "stuck"
-      ? "danger"
-      : item.qualityResult?.status === "scored"
-        ? "success"
-        : "warning";
+  const currentStatus = submissionStatus(item);
   const reviewReasons = item.qualityResult?.reviewReasons?.map(reviewReasonLabel) ?? [];
   // Only adapt presentation on this page; retain the original result and review decision.
   const displayItem = item.qualityResult
@@ -430,7 +410,7 @@ export function SubmissionDetail({
           <span>{item.createdAt} · {item.resolution} · {item.sizeMb} MB</span>
           <p className="submission-reference">记录编号：{item.id}</p>
         </div>
-        <StatusBadge label={label} tone={tone} />
+        <StatusBadge label={currentStatus.label} tone={currentStatus.tone} />
       </div>
       {item.assetStatus === "quarantined" && <div className="form-message error">该视频已进入敏感隔离区：{item.quarantine?.reason ?? "敏感内容隔离"}</div>}
       {item.storageStatus === "deleted" && <div className="form-message error">该视频对象已删除：{item.storage?.deleteReason ?? "对象已删除"}</div>}

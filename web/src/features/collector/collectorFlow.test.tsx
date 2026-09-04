@@ -11,6 +11,7 @@ import {
   getSubmissionPreview,
   listActiveUploads,
   listAnnotationRuns,
+  loadAllSubmissions,
   searchSubmissions,
 } from "../../submissions/client/submissionApi";
 import type {
@@ -37,6 +38,7 @@ vi.mock("../../submissions/client/submissionApi", async (importOriginal) => {
     getSubmissionPreview: vi.fn(),
     listActiveUploads: vi.fn(),
     listAnnotationRuns: vi.fn(),
+    loadAllSubmissions: vi.fn(),
     searchSubmissions: vi.fn(),
   };
 });
@@ -335,6 +337,8 @@ function readyTaskSegmentAsset(): BackendTaskSegmentAsset {
 beforeEach(() => {
   vi.mocked(uploadVideo).mockReset();
   vi.mocked(resumeUploadVideo).mockReset();
+  vi.mocked(loadAllSubmissions).mockReset();
+  vi.mocked(loadAllSubmissions).mockResolvedValue([backendSubmission()]);
   vi.mocked(searchSubmissions).mockReset();
   vi.mocked(searchSubmissions).mockResolvedValue({
     submissions: [backendSubmission()],
@@ -437,6 +441,61 @@ beforeEach(() => {
       createdAt: Date.now(),
       segments: [],
     };
+  });
+});
+
+describe("collector dashboard", () => {
+  it("keeps submission data available when the point rule fails", async () => {
+    vi.mocked(getPointRule).mockRejectedValue(new Error("规则接口不可用"));
+
+    renderCollector("/collector");
+
+    expect(await screen.findByText("已连接后端数据")).toBeVisible();
+    expect(screen.getByText("kitchen_breakfast_0803.mov")).toBeVisible();
+    expect(screen.getByText("规则不可用")).toBeVisible();
+  });
+
+  it("uses the pending-review status on the dashboard and submission table", async () => {
+    const original = backendSubmission();
+    const pendingReview = backendSubmission({
+      quality: {
+        ...original.quality!,
+        status: "review_pending",
+        reviewRequired: true,
+        reviewReasons: ["需要人工关注"],
+      },
+    });
+    vi.mocked(loadAllSubmissions).mockResolvedValue([pendingReview]);
+    vi.mocked(searchSubmissions).mockResolvedValue({
+      submissions: [pendingReview],
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: 1,
+        totalPages: 1,
+      },
+    });
+
+    const dashboard = renderCollector("/collector");
+    expect(await screen.findByText("等待人工复核")).toBeVisible();
+    dashboard.unmount();
+
+    renderCollector("/collector/quality");
+    expect(await screen.findByText("等待人工复核")).toBeVisible();
+  });
+
+  it("renders submission metrics as unknown when submission data fails", async () => {
+    vi.mocked(loadAllSubmissions).mockRejectedValue(
+      new Error("提交接口不可用"),
+    );
+
+    renderCollector("/collector");
+
+    expect((await screen.findAllByText("数据暂不可用")).length).toBeGreaterThan(0);
+    for (const label of ["本月上传", "有效时长", "质量通过率"]) {
+      expect(screen.getByText(label).closest("article")).toHaveTextContent("—");
+    }
+    expect(screen.queryByText("0 条")).not.toBeInTheDocument();
   });
 });
 
@@ -807,7 +866,7 @@ describe("collector journey", () => {
     expect(await screen.findByRole("heading", { name: "质检结果" })).toBeVisible();
     expect(searchSubmissions).toHaveBeenCalledWith({
       q: "",
-      status: "reviewed",
+      status: "quality_results",
       page: 1,
       pageSize: 20,
       includeThumbnails: true,

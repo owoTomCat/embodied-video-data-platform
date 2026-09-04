@@ -18,7 +18,7 @@
   "dependencies": {
     "@noble/hashes": "^2.3.0",
     "lucide-react": "^1.28.0",
-    "next": "16.2.6",
+    "next": "16.2.11",
     "react": "19.2.6",
     "react-dom": "19.2.6",
     "recharts": "^3.10.1"
@@ -36,7 +36,7 @@
     "@vitejs/plugin-react": "6.0.2",
     "@vitejs/plugin-rsc": "0.5.26",
     "eslint": "9.39.4",
-    "eslint-config-next": "16.2.6",
+    "eslint-config-next": "16.2.11",
     "jsdom": "^30.0.1",
     "miniflare": "4.20260515.0",
     "react-server-dom-webpack": "19.2.6",

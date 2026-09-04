@@ -201,6 +201,7 @@ export class ListSubmissionsQueryDto {
     "failed",
     "passed",
     "reviewed",
+    "quality_results",
     "review_queue",
     "unsettled",
   ])
