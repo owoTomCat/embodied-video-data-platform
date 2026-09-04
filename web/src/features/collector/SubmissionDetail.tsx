@@ -1,9 +1,10 @@
 "use client";
 
-import { ArrowLeft, ChevronDown, CopyCheck, FileVideo } from "lucide-react";
+import { ChevronDown, CopyCheck, FileVideo } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { dimensionLabel, hardVetoReasonLabel } from "../../ai-quality/dimensionLabels";
+import { BackButton } from "../../components/BackButton";
 import { QualityReportCard } from "../../components/QualityReportCard";
 import { StatusBadge } from "../../components/StatusBadge";
 import { TaskSegmentDemo } from "../../components/TaskSegmentDemo";
@@ -360,7 +361,7 @@ export function SubmissionDetail({
     );
   }
   if (!item) {
-    return <div className="empty-state"><FileVideo size={28} /><strong>找不到这条数据</strong><button className="text-button" onClick={() => navigate(backPath)}>{backLabel}</button></div>;
+    return <div className="empty-state"><FileVideo size={28} /><strong>找不到这条数据</strong><BackButton label={backLabel} fallbackPath={backPath} navigate={navigate} /></div>;
   }
   const submissionTeam = teams.find((team) => team.id === item.teamId);
   const teamPointsPerMinute = submissionTeam?.unitPricePerMinute ?? 0;
@@ -402,7 +403,7 @@ export function SubmissionDetail({
 
   return (
     <div className="page-stack submission-detail-page">
-      <button className="back-page" onClick={() => navigate(backPath)}><ArrowLeft size={16} />{backLabel}</button>
+      <BackButton label={backLabel} fallbackPath={backPath} navigate={navigate} />
       <div className="page-heading">
         <div>
           <p className="page-kicker">视频详情</p>

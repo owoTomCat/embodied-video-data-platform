@@ -91,14 +91,14 @@ describe("team metrics", () => {
       score: number,
       taskId: string,
       title: string,
-      taskType: "generic" | "scene_type" | "custom",
+      taskType: "generic" | "scene_type",
     ): Submission => ({
       ...submission(id, "2026-08-13 09:00", status, score),
       task: { taskId, title, revision: 1, sceneName: "家庭-厨房", taskType, pricePerHour: 12 },
     });
     const tasks = taskContributions([
-      withTask("A", "passed", 88, "TASK-1", "厨房任务", "custom"),
-      withTask("B", "failed", 40, "TASK-1", "厨房任务", "custom"),
+      withTask("A", "passed", 88, "TASK-1", "厨房任务", "scene_type"),
+      withTask("B", "failed", 40, "TASK-1", "厨房任务", "scene_type"),
       withTask("C", "passed", 76, "TASK-2", "通用采集", "generic"),
       submission("D", "2026-08-13 09:00", "passed", 88),
     ]);
@@ -106,7 +106,7 @@ describe("team metrics", () => {
     const kitchen = tasks.find((task) => task.taskId === "TASK-1");
     expect(kitchen).toMatchObject({
       title: "厨房任务",
-      taskType: "custom",
+      taskType: "scene_type",
       uploads: 2,
       reviewed: 2,
       passed: 1,

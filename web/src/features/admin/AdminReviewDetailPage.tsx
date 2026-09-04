@@ -3,6 +3,7 @@
 import { FileVideo } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { BackButton } from "../../components/BackButton";
 import { ReviewDrawer } from "../../components/ReviewDrawer";
 import type { Submission } from "../../domain/types";
 import {
@@ -50,9 +51,7 @@ export function AdminReviewDetailPage({
       <div className="empty-state">
         <FileVideo size={28} />
         <strong>找不到这条数据</strong>
-        <button className="text-button" onClick={() => navigate("/admin/review")}>
-          返回质量复核
-        </button>
+        <BackButton label="返回质量复核" fallbackPath="/admin/review" navigate={navigate} />
       </div>
     );
   }

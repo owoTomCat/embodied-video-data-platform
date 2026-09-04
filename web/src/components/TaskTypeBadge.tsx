@@ -3,13 +3,11 @@ import type { CollectionTaskType } from "../tasks/contracts";
 const typeTone: Record<CollectionTaskType, "info" | "success" | "neutral" | "warning"> = {
   generic: "info",
   scene_type: "warning",
-  custom: "neutral",
 };
 
 const typeLabel: Record<CollectionTaskType, string> = {
   generic: "通用",
   scene_type: "场景型",
-  custom: "自定义",
 };
 
 /** 任务类型徽标：通用=蓝 / 场景型=橙 / 预设=绿 / 自定义=中性 */

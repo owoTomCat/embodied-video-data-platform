@@ -8,6 +8,7 @@ import { accountForRole, demoAccounts } from "../../test/accountFixtures";
 
 const taskApi = vi.hoisted(() => ({
   listTasksForCollector: vi.fn(),
+  getCollectorTask: vi.fn(),
 }));
 
 const sceneGuideApi = vi.hoisted(() => ({
@@ -21,6 +22,7 @@ const sceneGuideApi = vi.hoisted(() => ({
 
 vi.mock("../../tasks/client/taskApi", () => ({
   listTasksForCollector: taskApi.listTasksForCollector,
+  getCollectorTask: taskApi.getCollectorTask,
 }));
 
 vi.mock("../../scene-guide/client/sceneGuideApi", () => ({
@@ -86,6 +88,7 @@ describe("TaskHallPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     taskApi.listTasksForCollector.mockResolvedValue(tasks);
+    taskApi.getCollectorTask.mockRejectedValue(new Error("unavailable"));
     sceneGuideApi.listSceneCategories.mockResolvedValue(categories);
     sceneGuideApi.listLibrariesByTask.mockResolvedValue([]);
     sceneGuideApi.listScenes.mockResolvedValue([

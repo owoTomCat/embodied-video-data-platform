@@ -1,6 +1,6 @@
 export type CollectionTaskStatus = "draft" | "published" | "paused" | "closed";
 export type TaskNormalizationStatus = "pending" | "ready" | "failed";
-export type CollectionTaskType = "generic" | "scene_type" | "custom";
+export type CollectionTaskType = "generic" | "scene_type";
 
 /** 任务类型选择器数据源：通用任务模板 */
 export type TaskTypeCatalog = {
@@ -26,7 +26,10 @@ export type NormalizedTaskRequirements = {
 };
 
 export type SceneTargetInput = {
-  sceneId: string;
+  /** 已有场景 id；新建场景时缺省，改用 sceneName */
+  sceneId?: string;
+  /** 新建场景名（保存时创建场景+标签） */
+  sceneName?: string;
   targetDurationSeconds: number;
 };
 
@@ -64,6 +67,8 @@ export type CollectionTaskForCollector = {
   categoryKey: string | null;
   targetDurationSeconds: number | null;
   currentDurationSeconds: number;
+  /** 场景型任务的可选场景目标（scene_type 用；custom/generic 为空） */
+  sceneTargets: SceneTargetInput[];
   normalizedRequirements: NormalizedTaskRequirements | null;
   pricePerHour: number | null;
   status: CollectionTaskStatus;

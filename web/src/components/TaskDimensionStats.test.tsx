@@ -9,7 +9,7 @@ const stats: BackendSubmissionTaskStat[] = [
     taskId: "TASK-1",
     title: "厨房任务",
     sceneName: "家庭-厨房",
-    taskType: "custom",
+    taskType: "scene_type",
     total: 5,
     reviewed: 4,
     passed: 3,
@@ -62,7 +62,7 @@ describe("TaskDimensionStats", () => {
     expect(screen.getByText("通用综合采集")).toBeInTheDocument();
     expect(screen.getByText("未关联任务")).toBeInTheDocument();
     // 类型徽标
-    expect(screen.getByText("自定义")).toBeInTheDocument();
+    expect(screen.getByText("场景型")).toBeInTheDocument();
     expect(screen.getAllByText("通用").length).toBeGreaterThan(0);
     // 汇总提交数
     expect(screen.getByText("8")).toBeInTheDocument();

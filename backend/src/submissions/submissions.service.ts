@@ -71,7 +71,7 @@ export type SubmissionTaskStat = {
   taskId: string | null;
   title: string;
   sceneName: string;
-  taskType: "generic" | "scene_type" | "custom" | "none";
+  taskType: "generic" | "scene_type" | "none";
   total: number;
   reviewed: number;
   passed: number;
@@ -396,7 +396,7 @@ function publicSubmission(submission: SubmissionEntity) {
           title: collectionTask?.title ?? undefined,
           revision: submission.taskRevision,
           sceneName: submission.taskSceneName ?? "",
-          taskType: collectionTask?.taskType ?? "custom",
+          taskType: collectionTask?.taskType ?? "none",
           requirements: submission.taskRequirementsSnapshot ?? undefined,
           pricePerHour:
             submission.taskPricePerHour === null ||

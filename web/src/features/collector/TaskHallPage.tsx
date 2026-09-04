@@ -10,9 +10,9 @@ import type { SceneCategory } from "../../scene-guide/contracts";
 import { listTasksForCollector } from "../../tasks/client/taskApi";
 import type { CollectionTaskForCollector } from "../../tasks/contracts";
 
-function fmtMinutes(seconds: number): string {
+function fmtHours(seconds: number): string {
   if (seconds <= 0) return "0";
-  return String(Math.round(seconds / 60));
+  return String(Math.round((seconds / 3600) * 10) / 10);
 }
 
 function taskTypeLabel(type: CollectionTaskForCollector["taskType"]): string {
@@ -142,9 +142,9 @@ export function TaskHallPage({ navigate }: { navigate(path: string): void }) {
                       {percent(task.currentDurationSeconds, task.targetDurationSeconds) !== null ? (
                         <>
                           <div className="task-progress-text">
-                            <span>已收集 {fmtMinutes(task.currentDurationSeconds)} 分钟</span>
+                            <span>已收集 {fmtHours(task.currentDurationSeconds)} 小时</span>
                             <span>
-                              / 目标 {fmtMinutes(task.targetDurationSeconds ?? 0)} 分钟
+                              / 目标 {fmtHours(task.targetDurationSeconds ?? 0)} 小时
                             </span>
                             <strong>
                               {percent(task.currentDurationSeconds, task.targetDurationSeconds)}%
@@ -248,9 +248,9 @@ function TaskDetailModal({
         )}
 
         <p className="task-progress-summary">
-          当前进度：已收集 {fmtMinutes(task.currentDurationSeconds)} 分钟
+          当前进度：已收集 {fmtHours(task.currentDurationSeconds)} 小时
           {task.targetDurationSeconds
-            ? ` / 目标 ${fmtMinutes(task.targetDurationSeconds)} 分钟（${percent(
+            ? ` / 目标 ${fmtHours(task.targetDurationSeconds)} 小时（${percent(
                 task.currentDurationSeconds,
                 task.targetDurationSeconds,
               )}%）`

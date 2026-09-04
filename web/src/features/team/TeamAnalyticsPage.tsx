@@ -183,7 +183,7 @@ export function TeamAnalyticsPage() {
                       {task.taskId === null ? (
                         <span className="task-type-badge task-type-badge-neutral">未关联</span>
                       ) : (
-                        <TaskTypeBadge type={task.taskType} />
+                        <TaskTypeBadge type={task.taskType as "generic" | "scene_type"} />
                       )}
                     </td>
                     <td>{task.uploads}</td>

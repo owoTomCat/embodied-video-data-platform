@@ -140,4 +140,10 @@ export class TasksController {
   async close(@CurrentUser() actor: PublicUser, @Param("id") id: string) {
     return { task: await this.tasks.close(actor, id) };
   }
+
+  @Post(":id/reopen")
+  @UseGuards(AllowedOriginGuard)
+  async reopen(@CurrentUser() actor: PublicUser, @Param("id") id: string) {
+    return { task: await this.tasks.reopen(actor, id) };
+  }
 }

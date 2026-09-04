@@ -15,10 +15,9 @@ export type CollectionTaskStatus = "draft" | "published" | "paused" | "closed";
 export type TaskNormalizationStatus = "pending" | "ready" | "failed";
 /**
  * 任务类型：
- * generic = 通用任务（不绑定场景）；scene_type = 场景型任务（绑定计费大类 + 按场景目标时长）；
- * custom = 自定义场景任务。
+ * generic = 通用任务（不绑定场景，系统仅保留一条）；scene_type = 场景型任务（绑定计费大类 + 按场景目标时长）。
  */
-export type CollectionTaskType = "generic" | "scene_type" | "custom";
+export type CollectionTaskType = "generic" | "scene_type";
 
 export type NormalizedRequirementItem = {
   type: "hard" | "soft";
@@ -60,9 +59,9 @@ export class CollectionTaskEntity {
   @Column({ name: "category_key", type: "varchar", length: 64, nullable: true })
   categoryKey: string | null = null;
 
-  /** 任务类型：generic = 通用任务；scene_type = 场景型任务（补量）；custom = 自定义场景任务。 */
-  @Column({ name: "task_type", type: "varchar", length: 24, default: "custom" })
-  taskType: CollectionTaskType = "custom";
+  /** 任务类型：generic = 通用任务（系统仅一条）；scene_type = 场景型任务（补量）。 */
+  @Column({ name: "task_type", type: "varchar", length: 24, default: "scene_type" })
+  taskType: CollectionTaskType = "scene_type";
 
   /** 场景型任务目标时长（秒）；用于场景存量均衡，空表示无目标 */
   @Column({

@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  ArrowLeft,
   ArrowRight,
   Camera,
   CheckCircle2,
@@ -14,6 +13,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { BackButton } from "../../components/BackButton";
 import { StatusBadge } from "../../components/StatusBadge";
 import { useInteractions } from "../../interactions/InteractionContext";
 import {
@@ -169,9 +169,7 @@ export function GuideCreatePage({
             )}
           </div>
           <div className="guide-photo-actions">
-            <button type="button" className="button button-secondary" onClick={goLibrary}>
-              <ArrowLeft size={14} />返回
-            </button>
+            <BackButton fallbackPath={`/collector/scenes/${libraryId}`} navigate={navigate} />
             <button
               type="button"
               className="button button-primary"

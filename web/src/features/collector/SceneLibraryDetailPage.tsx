@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  ArrowLeft,
   ArrowRight,
   Camera,
   CheckCircle2,
@@ -12,6 +11,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { BackButton } from "../../components/BackButton";
 import { StatusBadge } from "../../components/StatusBadge";
 import { useInteractions } from "../../interactions/InteractionContext";
 import { getCollectorLibrary, guideTaskErrorMessage } from "../../scene-guide/client/sceneGuideApi";
@@ -96,9 +96,7 @@ export function SceneLibraryDetailPage({
           </span>
         </div>
         <div className="task-hall-toolbar-actions">
-          <button type="button" className="button button-secondary" onClick={() => navigate("/collector/tasks")}>
-            <ArrowLeft size={14} />返回任务大厅
-          </button>
+          <BackButton fallbackPath="/collector/tasks" navigate={navigate} />
           <button type="button" className="button button-primary" onClick={goCreate}>
             <Sparkles size={14} />拍照创建任务
           </button>

@@ -175,7 +175,7 @@ describe("TasksPage", () => {
     expect(screen.getAllByText("15.5 元/小时").length).toBeGreaterThan(0);
   });
 
-  it("opens the create form and creates a task", async () => {
+  it("opens the create form and creates a scene_type task", async () => {
     const user = userEvent.setup();
     taskApi.create.mockResolvedValue({
       task: { ...draftTask, title: "新任务" },
@@ -186,17 +186,16 @@ describe("TasksPage", () => {
     await screen.findByText("厨房数据采集");
 
     await user.click(screen.getByRole("button", { name: "创建任务" }));
-    // 创建模式默认选中「通用任务」并自动带出模板内容与场景大类默认价（通用 20 元/小时）
-    expect(screen.getByLabelText(/任务标题/)).toHaveValue(
-      "通用任务：不限场景的具身操作采集",
-    );
-    expect(screen.getByLabelText(/每小时单价/)).toHaveValue(20);
-    // 切到自定义后自行填写场景与要求
-    await user.click(screen.getByRole("button", { name: /自定义任务/ }));
+    // 创建默认即为场景型：选择计费大类，再确认场景目标
+    await user.selectOptions(screen.getByLabelText(/计费大类/), "family");
+    await user.type(screen.getByLabelText(/场景 1/), "厨房");
+    await user.click(screen.getByRole("option", { name: "厨房" }));
+    const hoursInput = screen.getByLabelText(/目标时长 1/);
+    await user.clear(hoursInput);
+    await user.type(hoursInput, "2");
     const titleInput = screen.getByLabelText(/任务标题/);
     await user.clear(titleInput);
     await user.type(titleInput, "新任务");
-    await user.type(screen.getByLabelText(/场景名称/), "户外街道");
     const requirementsInput = screen.getByLabelText(/任务要求/);
     await user.clear(requirementsInput);
     await user.type(requirementsInput, "第一人称拍摄");
@@ -206,10 +205,46 @@ describe("TasksPage", () => {
       expect(taskApi.create).toHaveBeenCalledWith(
         expect.objectContaining({
           title: "新任务",
-          sceneName: "户外街道",
-          taskType: "custom",
+          sceneName: "家庭",
+          taskType: "scene_type",
+          categoryKey: "family",
+          sceneTargets: [{ sceneId: "SC-001", targetDurationSeconds: 7200 }],
           rawRequirements: "第一人称拍摄",
           pricePerHour: null,
+        }),
+      );
+    });
+  });
+
+  it("creates a new scene via the combobox Enter (no match)", async () => {
+    const user = userEvent.setup();
+    taskApi.create.mockResolvedValue({
+      task: { ...draftTask, title: "新场景任务" },
+      autoNormalized: false,
+      normalizationFailed: false,
+    });
+    renderAdmin();
+    await screen.findByText("厨房数据采集");
+    await user.click(screen.getByRole("button", { name: "创建任务" }));
+    await user.selectOptions(screen.getByLabelText(/计费大类/), "family");
+    // 输入无匹配的新场景名 → 回车新建
+    await user.type(screen.getByLabelText(/场景 1/), "阳光房{enter}");
+    const hoursInput = screen.getByLabelText(/目标时长 1/);
+    await user.clear(hoursInput);
+    await user.type(hoursInput, "2");
+    const titleInput = screen.getByLabelText(/任务标题/);
+    await user.clear(titleInput);
+    await user.type(titleInput, "新场景任务");
+    const requirementsInput = screen.getByLabelText(/任务要求/);
+    await user.clear(requirementsInput);
+    await user.type(requirementsInput, "第一人称拍摄");
+    await user.click(screen.getByRole("button", { name: "保存" }));
+
+    await waitFor(() => {
+      expect(taskApi.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          categoryKey: "family",
+          sceneTargets: [{ sceneName: "阳光房", targetDurationSeconds: 7200 }],
         }),
       );
     });
@@ -309,10 +344,8 @@ describe("TasksPage", () => {
     await user.click(screen.getByRole("button", { name: "取消" }));
     await user.click(screen.getByRole("button", { name: "创建任务" }));
 
-    // 重新打开后恢复为通用任务模板默认标题
-    expect(screen.getByLabelText(/任务标题/)).toHaveValue(
-      "通用任务：不限场景的具身操作采集",
-    );
+    // 重新打开后表单重置（创建默认即场景型，标题清空）
+    expect(screen.getByLabelText(/任务标题/)).toHaveValue("");
   });
 
   it("opens the normalize modal and confirms AI requirements", async () => {

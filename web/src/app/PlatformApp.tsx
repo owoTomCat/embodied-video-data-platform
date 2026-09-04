@@ -104,7 +104,7 @@ function AuthenticatedPlatformContent({
     page = <AccountProfilePage />;
   } else if (currentAccount.role === "collector") {
     if (safePath === "/collector/tasks") page = <TaskHallPage navigate={navigate} />;
-    else if (safePath === "/collector/upload") page = <UploadPage />;
+    else if (safePath === "/collector/upload") page = <UploadPage navigate={navigate} />;
     else if (safePath === "/collector/submissions") page = <SubmissionsPage navigate={navigate} />;
     else if (safePath.startsWith("/collector/submissions/")) page = <SubmissionDetail id={safePath.split("/").at(-1) ?? ""} navigate={navigate} />;
     else if (safePath === "/collector/quality") page = <SubmissionsPage qualityOnly navigate={navigate} />;

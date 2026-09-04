@@ -8,6 +8,8 @@ import {
   Play,
   Plus,
   RefreshCw,
+  Rocket,
+  RotateCcw,
   Search,
   Square,
   Trash2,
@@ -35,6 +37,7 @@ import {
   listManageTasks,
   pauseTask,
   publishTask,
+  reopenTask,
   resumeTask,
   taskErrorMessage,
   updateTask,
@@ -67,9 +70,9 @@ function formatTime(timestamp: number): string {
   }).format(timestamp);
 }
 
-function fmtMinutes(seconds: number | null): string {
+function fmtHours(seconds: number | null): string {
   if (!seconds || seconds <= 0) return "0";
-  return String(Math.round(seconds / 60));
+  return String(Math.round((seconds / 3600) * 10) / 10);
 }
 
 export function TasksPage() {
@@ -91,7 +94,7 @@ export function TasksPage() {
   const [deleteTarget, setDeleteTarget] = useState<CollectionTask>();
   const [confirmTarget, setConfirmTarget] = useState<{
     task: CollectionTask;
-    action: "publish" | "close";
+    action: "publish" | "close" | "reopen";
   }>();
   const [actingId, setActingId] = useState<string>();
   const createTriggerRef = useRef<HTMLButtonElement>(null);
@@ -223,8 +226,17 @@ export function TasksPage() {
     const { task, action } = confirmTarget;
     const succeeded = await act(
       task.id,
-      () => (action === "publish" ? publishTask(task.id) : closeTask(task.id)),
-      action === "publish" ? "任务已发布" : "任务已关闭",
+      () =>
+        action === "publish"
+          ? publishTask(task.id)
+          : action === "close"
+            ? closeTask(task.id)
+            : reopenTask(task.id),
+      action === "publish"
+        ? "任务已发布"
+        : action === "close"
+          ? "任务已关闭"
+          : "任务已重新开启",
     );
     if (succeeded) setConfirmTarget(undefined);
   }
@@ -345,22 +357,6 @@ export function TasksPage() {
                           {task.status === "draft" && (
                             <>
                               <button
-                                onClick={(event) => {
-                                  actionTriggerRef.current = event.currentTarget;
-                                  setConfirmTarget({ task, action: "publish" });
-                                }}
-                              >
-                                发布
-                              </button>
-                              <button
-                                onClick={(event) => {
-                                  actionTriggerRef.current = event.currentTarget;
-                                  setNormalizeTarget(task);
-                                }}
-                              >
-                                <WandSparkles size={14} />规范化
-                              </button>
-                              <button
                                 className="danger"
                                 onClick={(event) => {
                                   actionTriggerRef.current = event.currentTarget;
@@ -404,7 +400,14 @@ export function TasksPage() {
                             </>
                           )}
                           {task.status === "closed" && (
-                            <span className="muted">已结束</span>
+                            <button
+                              onClick={(event) => {
+                                actionTriggerRef.current = event.currentTarget;
+                                setConfirmTarget({ task, action: "reopen" });
+                              }}
+                            >
+                              <RotateCcw size={14} />重新开启
+                            </button>
                           )}
                         </div>
                       </details>
@@ -426,11 +429,11 @@ export function TasksPage() {
                   <div className="task-card-duration">
                     <span className="task-dur-label">数据时长</span>
                     <span>
-                      已收集 {stat?.effectiveMinutes ?? 0} 分钟 / 目标{" "}
+                      已收集 {fmtHours((stat?.effectiveMinutes ?? 0) * 60)} 小时 / 目标{" "}
                       {task.targetDurationSeconds
-                        ? fmtMinutes(task.targetDurationSeconds)
+                        ? fmtHours(task.targetDurationSeconds)
                         : "无"}{" "}
-                      分钟
+                      小时
                     </span>
                   </div>
 
@@ -452,16 +455,42 @@ export function TasksPage() {
                     >
                       <Eye size={14} />查看详情
                     </button>
-                    <button
-                      type="button"
-                      className="button button-primary button-small"
-                      onClick={(event) => {
-                        actionTriggerRef.current = event.currentTarget;
-                        setEditTarget(task);
-                      }}
-                    >
-                      编辑
-                    </button>
+                    <div className="task-card-foot-actions">
+                      {task.status === "draft" && (
+                        <>
+                          <button
+                            type="button"
+                            className="button button-primary button-small"
+                            onClick={(event) => {
+                              actionTriggerRef.current = event.currentTarget;
+                              setConfirmTarget({ task, action: "publish" });
+                            }}
+                          >
+                            <Rocket size={14} />发布
+                          </button>
+                          <button
+                            type="button"
+                            className="button button-secondary button-small"
+                            onClick={(event) => {
+                              actionTriggerRef.current = event.currentTarget;
+                              setNormalizeTarget(task);
+                            }}
+                          >
+                            <WandSparkles size={14} />规范化
+                          </button>
+                        </>
+                      )}
+                      <button
+                        type="button"
+                        className={`button button-small ${task.status === "draft" ? "button-ghost" : "button-primary"}`}
+                        onClick={(event) => {
+                          actionTriggerRef.current = event.currentTarget;
+                          setEditTarget(task);
+                        }}
+                      >
+                        编辑
+                      </button>
+                    </div>
                   </div>
                 </article>
               );
@@ -550,19 +579,41 @@ export function TasksPage() {
       {confirmTarget && (
         <ConfirmModal
           open
-          title={confirmTarget.action === "publish" ? "发布采集任务" : "关闭采集任务"}
+          title={
+            confirmTarget.action === "publish"
+              ? "发布采集任务"
+              : confirmTarget.action === "close"
+                ? "关闭采集任务"
+                : "重新开启采集任务"
+          }
           heading={
             confirmTarget.action === "publish"
               ? `确认发布“${confirmTarget.task.title}”？`
-              : `确认关闭“${confirmTarget.task.title}”？`
+              : confirmTarget.action === "close"
+                ? `确认关闭“${confirmTarget.task.title}”？`
+                : `确认重新开启“${confirmTarget.task.title}”？`
           }
           description={
             confirmTarget.action === "publish"
               ? "发布后数采人员即可看到并提交此任务；新的场景名称会自动加入标签字典。"
-              : "关闭后任务不可恢复，也不再接受新提交；已经提交的数据仍会继续处理。"
+              : confirmTarget.action === "close"
+                ? "关闭后任务不再接受新提交；已经提交的数据仍会继续处理，如需继续收集可重新开启。"
+                : "重新开启后任务将恢复为发布状态，数采人员可继续提交；已提交的数据与统计记录会保留。"
           }
-          confirmLabel={confirmTarget.action === "publish" ? "确认发布" : "确认关闭"}
-          busyLabel={confirmTarget.action === "publish" ? "发布中…" : "关闭中…"}
+          confirmLabel={
+            confirmTarget.action === "publish"
+              ? "确认发布"
+              : confirmTarget.action === "close"
+                ? "确认关闭"
+                : "确认重新开启"
+          }
+          busyLabel={
+            confirmTarget.action === "publish"
+              ? "发布中…"
+              : confirmTarget.action === "close"
+                ? "关闭中…"
+                : "开启中…"
+          }
           tone={confirmTarget.action === "close" ? "danger" : "primary"}
           busy={actingId === confirmTarget.task.id}
           onClose={() => {

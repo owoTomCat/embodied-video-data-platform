@@ -21,14 +21,20 @@ const MAX_SCENE_NAME_LENGTH = 120;
 const MAX_RAW_REQUIREMENTS_LENGTH = 20_000;
 const MAX_REQUIREMENT_ITEMS = 100;
 
-// 任务类型：generic（通用）/ scene_type（场景型补量）/ custom（自定义）。
-const TASK_TYPES = ["generic", "scene_type", "custom"] as const;
+// 任务类型：generic（通用，系统仅保留一条）/ scene_type（场景型补量）。
+const TASK_TYPES = ["generic", "scene_type"] as const;
 
-/** 场景型任务目标（按场景） */
+/** 场景型任务目标（按场景）：提供已有 sceneId，或提供新场景 sceneName（保存时新建场景+标签） */
 export class SceneTargetDto {
+  @IsOptional()
   @IsString()
   @MaxLength(64)
-  sceneId!: string;
+  sceneId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  sceneName?: string;
 
   @Type(() => Number)
   @IsInt()
