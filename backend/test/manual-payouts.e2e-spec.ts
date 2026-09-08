@@ -17,7 +17,6 @@ import { SessionGuard } from "../src/auth/session.guard.js";
 import type { PublicUser } from "../src/auth/auth.types.js";
 import { configureApplication } from "../src/http/configure-application.js";
 import { OBJECT_STORAGE } from "../src/storage/object-storage.port.js";
-import { WithdrawalEvidenceEntity } from "../src/database/entities/withdrawal-evidence.entity.js";
 
 const origin = "http://localhost:3000";
 const actor = (id: string, role: PublicUser["role"], teamId?: string): PublicUser => ({ id, role, teamId, displayName: id, username: id, status: "active", updatedAt: 0 });
@@ -60,11 +59,6 @@ describe("manual payouts", () => {
     await db.getRepository(WalletBalanceEntity).save({ ownerId: collector.id, totalBalance: "10.00", availableBalance: "10.00" });
   });
   afterAll(async () => { await app?.close(); if (db?.isInitialized) await db.destroy(); vi.unstubAllEnvs(); });
-  async function proof(requestId: string, uploader = admin) {
-    const id = `PE-${randomBytes(12).toString("hex")}`;
-    await db.getRepository(WithdrawalEvidenceEntity).insert({ id, requestId, originalFileName: "receipt.png", contentType: "image/png", sizeBytes: "8", sha256: "a".repeat(64), uploadedById: uploader.id, objectKey: `private-test/${id}` });
-    return id;
-  }
 
   it("serializes competing requests and retries without double spending or changing snapshots", async () => {
     const results = await Promise.allSettled([payouts.submit(collector, input("first")), payouts.submit(collector, input("second"))]);
@@ -87,138 +81,96 @@ describe("manual payouts", () => {
     ]);
     await db.transaction(manager => wallet.settleToAvailable(manager, { ownerId: collector.id, amount: 3, cycleId: "cycle-manual" }));
     expect(await wallet.getWallet(collector.id)).toMatchObject({ totalBalance: 13, availableBalance: 5, reservedBalance: 8 });
-    await request(app.getHttpServer()).post(`/api/v1/wallet/withdrawals/${row.id}/status`).set("Origin", origin).set("x-test-actor", "admin").send({ status: "paid", transferReference: "ref", paidAt: new Date().toISOString() }).expect(400);
-    const batch = await payouts.claim(admin, [row.id]);
-    await expect(payouts.claim(admin, [row.id])).rejects.toMatchObject({ code: "STATE_CONFLICT" });
-    await expect(db.getRepository(WithdrawalRequestEntity).update(row.id, { batchId: null })).rejects.toThrow("immutable");
-    await payouts.exportBatch(admin, batch.batchId);
-    expect(await wallet.getWallet(collector.id)).toMatchObject({ reservedBalance: 8, withdrawnBalance: 0 });
-    const registration = { transferReference: "bank-ref-001", paidAt: new Date().toISOString(), evidenceIds: [await proof(row.id)], revision: 1 };
-    const attempts = await Promise.allSettled([payouts.register(admin, row.id, registration), payouts.register(admin, row.id, registration)]);
-    expect(attempts.filter(r => r.status === "fulfilled")).toHaveLength(1);
-    await expect(payouts.review(admin, row.id, { decision: "approve", mode: "independent", revision: 2 })).rejects.toMatchObject({ code: "FORBIDDEN" });
-    const confirmations = await Promise.allSettled([payouts.review(reviewer, row.id, { decision: "approve", mode: "independent", revision: 2 }), payouts.review(reviewer, row.id, { decision: "approve", mode: "independent", revision: 2 })]);
-    expect(confirmations.filter(r => r.status === "fulfilled")).toHaveLength(1);
-    await expect(payouts.investigate(admin, row.id, { reason: "ambiguous", revision: 3 })).rejects.toMatchObject({ code: "STATE_CONFLICT" });
-    await expect(db.getRepository(WithdrawalRequestEntity).update(row.id, { status: "investigating" })).rejects.toThrow("immutable");
+    const confirmations = await Promise.all([payouts.confirm(admin, row.id), payouts.confirm(reviewer, row.id)]);
+    expect(confirmations[0]).toEqual(confirmations[1]);
+    expect(confirmations[0]).toMatchObject({ status: "paid", batchId: null, transferReference: null, paidAt: null });
+    expect([admin.id, reviewer.id]).toContain(confirmations[0].confirmedById);
+    expect(confirmations[0].confirmedAt).not.toBeNull();
+    expect(await payouts.confirm(reviewer, row.id)).toEqual(confirmations[0]);
+    await expect(db.getRepository(WithdrawalRequestEntity).update(row.id, { status: "pending" })).rejects.toThrow("immutable");
+    const events = await db.query("SELECT actor_id FROM withdrawal_events WHERE request_id=$1 AND action='withdrawal.paid'", [row.id]);
+    expect(events).toEqual([{ actor_id: confirmations[0].confirmedById }]);
     expect(await wallet.getWallet(collector.id)).toMatchObject({ totalBalance: 13, availableBalance: 5, reservedBalance: 2, withdrawnBalance: 6, cumulativeWithdrawn: 6 });
     expect((await wallet.listTransactions(collector, collector.id)).filter(tx => tx.type === "withdraw").map(tx => tx.amount)).toEqual([-6]);
   });
 
-  it("rejects pending or definitively fails processing and releases only once", async () => {
-    const pending = await payouts.submit(collector, input("rejected"));
-    const rejection = { status: "rejected" as const, reason: "recipient could not be verified" };
-    await Promise.all([payouts.transition(admin, pending.id, rejection), payouts.transition(admin, pending.id, rejection)]);
-    expect(await wallet.getWallet(collector.id)).toMatchObject({ availableBalance: 10, reservedBalance: 0 });
-    const processing = await payouts.submit(collector, input("failed"));
-    await payouts.claim(admin, [processing.id]);
-    await expect(payouts.transition(admin, processing.id, rejection)).rejects.toMatchObject({ code: "STATE_CONFLICT" });
-    await request(app.getHttpServer()).post(`/api/v1/wallet/withdrawals/${processing.id}/status`).set("Origin", origin).set("x-test-actor", "admin").send({ status: "failed", reason: "bank result unknown" }).expect(400);
-    const unknown = await payouts.investigate(admin, processing.id, { reason: "bank result unknown", revision: 1 });
-    expect(await wallet.getWallet(collector.id)).toMatchObject({ availableBalance: 4, reservedBalance: 6 });
-    const failure = { reason: "finance verified bank returned the transfer", fundsNotTransferred: true, evidenceIds: [await proof(processing.id)], revision: unknown.revision };
-    const releases = await Promise.allSettled([payouts.resolveUnpaid(admin, processing.id, failure), payouts.resolveUnpaid(admin, processing.id, failure)]);
-    expect(releases.filter(r => r.status === "fulfilled")).toHaveLength(1);
-    expect(await wallet.getWallet(collector.id)).toMatchObject({ availableBalance: 10, reservedBalance: 0, withdrawnBalance: 0 });
-    expect(await db.getRepository(WalletTransactionEntity).count()).toBe(0);
-    const resolutionTimeline = (await payouts.detail(admin, processing.id)).timeline;
-    expect(resolutionTimeline.find(event => event.action === "withdrawal.unpaid_evidence")).toMatchObject({ evidenceIds: failure.evidenceIds, assignment: null });
-    expect(resolutionTimeline.every(event => !("details" in event))).toBe(true);
-  });
-
-  it("encrypts snapshots, masks ordinary responses, protects cross-user/team reads and explicit exports", async () => {
+  it("exposes full snapshots only to active admins and audits reads without plaintext", async () => {
     const row = await payouts.submit(collector, input("privacy"));
     expect(JSON.stringify(row)).not.toContain(input("privacy").account);
-    expect(JSON.stringify(await payouts.list(admin))).not.toContain(input("privacy").name);
+    expect(JSON.stringify(await payouts.list(collector))).not.toContain(input("privacy").account);
     expect((await payouts.list(other)).requests).toEqual([]);
     await expect(payouts.list(other, { ownerId: collector.id })).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(payouts.list(leader)).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(wallet.listTransactions(leader, other.id)).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(wallet.listTransactions(other, collector.id)).rejects.toMatchObject({ code: "FORBIDDEN" });
-    expect(await wallet.listTransactions(leader, collector.id)).toEqual([]);
-    expect(await wallet.listWallets({ ...leader, teamId: undefined })).toEqual([]);
-    const batch = await payouts.claim(admin, [row.id]);
-    await expect(payouts.exportBatch(collector, batch.batchId)).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(payouts.claim(collector, [row.id])).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(payouts.investigate(collector, row.id, { reason: "cancel", revision: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
-    const ciphertext = (await db.query("SELECT recipient_encrypted FROM withdrawal_requests WHERE id = $1", [row.id]))[0].recipient_encrypted as string;
-    expect(ciphertext).not.toContain(input("privacy").account);
-    expect(JSON.stringify(await db.getRepository(AuditLogEntity).find())).not.toContain(input("privacy").account);
-    await request(app.getHttpServer()).post(`/api/v1/wallet/withdrawal-batches/${batch.batchId}/export`).set("Origin", origin).set("x-test-actor", "collector").expect(403);
-    await request(app.getHttpServer()).get(`/api/v1/wallet/transactions?ownerId=${other.id}`).set("x-test-actor", "leader").expect(403);
-  });
-
-  it("preserves return history and reserve, requires evidence, handover ownership and independent resolution", async () => {
-    const row = await payouts.submit(collector, input("returned"));
-    await payouts.claim(admin, [row.id]);
-    await expect(payouts.register(admin, row.id, { transferReference: "return-ref", paidAt: new Date().toISOString(), evidenceIds: [], revision: 1 })).rejects.toThrow();
-    await payouts.register(admin, row.id, { transferReference: "return-ref", paidAt: new Date().toISOString(), evidenceIds: [await proof(row.id)], revision: 1 });
-    await payouts.review(reviewer, row.id, { decision: "return", mode: "independent", reason: "bank result needs reconciliation", revision: 2 });
-    expect(await wallet.getWallet(collector.id)).toMatchObject({ availableBalance: 4, reservedBalance: 6, withdrawnBalance: 0 });
-    await expect(payouts.resolveUnpaid(admin, row.id, { reason: "returned", fundsNotTransferred: true, evidenceIds: [await proof(row.id)], revision: 3 })).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await payouts.assign(reviewer, row.id, { assigneeId: reviewer.id, reason: "explicit handover", revision: 3 });
-    await expect(payouts.register(admin, row.id, { transferReference: "return-ref", paidAt: new Date().toISOString(), evidenceIds: [await proof(row.id)], revision: 4 })).rejects.toMatchObject({ code: "FORBIDDEN" });
-    expect((await payouts.detail(reviewer, row.id)).registrations).toHaveLength(1);
-    await db.getRepository(UserEntity).update(reviewer.id, { displayName: "Renamed after handover" });
-    try {
-      const detail = await payouts.detail(admin, row.id);
-      expect(detail.timeline.find(event => event.action === "withdrawal.assigned")).toMatchObject({
-        evidenceIds: [], assignment: { fromId: admin.id, fromName: admin.displayName, toId: reviewer.id, toName: reviewer.displayName },
-      });
-      expect(detail.timeline.find(event => event.action === "withdrawal.returned")).toMatchObject({ evidenceIds: [], assignment: null });
-    } finally { await db.getRepository(UserEntity).update(reviewer.id, { displayName: reviewer.displayName }); }
-    const retainedProof = (await payouts.detail(reviewer, row.id)).evidence[0]!;
-    await payouts.register(reviewer, row.id, { transferReference: "return-ref", paidAt: new Date().toISOString(), evidenceIds: [retainedProof.id], revision: 4 });
-    await expect(payouts.review(admin, row.id, { decision: "approve", mode: "independent", revision: 5 })).rejects.toMatchObject({ code: "FORBIDDEN" });
-    expect(await wallet.getWallet(collector.id)).toMatchObject({ reservedBalance: 6, withdrawnBalance: 0 });
-    await request(app.getHttpServer()).get(`/api/v1/wallet/withdrawals/${row.id}`).set("x-test-actor", "collector").expect(403);
-    await request(app.getHttpServer()).post(`/api/v1/wallet/withdrawals/${row.id}/recipient`).set("Origin", "https://evil.invalid").set("x-test-actor", "admin").send({}).expect(403);
-  });
-
-  it("permits explicit single confirmation only with exactly one active admin", async () => {
-    const row = await payouts.submit(collector, input("single"));
-    await payouts.claim(admin, [row.id]);
-    await payouts.register(admin, row.id, { transferReference: "single-ref", paidAt: new Date().toISOString(), evidenceIds: [await proof(row.id)], revision: 1 });
-    await expect(payouts.review(admin, row.id, { decision: "approve", mode: "single", revision: 2 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    for (const role of ["collector", "leader"]) {
+      await request(app.getHttpServer()).get("/api/v1/wallet/payouts").set("x-test-actor", role).expect(403);
+      await request(app.getHttpServer()).post(`/api/v1/wallet/payouts/${row.id}/confirm`).set("Origin", origin).set("x-test-actor", role).expect(403);
+    }
     await db.getRepository(UserEntity).update(reviewer.id, { status: "disabled" });
-    expect(await payouts.review(admin, row.id, { decision: "approve", mode: "single", revision: 2 })).toMatchObject({ status: "paid", reviewMode: "single", reviewedById: admin.id });
+    await request(app.getHttpServer()).get("/api/v1/wallet/payouts").set("x-test-actor", "reviewer").expect(403);
+    await request(app.getHttpServer()).post(`/api/v1/wallet/payouts/${row.id}/confirm`).set("Origin", origin).set("x-test-actor", "reviewer").expect(403);
+    const table = await request(app.getHttpServer()).get("/api/v1/wallet/payouts").set("x-test-actor", "admin").expect(200);
+    expect(table.headers["cache-control"]).toBe("no-store");
+    expect(table.body.requests[0]).toMatchObject({ id: row.id, recipient: { method: "bank", name: input("privacy").name, account: input("privacy").account, bankName: "@bank" }, confirmedAt: null });
+    await request(app.getHttpServer()).post(`/api/v1/wallet/payouts/${row.id}/confirm`).set("Origin", "https://evil.invalid").set("x-test-actor", "admin").expect(403);
+    const paid = await request(app.getHttpServer()).post(`/api/v1/wallet/payouts/${row.id}/confirm`).set("Origin", origin).set("x-test-actor", "admin").expect(200);
+    expect(paid.body.request).toMatchObject({ status: "paid", confirmedById: admin.id });
+    expect(paid.headers["cache-control"]).toBe("no-store");
+    const ciphertext = (await db.query("SELECT recipient_encrypted FROM withdrawal_requests WHERE id=$1", [row.id]))[0].recipient_encrypted;
+    expect(ciphertext).not.toContain(input("privacy").account);
+    const audits = JSON.stringify(await db.getRepository(AuditLogEntity).find());
+    expect(audits).not.toContain(input("privacy").account);
+    expect(audits).not.toContain(input("privacy").name);
+    expect(await wallet.getWallet(collector.id)).toMatchObject({ reservedBalance: 0, withdrawnBalance: 6 });
   });
 
-  it("serializes cross-request reference uniqueness and rejects foreign evidence", async () => {
-    const a = await payouts.submit(collector, input("duplicate-a", 3));
-    const b = await payouts.submit(collector, input("duplicate-b", 3));
-    await payouts.claim(admin, [b.id, a.id]);
-    const evidenceA = await proof(a.id), evidenceB = await proof(b.id);
-    await expect(payouts.register(admin, b.id, { transferReference: "foreign", paidAt: new Date().toISOString(), evidenceIds: [evidenceA], revision: 1 })).rejects.toThrow();
-    const attempts = await Promise.allSettled([
-      payouts.register(admin, a.id, { transferReference: "same-bank-reference", paidAt: new Date().toISOString(), evidenceIds: [evidenceA], revision: 1 }),
-      payouts.register(admin, b.id, { transferReference: "same-bank-reference", paidAt: new Date().toISOString(), evidenceIds: [evidenceB], revision: 1 }),
-    ]);
-    expect(attempts.filter(r => r.status === "fulfilled")).toHaveLength(1);
-    expect(attempts.filter(r => r.status === "rejected").map(r => r.reason.code)).toEqual(["DUPLICATE_REFERENCE"]);
-    expect(await wallet.getWallet(collector.id)).toMatchObject({ reservedBalance: 6, withdrawnBalance: 0 });
+  it("filters before pagination and includes every historical nonterminal state", async () => {
+    const rows = [];
+    for (let i = 0; i < 4; i++) rows.push(await payouts.submit(collector, input(`search-${i}`, 1)));
+    await db.query("INSERT INTO withdrawal_batches(id,created_by) VALUES('WB-OLD',$1)", [admin.id]);
+    for (const [index, status] of ["processing", "review_pending", "investigating"].entries()) {
+      await db.query("UPDATE withdrawal_requests SET status=$2,batch_id='WB-OLD',assignee_id=$3 WHERE id=$1", [rows[index + 1]!.id, status, admin.id]);
+    }
+    expect((await payouts.listPayouts(admin)).pagination.total).toBe(4);
+    for (const q of [rows[0]!.id, collector.id, collector.username, "A"]) {
+      const result = await payouts.listPayouts(admin, { q, pageSize: 1 });
+      expect(result.requests).toHaveLength(1);
+      expect(result.pagination.total).toBe(q === rows[0]!.id ? 1 : 4);
+    }
+    for (const row of rows) expect(await payouts.confirm(reviewer, row.id)).toMatchObject({ status: "paid", confirmedById: reviewer.id });
+    expect((await payouts.listPayouts(admin)).requests).toEqual([]);
+    expect((await payouts.listPayouts(admin, { status: "paid", pageSize: 2 })).pagination).toMatchObject({ total: 4, totalPages: 2 });
+    expect(await wallet.getWallet(collector.id)).toMatchObject({ availableBalance: 6, reservedBalance: 0, withdrawnBalance: 4 });
   });
 
-  it("exports immutable membership, preserves all long account digits as text and neutralizes formulas", async () => {
-    const first = await payouts.submit(collector, input("csv", 3));
-    const batch = await payouts.claim(admin, [first.id]);
-    await payouts.submit(collector, { ...input("later", 2), account: "+formula()", name: "Other recipient" });
-    const csv = await payouts.exportBatch(admin, batch.batchId);
-    expect(csv).toContain(",'00123456789012345678901234567890,");
-    expect(csv).toContain(",'=malicious(),");
-    expect(csv).toContain(",'@bank,");
-    expect(csv).not.toContain("+formula()");
-    expect(await payouts.exportBatch(admin, batch.batchId)).toBe(csv);
-    expect((await payouts.list(admin, { batchId: batch.batchId })).requests.map(row => row.id)).toEqual([first.id]);
-    expect(await wallet.getWallet(collector.id)).toMatchObject({ reservedBalance: 5, withdrawnBalance: 0 });
+  it("preserves historical paid confirmation and rejects other terminal states", async () => {
+    const legacy = await payouts.submit(collector, input("legacy-paid", 1));
+    const rejected = await payouts.submit(collector, input("legacy-rejected", 1));
+    await db.query("INSERT INTO withdrawal_batches(id,created_by) VALUES('WB-PAID',$1)", [admin.id]);
+    await db.query(`UPDATE withdrawal_requests SET status='paid',batch_id='WB-PAID',transfer_reference='old-ref',paid_at='2026-09-01',
+      reviewed_by_id=$2,reviewed_at='2026-09-02',review_mode='independent' WHERE id=$1`, [legacy.id, admin.id]);
+    await db.query("UPDATE withdrawal_requests SET status='rejected',reason='historical rejection' WHERE id=$1", [rejected.id]);
+    const before = await db.query("SELECT * FROM withdrawal_requests WHERE id=$1", [legacy.id]);
+    const balance = await wallet.getWallet(collector.id);
+    expect(await payouts.confirm(reviewer, legacy.id)).toMatchObject({ confirmedById: admin.id, confirmedAt: "2026-09-02T00:00:00.000Z", transferReference: "old-ref" });
+    expect(await db.query("SELECT * FROM withdrawal_requests WHERE id=$1", [legacy.id])).toEqual(before);
+    expect(await wallet.getWallet(collector.id)).toEqual(balance);
+    expect(await db.getRepository(WalletTransactionEntity).count()).toBe(0);
+    await expect(payouts.confirm(admin, rejected.id)).rejects.toMatchObject({ code: "STATE_CONFLICT" });
+  });
+
+  it("rolls back confirmation when reserves or decryption are unavailable and removes old write routes", async () => {
+    const row = await payouts.submit(collector, input("rollback"));
     const key = process.env.PAYOUT_RECIPIENT_KEY!;
-    vi.stubEnv("PAYOUT_RECIPIENT_KEY", "");
-    await expect(payouts.submit(collector, input("missing", 1))).rejects.toMatchObject({ code: "PAYOUT_UNAVAILABLE" });
-    await expect(payouts.exportBatch(admin, batch.batchId)).rejects.toMatchObject({ code: "PAYOUT_UNAVAILABLE" });
     vi.stubEnv("PAYOUT_RECIPIENT_KEY", randomBytes(32).toString("hex"));
-    await expect(payouts.exportBatch(admin, batch.batchId)).rejects.toMatchObject({ code: "PAYOUT_UNAVAILABLE" });
+    await expect(payouts.confirm(admin, row.id)).rejects.toMatchObject({ code: "PAYOUT_UNAVAILABLE" });
     vi.stubEnv("PAYOUT_RECIPIENT_KEY", key);
-    expect(await wallet.getWallet(collector.id)).toMatchObject({ availableBalance: 5, reservedBalance: 5 });
+    expect(await wallet.getWallet(collector.id)).toMatchObject({ reservedBalance: 6, withdrawnBalance: 0 });
+    await db.getRepository(WalletBalanceEntity).update(collector.id, { reservedBalance: "0.00" });
+    await expect(payouts.confirm(admin, row.id)).rejects.toMatchObject({ code: "BALANCE_CONFLICT" });
+    expect((await payouts.listPayouts(admin)).requests[0]).toMatchObject({ status: "pending", confirmedAt: null });
+    for (const suffix of ["assign", "register", "review", "investigate", "resolve-unpaid", "status", "evidence", "recipient"]) {
+      await request(app.getHttpServer()).post(`/api/v1/wallet/withdrawals/${row.id}/${suffix}`).set("Origin", origin).set("x-test-actor", "admin").send({}).expect(404);
+    }
+    await request(app.getHttpServer()).post("/api/v1/wallet/withdrawal-batches").set("Origin", origin).set("x-test-actor", "admin").send({ ids: [row.id] }).expect(404);
   });
 });
 
@@ -241,7 +193,15 @@ it("migrates legacy processing and paid without changing balances or inventing r
     }
     await db.getRepository(AuditLogEntity).insert({ id: "AUD-LEGACY", actorAccountId: admin.id, actorName: admin.displayName, action: "withdrawal.claimed", targetAccountId: collector.id, targetName: collector.id, summary: "Legacy claim", afterValue: { requestId: "WR-LEGACY-A", status: "processing" } });
     const balanceBefore = await db.getRepository(WalletBalanceEntity).findOneByOrFail({ ownerId: collector.id });
+    db.migrations.splice(0, db.migrations.length, ...allMigrations.filter(m => Number(m.name!.slice(-13)) <= 2_026_092_300_001));
+    await db.runMigrations();
+    const requestsBefore = await db.query("SELECT * FROM withdrawal_requests ORDER BY id");
+    const batchesBefore = await db.query("SELECT * FROM withdrawal_batches ORDER BY id");
+    const eventsBefore = await db.query("SELECT * FROM withdrawal_events ORDER BY sequence");
     db.migrations.splice(0, db.migrations.length, ...allMigrations); await db.runMigrations();
+    expect(await db.query("SELECT * FROM withdrawal_requests ORDER BY id")).toEqual(requestsBefore);
+    expect(await db.query("SELECT * FROM withdrawal_batches ORDER BY id")).toEqual(batchesBefore);
+    expect(await db.query("SELECT * FROM withdrawal_events ORDER BY sequence")).toEqual(eventsBefore);
     expect(await db.getRepository(WalletBalanceEntity).findOneByOrFail({ ownerId: collector.id })).toEqual(balanceBefore);
     expect(await db.getRepository(WithdrawalRequestEntity).findOneByOrFail({ id: "WR-LEGACY-A" })).toMatchObject({ status: "processing", amount: "8.00", assigneeId: admin.id, latestRegistrationId: null, reviewMode: null });
     expect(await db.getRepository(WithdrawalRequestEntity).findOneByOrFail({ id: "WR-LEGACY-PAID" })).toMatchObject({ status: "paid", reviewMode: "legacy", reviewedById: null, reviewedAt: null });

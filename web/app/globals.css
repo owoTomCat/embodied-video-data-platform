@@ -67,12 +67,12 @@ a { color: inherit; text-decoration: none; }
 .button-ghost { color: #e3eaff; background: transparent; border-color: rgb(255 255 255 / 19%); }
 .button-ghost:hover, .button-secondary:hover { background: rgb(255 255 255 / 11%); }
 /* 浅色表面的 secondary / ghost 按钮：深色主题默认样式在这里看不清，需覆盖为浅色变体 */
-.content-card .button-secondary, .payout-detail-modal .button-secondary {
+.content-card .button-secondary {
   color: #3a4a63;
   background: #fff;
   border-color: var(--line);
 }
-.content-card .button-secondary:hover, .payout-detail-modal .button-secondary:hover { background: #f2f5fb; }
+.content-card .button-secondary:hover { background: #f2f5fb; }
 .content-card .button-ghost {
   color: #5a6478;
   background: transparent;
@@ -3405,12 +3405,10 @@ button:disabled { cursor: not-allowed; opacity: .56; }
 /* 数采钱包页 */
 .wallet-withdraw-card { padding: 16px; }
 .wallet-withdraw-form { display: flex; align-items: center; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
-.payout-detail-modal { width: min(900px, 100%); }
-.payout-detail-modal section { margin-block: 22px; padding-top: 12px; border-top: 1px solid var(--line); }
-.payout-detail-modal fieldset { min-width: 0; padding: 16px; border: 1px solid var(--line); border-radius: 9px; }
-.payout-detail-modal p, .payout-detail-modal li { overflow-wrap: anywhere; }
-.payout-detail-modal button { margin: 4px; }
-.payout-detail-modal :is(button, input, select, textarea):focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+.payout-table { min-width: 1050px; }
+.payout-account { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.payout-table input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--blue); }
+.payout-table .payout-check { position: sticky; right: 0; min-width: 90px; background: white; text-align: center; box-shadow: -1px 0 0 var(--line); }
 .wallet-amount-field { flex: 0 0 220px; }
 .wallet-amount-field input { font-size: 16px; font-weight: 700; }
 .wallet-remark-field { flex: 1 1 240px; min-width: 0; }

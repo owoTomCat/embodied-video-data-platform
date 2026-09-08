@@ -98,6 +98,7 @@ import { WithdrawalBatchEntity, WithdrawalRequestEntity, WithdrawalRegistrationE
 import { WithdrawalEvidenceEntity } from "./entities/withdrawal-evidence.entity.js";
 import { PayoutSupervision2026092200001 } from "./migrations/202609220001-payout-supervision.js";
 import { PayoutEvidence2026092300001 } from "./migrations/202609230001-payout-evidence.js";
+import { SimplePayouts2026092400001 } from "./migrations/202609240001-simple-payouts.js";
 import { ManualPayouts2026092000001 } from "./migrations/202609200001-manual-payouts.js";
 import { NextDaySettlement2026092100001 } from "./migrations/202609210001-next-day-settlement.js";
 
@@ -217,6 +218,7 @@ export function createDataSource(
       NextDaySettlement2026092100001,
       PayoutSupervision2026092200001,
       PayoutEvidence2026092300001,
+      SimplePayouts2026092400001,
     ],
     synchronize: false,
     logging: false,

@@ -1,22 +1,19 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { createDecipheriv, createHash, randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
 import { Inject, Injectable } from "@nestjs/common";
-import { DataSource, EntityManager, In } from "typeorm";
+import { DataSource, EntityManager } from "typeorm";
 import type { PublicUser } from "../auth/auth.types.js";
 import { AuditService } from "../audit/audit.service.js";
 import { WithdrawalEvidenceEntity } from "../database/entities/withdrawal-evidence.entity.js";
+import { UserEntity } from "../database/entities/user.entity.js";
 import { WithdrawalEventEntity, WithdrawalRequestEntity } from "../database/entities/withdrawal.entity.js";
 import { OBJECT_STORAGE, type ObjectStoragePort } from "../storage/object-storage.port.js";
 import { payoutKey } from "./payout-recipient.js";
 import { WalletFailure } from "./wallet.failure.js";
 
-export const MAX_PAYOUT_EVIDENCE_BYTES = 5 * 1024 * 1024;
+const MAX_PAYOUT_EVIDENCE_BYTES = 5 * 1024 * 1024;
 // Version byte + 12-byte nonce + 16-byte GCM tag; ciphertext length equals plaintext length.
 const ENVELOPE_BYTES = 29;
-type EvidenceUpload = Pick<Express.Multer.File, "buffer" | "size" | "mimetype" | "originalname">;
 
 function metadata(row: WithdrawalEvidenceEntity) {
   return { id: row.id, originalFileName: row.originalFileName, contentType: row.contentType,
@@ -24,12 +21,6 @@ function metadata(row: WithdrawalEvidenceEntity) {
 }
 function admin(actor: PublicUser) {
   if (actor.role !== "admin" || actor.status !== "active") throw new WalletFailure("FORBIDDEN", "仅有效管理员可访问提现凭证", 403);
-}
-function uploader(actor: PublicUser, request: WithdrawalRequestEntity) {
-  admin(actor);
-  if (request.status !== "processing" && request.status !== "investigating") throw new WalletFailure("STATE_CONFLICT", "当前状态不可上传或使用新凭证", 409);
-  const independentResolver = request.status === "investigating" && actor.id !== request.assigneeId && actor.id !== request.registeredById;
-  if (actor.id !== request.assigneeId && !independentResolver) throw new WalletFailure("FORBIDDEN", "仅当前经办人或独立核查人可提供凭证", 403);
 }
 function contentType(bytes: Buffer): string | null {
   if (bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) return "image/png";
@@ -49,64 +40,6 @@ export class PayoutEvidenceService {
   constructor(private readonly dataSource: DataSource, @Inject(OBJECT_STORAGE) private readonly storage: ObjectStoragePort,
     private readonly audit: AuditService) {}
 
-  async upload(actor: PublicUser, requestId: string, file?: EvidenceUpload) {
-    admin(actor);
-    if (!file || !Buffer.isBuffer(file.buffer) || !file.buffer.length) throw new WalletFailure("VALIDATION", "请选择凭证文件", 400);
-    if (file.buffer.length > MAX_PAYOUT_EVIDENCE_BYTES || file.size > MAX_PAYOUT_EVIDENCE_BYTES) throw new WalletFailure("VALIDATION", "凭证不可超过 5MiB", 413);
-    const mime = contentType(file.buffer);
-    if (!mime || mime !== file.mimetype || file.size !== file.buffer.length) throw new WalletFailure("VALIDATION", "凭证必须为真实 JPEG、PNG 或 PDF，且类型与内容一致", 400);
-    const key = payoutKey();
-    const id = `WE-${randomUUID()}`;
-    const objectKey = `private/payout-evidence/${randomUUID()}/${id}.enc`;
-    let directory: string | undefined;
-    let objectAttempted = false;
-    try {
-      return await this.dataSource.transaction(async manager => {
-        const request = await manager.getRepository(WithdrawalRequestEntity).findOne({ where: { id: requestId }, lock: { mode: "pessimistic_write" } });
-        if (!request) throw new WalletFailure("NOT_FOUND", "提现申请不存在", 404);
-        uploader(actor, request);
-        const repo = manager.getRepository(WithdrawalEvidenceEntity);
-        const row = repo.create({ id, requestId, originalFileName: safeFilename(file.originalname), contentType: mime,
-          sizeBytes: String(file.buffer.length), sha256: createHash("sha256").update(file.buffer).digest("hex"), uploadedById: actor.id, objectKey });
-        const iv = randomBytes(12);
-        const cipher = createCipheriv("aes-256-gcm", key, iv);
-        cipher.setAAD(aad(row));
-        const ciphertext = Buffer.concat([cipher.update(file.buffer), cipher.final()]);
-        const encrypted = Buffer.concat([Buffer.from([1]), iv, cipher.getAuthTag(), ciphertext]);
-        directory = await mkdtemp(join(tmpdir(), "payout-evidence-"));
-        const sourcePath = join(directory, "encrypted.bin");
-        await writeFile(sourcePath, encrypted, { mode: 0o600, flag: "wx" });
-        objectAttempted = true;
-        await this.storage.uploadObject({ objectKey, sourcePath, contentType: "application/octet-stream" });
-        await repo.save(row);
-        await this.audit.record(manager, actor, "withdrawal.evidence_uploaded", { id: request.ownerId, name: request.ownerId },
-          "上传提现凭证", null, { requestId, evidenceId: id });
-        await manager.getRepository(WithdrawalEventEntity).insert({
-          id: `WPE-${randomUUID()}`, requestId, actorId: actor.id, actorName: actor.displayName,
-          action: "withdrawal.evidence_uploaded", reason: null, registrationId: null, details: { evidenceIds: [id] },
-        });
-        return metadata(row);
-      });
-    } catch (error) {
-      if (objectAttempted) {
-        try { await this.storage.deleteObject({ objectKey }); }
-        catch { throw new WalletFailure("PAYOUT_UNAVAILABLE", "凭证上传未完成且存储清理失败，请联系管理员", 503); }
-      }
-      if (error instanceof WalletFailure) throw error;
-      throw new WalletFailure("PAYOUT_UNAVAILABLE", "凭证上传失败，请重试", 503);
-    } finally {
-      if (directory) await rm(directory, { recursive: true, force: true });
-    }
-  }
-
-  async validateForRegistration(manager: EntityManager, actor: PublicUser, request: WithdrawalRequestEntity, evidenceIds: string[]): Promise<void> {
-    uploader(actor, request);
-    if (!Array.isArray(evidenceIds) || evidenceIds.length < 1 || evidenceIds.length > 5 || new Set(evidenceIds).size !== evidenceIds.length ||
-      evidenceIds.some(id => typeof id !== "string" || !id.length || id.length > 64)) throw new WalletFailure("VALIDATION", "请选择 1 至 5 个不同凭证", 400);
-    const rows = await manager.getRepository(WithdrawalEvidenceEntity).find({ where: { id: In(evidenceIds), requestId: request.id } });
-    if (rows.length !== evidenceIds.length) throw new WalletFailure("VALIDATION", "凭证必须存在且属于此申请", 400);
-  }
-
   async listForRequest(manager: EntityManager, requestId: string) {
     const rows = await manager.getRepository(WithdrawalEvidenceEntity).find({ where: { requestId }, order: { createdAt: "ASC", id: "ASC" } });
     return rows.map(metadata);
@@ -115,6 +48,8 @@ export class PayoutEvidenceService {
   async download(actor: PublicUser, requestId: string, evidenceId: string) {
     admin(actor);
     return this.dataSource.transaction(async manager => {
+      const user = await manager.getRepository(UserEntity).findOneBy({ id: actor.id, role: "admin", status: "active" });
+      if (!user) throw new WalletFailure("FORBIDDEN", "需要有效管理员身份", 403);
       const request = await manager.getRepository(WithdrawalRequestEntity).findOneBy({ id: requestId });
       if (!request) throw new WalletFailure("NOT_FOUND", "提现申请不存在", 404);
       const row = await manager.getRepository(WithdrawalEvidenceEntity).createQueryBuilder("evidence").addSelect("evidence.objectKey")

@@ -8,7 +8,7 @@ import type {
   WithdrawalRequest,
   WithdrawalList,
   WithdrawalStatus,
-  WithdrawalDetail, WithdrawalEvidence, WithdrawalRecipient, WithdrawalSummary,
+  PayoutList, PayoutRequest, PayoutStatus,
 } from "../contracts";
 
 export class WalletApiError extends Error {
@@ -123,44 +123,18 @@ export async function getWalletTeamStats(
   return result.teams;
 }
 
-export async function listWithdrawals(input: { page?: number; status?: WithdrawalStatus; ownerId?: string; batchId?: string; scope?: "mine"; overdue?: boolean } = {}): Promise<WithdrawalList> {
+export async function listWithdrawals(input: { page?: number; status?: WithdrawalStatus } = {}): Promise<WithdrawalList> {
   const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(input)) if (value !== undefined && value !== "") params.set(key, String(value));
+  for (const [key, value] of Object.entries(input)) if (value !== undefined) params.set(key, String(value));
   return requestJson<WithdrawalList>(`/wallet/withdrawals?${params.toString()}`);
 }
-export async function claimWithdrawals(ids: string[]): Promise<{ batchId: string; requests: WithdrawalRequest[] }> {
-  return requestJson("/wallet/withdrawal-batches", { method: "POST", body: JSON.stringify({ ids }) });
-}
-export async function rejectWithdrawal(id: string, reason: string): Promise<{ request: WithdrawalRequest }> {
-  return requestJson(`/wallet/withdrawals/${encodeURIComponent(id)}/status`, { method: "POST", body: JSON.stringify({ status: "rejected", reason }) });
-}
-export async function exportWithdrawalBatch(batchId: string): Promise<Blob> {
-  const response = await fetch(apiUrl(`/wallet/withdrawal-batches/${encodeURIComponent(batchId)}/export`), { method: "POST", credentials: "include" });
-  if (!response.ok) throw new WalletApiError(response.status, "导出失败，请检查权限、批次与密钥配置");
-  return response.blob();
+
+export async function listPayouts(input: { page?: number; pageSize?: number; q?: string; status?: PayoutStatus } = {}): Promise<PayoutList> {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(input)) if (value !== undefined && value !== "") params.set(key, String(value));
+  return requestJson<PayoutList>(`/wallet/payouts?${params.toString()}`, { cache: "no-store" });
 }
 
-export const getWithdrawal = (id: string) => requestJson<WithdrawalDetail>(`/wallet/withdrawals/${encodeURIComponent(id)}`);
-export const getWithdrawalSummary = () => requestJson<WithdrawalSummary>("/wallet/withdrawals/summary");
-export const revealWithdrawalRecipient = (id: string) => requestJson<{ recipient: WithdrawalRecipient }>(`/wallet/withdrawals/${encodeURIComponent(id)}/recipient`, { method: "POST", body: "{}" });
-function withdrawalAction(id: string, action: string, input: unknown) {
-  return requestJson<{ request: WithdrawalRequest }>(`/wallet/withdrawals/${encodeURIComponent(id)}/${action}`, { method: "POST", body: JSON.stringify(input) });
-}
-export const assignWithdrawal = (id: string, input: { assigneeId: string; reason: string; revision: number }) => withdrawalAction(id, "assign", input);
-export const registerWithdrawal = (id: string, input: { transferReference: string; paidAt: string; evidenceIds: string[]; note?: string; revision: number }) => withdrawalAction(id, "register", input);
-export const reviewWithdrawal = (id: string, input: { decision: "approve" | "return"; mode: "independent" | "single"; reason?: string; revision: number }) => withdrawalAction(id, "review", input);
-export const investigateWithdrawal = (id: string, input: { reason: string; revision: number }) => withdrawalAction(id, "investigate", input);
-export const resolveUnpaidWithdrawal = (id: string, input: { reason: string; fundsNotTransferred: true; evidenceIds: string[]; revision: number; mode?: "independent" | "single" }) => withdrawalAction(id, "resolve-unpaid", input);
-export async function uploadWithdrawalEvidence(id: string, file: File): Promise<WithdrawalEvidence> {
-  const body = new FormData();
-  body.append("file", file);
-  return (await requestJson<{ evidence: WithdrawalEvidence }>(`/wallet/withdrawals/${encodeURIComponent(id)}/evidence`, { method: "POST", body })).evidence;
-}
-export async function downloadWithdrawalEvidence(id: string, evidenceId: string): Promise<Blob> {
-  const response = await fetch(apiUrl(`/wallet/withdrawals/${encodeURIComponent(id)}/evidence/${encodeURIComponent(evidenceId)}/content`), { credentials: "include", cache: "no-store" });
-  if (!response.ok) {
-    const payload = await response.json().catch(() => ({})) as { error?: string; code?: string };
-    throw new WalletApiError(response.status, payload.error || "凭证下载失败", payload.code);
-  }
-  return response.blob();
+export function confirmPayout(id: string): Promise<{ request: PayoutRequest }> {
+  return requestJson(`/wallet/payouts/${encodeURIComponent(id)}/confirm`, { method: "POST" });
 }

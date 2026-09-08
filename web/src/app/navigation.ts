@@ -137,7 +137,7 @@ export const navigationByRole: Record<Role, NavigationGroup[]> = {
         { label: "场景体系", path: "/admin/scenes", icon: Map },
         { label: "规则与提示词", path: "/admin/rules", icon: ScrollText },
         { label: "结算与钱包", path: "/admin/settlements", icon: Receipt },
-        { label: "提现工作台", path: "/admin/withdrawals", icon: Receipt },
+        { label: "提现打款", path: "/admin/withdrawals", icon: Receipt },
         { label: "公开数据配置", path: "/admin/public", icon: Globe },
       ],
     },

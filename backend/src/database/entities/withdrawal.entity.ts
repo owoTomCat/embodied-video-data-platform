@@ -1,7 +1,7 @@
 import { Column, CreateDateColumn, Entity, Index, PrimaryColumn, UpdateDateColumn } from "typeorm";
 
 export type WithdrawalStatus = "pending" | "processing" | "review_pending" | "investigating" | "paid" | "rejected" | "failed";
-export type ReviewMode = "independent" | "single" | "legacy";
+export type ReviewMode = "independent" | "single" | "legacy" | "manual";
 
 @Entity({ name: "withdrawal_batches" })
 export class WithdrawalBatchEntity {
