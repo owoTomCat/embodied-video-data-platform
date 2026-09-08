@@ -5,6 +5,7 @@ import { AuthModule } from "../auth/auth.module.js";
 import { AuditModule } from "../audit/audit.module.js";
 import { PayoutService } from "./payout.service.js";
 import { PayoutController } from "./payout.controller.js";
+import { PayoutEvidenceModule } from "./payout-evidence.module.js";
 import { UserEntity } from "../database/entities/user.entity.js";
 import {
   WalletBalanceEntity,
@@ -24,6 +25,7 @@ import { WalletService } from "./wallet.service.js";
     ]),
     AuthModule,
     AuditModule,
+    PayoutEvidenceModule,
   ],
   controllers: [WalletController, PayoutController],
   providers: [WalletService, PayoutService, WalletFailureFilter, AllowedOriginGuard],

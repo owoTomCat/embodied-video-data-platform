@@ -29,6 +29,7 @@ import { PointCyclesService, nextSettlementAt } from "../src/points/point-cycles
 import { SettlementSchedulerService } from "../src/points/settlement-scheduler.service.js";
 import { NextDaySettlement2026092100001 } from "../src/database/migrations/202609210001-next-day-settlement.js";
 import { WalletService } from "../src/wallet/wallet.service.js";
+import { WithdrawalEvidenceEntity } from "../src/database/entities/withdrawal-evidence.entity.js";
 import { PointsModule } from "../src/points/points.module.js";
 import {
   OBJECT_STORAGE,
@@ -709,8 +710,13 @@ describe("point cycle API", () => {
     const batch = await request(app.getHttpServer()).post("/api/v1/wallet/withdrawal-batches").set("Origin", WEB_ORIGIN).set("Cookie", admin)
       .send({ ids: [withdrawn.body.request.id] }).expect(200);
     await request(app.getHttpServer()).post(`/api/v1/wallet/withdrawal-batches/${batch.body.batchId}/export`).set("Origin", WEB_ORIGIN).set("Cookie", admin).expect(200);
-    await request(app.getHttpServer()).post(`/api/v1/wallet/withdrawals/${withdrawn.body.request.id}/status`).set("Origin", WEB_ORIGIN).set("Cookie", admin)
-      .send({ status: "paid", transferReference: "point-manual-transfer", paidAt: new Date().toISOString() }).expect(200);
+    const evidenceId = "PE-POINT-MANUAL";
+    await dataSource.getRepository(WithdrawalEvidenceEntity).insert({ id: evidenceId, requestId: withdrawn.body.request.id, uploadedById: "U-PC-ADMIN",
+      originalFileName: "receipt.png", contentType: "image/png", sizeBytes: "8", sha256: "a".repeat(64), objectKey: "private-test/point-manual" });
+    const registered = await request(app.getHttpServer()).post(`/api/v1/wallet/withdrawals/${withdrawn.body.request.id}/register`).set("Origin", WEB_ORIGIN).set("Cookie", admin)
+      .send({ transferReference: "point-manual-transfer", paidAt: new Date().toISOString(), evidenceIds: [evidenceId], revision: batch.body.requests[0].revision }).expect(200);
+    await request(app.getHttpServer()).post(`/api/v1/wallet/withdrawals/${withdrawn.body.request.id}/review`).set("Origin", WEB_ORIGIN).set("Cookie", admin)
+      .send({ decision: "approve", mode: "single", revision: registered.body.request.revision }).expect(200);
     const paid = await app.get(WalletService).getWallet("U-PC-COLLECTOR");
     expect(paid).toMatchObject({ reservedBalance: 0, withdrawnBalance: 0.1, cumulativeWithdrawn: 0.1, totalBalance: before.totalBalance });
     await app.get(PointCyclesService).settleCycle(cycle.id, cycle.settleDueAt!);
