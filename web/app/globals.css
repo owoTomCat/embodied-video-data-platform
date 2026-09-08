@@ -3405,10 +3405,107 @@ button:disabled { cursor: not-allowed; opacity: .56; }
 /* 数采钱包页 */
 .wallet-withdraw-card { padding: 16px; }
 .wallet-withdraw-form { display: flex; align-items: center; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
-.payout-table { min-width: 1050px; }
-.payout-account { white-space: nowrap; font-variant-numeric: tabular-nums; }
-.payout-table input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--blue); }
-.payout-table .payout-check { position: sticky; right: 0; min-width: 90px; background: white; text-align: center; box-shadow: -1px 0 0 var(--line); }
+.payout-page { gap: 18px; }
+.payout-heading { align-items: center; gap: 18px; }
+.payout-heading-title { display: flex; align-items: center; gap: 14px; }
+.payout-heading .payout-heading-icon { display: grid; width: 52px; height: 52px; flex-shrink: 0; place-items: center; color: var(--blue); background: #eaf1ff; border: 1px solid #dbe7ff; border-radius: 15px; }
+.payout-heading h1 { margin-block: 3px 5px; font-size: 24px; }
+.payout-heading .payout-security { display: inline-flex; align-items: center; gap: 7px; color: #66758b; font-size: 12px; white-space: nowrap; }
+.payout-card { overflow: hidden; border-radius: 14px; }
+.payout-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 22px 24px 18px; }
+.payout-card-heading h2 { display: flex; align-items: center; gap: 10px; margin: 0; color: #25334b; font-size: 17px; font-weight: 700; }
+.payout-card-heading p { margin: 7px 0 0; color: #7b8799; font-size: 12px; line-height: 1.6; }
+.payout-count { padding: 3px 9px; color: #5471a5; background: #f0f4fb; border-radius: 6px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.payout-refresh { display: flex; align-items: center; gap: 12px; }
+.payout-refresh > span { color: #8994a5; font-size: 11px; white-space: nowrap; }
+.payout-card .button { min-height: 34px; gap: 6px; padding: 7px 12px; font-size: 12px; }
+.payout-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 24px 20px; }
+.payout-toolbar .segmented-control { flex-shrink: 0; }
+.payout-search { display: flex; min-width: 0; width: min(440px, 100%); padding: 4px 4px 4px 12px; align-items: center; gap: 9px; color: #8a98ad; background: #f9fbfe; border: 1px solid var(--line); border-radius: 9px; }
+.payout-search:focus-within { border-color: #8faff5; box-shadow: 0 0 0 3px rgb(47 116 245 / 8%); }
+.payout-search > svg { flex-shrink: 0; }
+.payout-search input { width: 100%; min-width: 0; min-height: 30px; padding: 0; color: #354156; background: transparent; border: 0; outline: 0; font-size: 13px; }
+.payout-search input::placeholder { color: #95a0b1; }
+.payout-search > .button { flex-shrink: 0; }
+.payout-search-clear, .payout-dismiss { display: grid; width: 28px; height: 28px; padding: 0; flex-shrink: 0; place-items: center; color: #8490a2; background: transparent; border: 0; border-radius: 6px; }
+.payout-search-clear:hover, .payout-dismiss:hover { color: #354156; background: rgb(57 87 135 / 7%); }
+.payout-filter-note { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 24px 16px; align-items: center; color: #8994a5; font-size: 12px; }
+.payout-filter-note > span { max-width: 100%; overflow-wrap: anywhere; color: #435c85; }
+.payout-filter-note button { padding: 0; color: var(--blue); font-size: 12px; }
+.payout-table-scroll { position: relative; max-height: clamp(280px, calc(100vh - 420px), 680px); overflow: auto; border-top: 1px solid var(--line); }
+.payout-table { min-width: 1030px; }
+.payout-table-history { min-width: 1220px; }
+.payout-table th { position: sticky; top: 0; z-index: 2; padding: 12px 18px; color: #728097; background: #f8fafd; font-size: 12px; font-weight: 600; }
+.payout-table td { padding: 18px; line-height: 1.6; vertical-align: middle; }
+.payout-table tbody tr:hover, .payout-table tbody tr:hover .payout-check { background: #f8fbff; }
+.payout-table .payout-person { display: block; color: #263752; font-size: 14px; font-weight: 650; }
+.payout-secondary { display: block; margin-top: 4px; color: #8a96a7; font-size: 11px; line-height: 1.55; }
+.payout-request-id { display: block; max-width: 180px; margin-top: 4px; overflow: hidden; color: #a0a9b7; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.payout-recipient { display: block; color: #3c4c64; font-size: 13px; font-weight: 600; }
+.payout-table .status-badge { margin-top: 7px; padding: 3px 7px; font-size: 10px; }
+.payout-account-line { display: flex; align-items: center; gap: 9px; }
+.payout-account { color: #344662; font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; user-select: all; }
+.payout-copy { min-height: 26px; flex-shrink: 0; gap: 4px; padding: 4px 6px; font-size: 10px; }
+.payout-copy.is-copied { color: #278664; background: #e9f6ef; }
+.payout-bank { display: flex; margin-top: 7px; align-items: center; gap: 5px; color: #8a96a7; font-size: 11px; }
+.payout-bank > svg { flex-shrink: 0; }
+.payout-table .payout-amount { text-align: right; white-space: nowrap; }
+.payout-amount > strong { color: #263b61; font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.payout-amount > strong > small { margin-right: 4px; color: #8a99b0; font-size: 11px; font-weight: 500; }
+.payout-time { display: block; color: #596981; font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.payout-time > small { display: block; margin-top: 3px; color: #98a1af; font-size: 10px; }
+.payout-secondary + .payout-time { margin-top: 7px; }
+.payout-table .payout-check { position: sticky; right: 0; z-index: 1; min-width: 148px; width: 148px; background: white; text-align: center; box-shadow: -1px 0 0 #edf1f7; }
+.payout-table th.payout-check { z-index: 3; background: #f8fafd; }
+.payout-confirm { display: inline-flex; min-height: 38px; padding: 8px 10px; align-items: center; justify-content: center; gap: 7px; color: #50637f; background: #fff; border: 1px solid #dce4f0; border-radius: 8px; cursor: pointer; white-space: nowrap; font-size: 11px; }
+.payout-confirm:hover:has(input:not(:disabled)) { color: #2b61c7; background: #f2f7ff; border-color: #96b5ee; }
+.payout-confirm:has(input:focus-visible) { outline: 3px solid rgb(52 104 245 / 22%); outline-offset: 2px; }
+.payout-confirm:has(input:disabled) { cursor: default; }
+.payout-confirm.is-paid { color: #23865f; background: #edf8f2; border-color: #d5eddf; }
+.payout-confirm.is-closed { color: #8c96a5; background: #f5f6f8; border-color: #e7eaf0; }
+.payout-table .payout-confirm input { width: 17px; height: 17px; min-width: 17px; min-height: 17px; margin: 0; padding: 0; flex: 0 0 17px; accent-color: var(--blue); }
+.payout-row-note { display: block; max-width: 140px; margin-top: 6px; color: #9a8158; font-size: 10px; }
+.payout-feedback { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border: 1px solid; border-radius: 10px; font-size: 13px; line-height: 1.6; }
+.payout-feedback > svg { flex-shrink: 0; }
+.payout-feedback > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.payout-feedback-success { color: #267a59; background: #f0faf5; border-color: #d8eee2; }
+.payout-feedback-error { color: #b6534d; background: #fff5f4; border-color: #f3ddd9; }
+.payout-card > .payout-feedback { margin: 0 24px 16px; }
+.payout-loading { display: flex; margin: 0; padding: 10px 24px; align-items: center; gap: 7px; color: #7e91b1; background: #f8fbff; font-size: 12px; }
+.payout-spinning { animation: payout-spin 1s linear infinite; }
+@keyframes payout-spin { to { transform: rotate(360deg); } }
+.payout-table .payout-empty { min-height: 230px; gap: 10px; }
+.payout-empty > svg { margin-bottom: 3px; color: #b9c8df; }
+.payout-empty > strong { font-size: 14px; }
+.payout-empty > span { font-size: 12px; }
+.payout-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding: 17px 24px; border-top: 1px solid var(--line); background: #fcfdff; }
+.payout-page-total { display: flex; align-items: baseline; gap: 10px; }
+.payout-page-total > span { color: #8a95a7; font-size: 12px; }
+.payout-page-total > strong { color: #3b5378; font-size: 15px; font-variant-numeric: tabular-nums; }
+.payout-pagination { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; color: #7c889b; font-size: 12px; }
+.payout-pagination > label { display: flex; align-items: center; gap: 6px; margin-right: 4px; }
+.payout-pagination select { min-height: 30px; padding: 4px 5px; color: #52627b; background: white; border: 1px solid var(--line); border-radius: 6px; font-size: 12px; }
+.payout-pagination > .button { min-width: 30px; min-height: 30px; padding: 5px; }
+.payout-footnote { display: flex; align-items: flex-start; gap: 7px; margin: 0; color: #919daf; font-size: 11px; line-height: 1.8; }
+.payout-footnote > svg { margin-top: 3px; flex-shrink: 0; }
+@media (max-width: 1100px) {
+  .payout-toolbar { flex-wrap: wrap; }
+  .payout-search { width: 100%; }
+  .payout-refresh > span { display: none; }
+}
+@media (max-width: 640px) {
+  .payout-heading .payout-security { display: none; }
+  .payout-heading h1 { font-size: 21px; }
+  .payout-card-heading { padding: 18px 16px; gap: 10px; }
+  .payout-toolbar { padding: 0 16px 16px; }
+  .payout-filter-note { padding-inline: 16px; }
+  .payout-footer { padding: 16px; }
+  .payout-pagination { gap: 8px; }
+  .payout-feedback { flex-wrap: wrap; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .payout-spinning { animation: none; }
+}
 .wallet-amount-field { flex: 0 0 220px; }
 .wallet-amount-field input { font-size: 16px; font-weight: 700; }
 .wallet-remark-field { flex: 1 1 240px; min-width: 0; }

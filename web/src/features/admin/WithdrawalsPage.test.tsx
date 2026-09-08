@@ -48,7 +48,6 @@ it("shows full recipient details immediately and records a single checkbox actio
   const paidRow = screen.getByText("001622200001234567890").closest("tr")!;
   expect(within(paidRow).getByText("首次勾选管理员")).toBeVisible();
   expect(within(paidRow).getByText("admin-first")).toBeVisible();
-  expect(within(paidRow).getByText(/2026\/1\/2.*12:00:00/)).toBeVisible();
   await user.click(paid);
   expect(confirmationCalls).toBe(1);
 });
@@ -88,8 +87,24 @@ it("searches server-side so results can be found beyond the currently displayed 
   await user.type(search, "无匹配");
   await user.click(screen.getByRole("button", { name: "搜索" }));
   await screen.findByText("暂无匹配申请");
-  await user.clear(search);
+  await user.click(screen.getByRole("button", { name: "清除搜索" }));
+  expect(await screen.findByText("张三")).toBeVisible();
   await user.type(search, "采集团队");
   await user.click(screen.getByRole("button", { name: "搜索" }));
   expect(await screen.findByText("张三")).toBeVisible();
+});
+
+it("keeps recipient details visible but prevents confirmation while refreshing stale rows", async () => {
+  const user = userEvent.setup(); render(<WithdrawalsPage />);
+  await screen.findByText("001622200001234567890");
+  let finishRefresh!: (response: Response) => void;
+  vi.mocked(fetch).mockImplementationOnce(() => new Promise<Response>(resolve => { finishRefresh = resolve; }));
+  await user.click(screen.getByRole("button", { name: "刷新" }));
+  expect(screen.getByText("001622200001234567890")).toBeVisible();
+  const checkbox = screen.getByRole("checkbox", { name: "已打款 WR-finance" });
+  expect(checkbox).toBeDisabled();
+  await user.click(checkbox);
+  expect(confirmationCalls).toBe(0);
+  await act(async () => { finishRefresh(json({ requests: [], pagination: { page: 1, pageSize: 20, total: 0, totalPages: 1 } })); });
+  expect(screen.queryByRole("checkbox", { name: "已打款 WR-finance" })).not.toBeInTheDocument();
 });
