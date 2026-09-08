@@ -13,10 +13,11 @@ import { useIdentity } from "../../auth/client/IdentityContext";
 import { StatusBadge } from "../../components/StatusBadge";
 import {
   getMyWallet,
+  getSavedPayoutRecipients,
   withdrawWallet,
   type WalletDetail,
 } from "../../wallet/client/walletApi";
-import type { WalletTransaction } from "../../wallet/contracts";
+import type { SavedPayoutRecipient, WalletTransaction } from "../../wallet/contracts";
 import { WithdrawalHistory } from "../../wallet/WithdrawalHistory";
 
 type PageMode = "loading" | "live" | "unavailable";
@@ -81,7 +82,12 @@ const viewMeta: Record<
   },
 };
 
-export function EarningsPage() {
+export function EarningsPage({ navigate }: { navigate(path: string): void }) {
+  const { currentAccount } = useIdentity();
+  return <EarningsContent key={currentAccount.id} navigate={navigate} />;
+}
+
+function EarningsContent({ navigate }: { navigate(path: string): void }) {
   const { notify } = useInteractions();
   const { currentAccount } = useIdentity();
   const [wallet, setWallet] = useState<WalletDetail>(emptyWallet);
@@ -95,6 +101,48 @@ export function EarningsPage() {
   const [revision, setRevision] = useState(0);
   const attempt = useRef<{ payload: string; key: string } | null>(null);
   const [withdrawing, setWithdrawing] = useState(false);
+  const withdrawingRef = useRef(false);
+  const [recipients, setRecipients] = useState<SavedPayoutRecipient[]>([]);
+  const [recipientSource, setRecipientSource] = useState<"manual" | "alipay" | "bank">("manual");
+  const [recipientsLoading, setRecipientsLoading] = useState(true);
+  const [recipientsError, setRecipientsError] = useState("");
+  const [recipientsRevision, setRecipientsRevision] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    getSavedPayoutRecipients().then(values => {
+      if (!active) return;
+      setRecipients(values);
+      setRecipientsLoading(false);
+    }).catch(() => {
+      if (!active) return;
+      setRecipientsError("常用收款信息暂不可用，仍可手动填写并提现。");
+      setRecipientsLoading(false);
+    });
+    return () => { active = false; };
+  }, [currentAccount.id, recipientsRevision]);
+
+  function changeMethod(value: SavedPayoutRecipient["method"]) {
+    setMethod(value);
+    setRecipientSource("manual");
+    setRecipientName("");
+    setAccount("");
+    setBankName("");
+  }
+
+  function changeSource(value: "manual" | "alipay" | "bank") {
+    if (value === "manual") {
+      changeMethod(method);
+      return;
+    }
+    const recipient = recipients.find(item => item.method === value);
+    if (!recipient) return;
+    setRecipientSource(value);
+    setMethod(recipient.method);
+    setRecipientName(recipient.name);
+    setAccount(recipient.account);
+    setBankName(recipient.method === "bank" ? recipient.bankName : "");
+  }
 
   useEffect(() => {
     let active = true;
@@ -119,7 +167,7 @@ export function EarningsPage() {
 
   async function submitWithdraw(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (withdrawing) return;
+    if (withdrawingRef.current) return;
     const amount = Number(withdrawAmount);
     if (!Number.isFinite(amount) || amount <= 0) {
       notify("error", "请输入大于 0 的提现金额");
@@ -136,6 +184,7 @@ export function EarningsPage() {
     ) {
       return;
     }
+    withdrawingRef.current = true;
     setWithdrawing(true);
     try {
       const input = { amount, method, account: account.trim(), name: recipientName.trim(), bankName: method === "bank" ? bankName.trim() : undefined };
@@ -149,6 +198,7 @@ export function EarningsPage() {
       setAccount("");
       setRecipientName("");
       setBankName("");
+      setRecipientSource("manual");
       setRevision(value => value + 1);
       notify("success", "提现申请已提交，金额已预留，等待财务人工付款");
       try {
@@ -160,6 +210,7 @@ export function EarningsPage() {
     } catch (reason) {
       notify("error", reason instanceof Error ? reason.message : "提现失败，请重试");
     } finally {
+      withdrawingRef.current = false;
       setWithdrawing(false);
     }
   }
@@ -238,13 +289,23 @@ export function EarningsPage() {
             </div>
           </div>
           <form className="wallet-withdraw-form modal-form" onSubmit={submitWithdraw}>
-            <label>收款方式<select aria-label="收款方式" value={method} onChange={event => setMethod(event.target.value as "alipay" | "bank")}><option value="alipay">支付宝</option><option value="bank">银行账户</option></select></label>
-            <label>收款人姓名<input aria-label="收款人姓名" value={recipientName} onChange={event => setRecipientName(event.target.value)} maxLength={120} required autoComplete="off" /></label>
-            <label>{method === "bank" ? "银行卡 / 账户" : "支付宝账号"}<input aria-label="收款账号" value={account} onChange={event => setAccount(event.target.value)} maxLength={200} required autoComplete="off" /></label>
-            {method === "bank" && <label>银行名称<input aria-label="银行名称" value={bankName} onChange={event => setBankName(event.target.value)} maxLength={120} required /></label>}
+            <div className="wallet-recipient-source">
+              <label>收款信息来源<select aria-label="收款信息来源" value={recipientSource} disabled={withdrawing} onChange={event => changeSource(event.target.value as "manual" | "alipay" | "bank")}>
+                <option value="manual">手动填写（不保存）</option>
+                {recipients.map(recipient => <option key={recipient.method} value={recipient.method}>已保存的{recipient.method === "alipay" ? "支付宝" : "银行账户"}</option>)}
+              </select></label>
+              <p className="form-message">选用后仍可编辑，修改仅用于本次提现，不会自动保存。<button type="button" className="table-action" disabled={withdrawing} onClick={() => navigate("/account/profile")}>管理常用收款信息</button></p>
+              {recipientsLoading && <p className="form-message" role="status">正在加载常用收款信息，可先手动填写…</p>}
+              {recipientsError && <div className="wallet-recipient-feedback"><p className="form-message" role="status">{recipientsError}</p><button type="button" className="button button-secondary" disabled={recipientsLoading || withdrawing} onClick={() => { setRecipientsError(""); setRecipientsLoading(true); setRecipientsRevision(value => value + 1); }}>重试加载收款信息</button></div>}
+            </div>
+            <label>收款方式<select aria-label="收款方式" value={method} disabled={withdrawing} onChange={event => changeMethod(event.target.value as "alipay" | "bank")}><option value="alipay">支付宝</option><option value="bank">银行账户</option></select></label>
+            <label>收款人姓名<input aria-label="收款人姓名" value={recipientName} disabled={withdrawing} onChange={event => setRecipientName(event.target.value)} maxLength={120} required autoComplete="off" /></label>
+            <label>{method === "bank" ? "银行卡 / 账户" : "支付宝账号"}<input aria-label="收款账号" value={account} disabled={withdrawing} onChange={event => setAccount(event.target.value)} maxLength={200} required autoComplete="off" /></label>
+            {method === "bank" && <label>银行名称<input aria-label="银行名称" value={bankName} disabled={withdrawing} onChange={event => setBankName(event.target.value)} maxLength={120} required autoComplete="off" /></label>}
             <div className="input-with-suffix wallet-amount-field">
               <input
                 aria-label="提现金额"
+                disabled={withdrawing}
                 type="number"
                 inputMode="decimal"
                 min="0"

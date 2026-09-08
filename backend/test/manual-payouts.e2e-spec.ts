@@ -10,6 +10,9 @@ import { TeamEntity } from "../src/database/entities/team.entity.js";
 import { WalletBalanceEntity, WalletTransactionEntity } from "../src/database/entities/wallet.entity.js";
 import { WithdrawalRequestEntity } from "../src/database/entities/withdrawal.entity.js";
 import { AuditLogEntity } from "../src/database/entities/audit-log.entity.js";
+import { SavedPayoutRecipientEntity } from "../src/database/entities/saved-payout-recipient.entity.js";
+import { SavedPayoutRecipientService } from "../src/wallet/saved-payout-recipient.service.js";
+import { AuditService } from "../src/audit/audit.service.js";
 import { WalletModule } from "../src/wallet/wallet.module.js";
 import { WalletService } from "../src/wallet/wallet.service.js";
 import { PayoutService } from "../src/wallet/payout.service.js";
@@ -54,11 +57,89 @@ describe("manual payouts", () => {
     payouts = module.get(PayoutService); wallet = module.get(WalletService);
   });
   beforeEach(async () => {
-    await db.query("TRUNCATE withdrawal_requests, withdrawal_batches, wallet_transactions, wallet_balances, audit_logs CASCADE");
+    await db.query("TRUNCATE saved_payout_recipients, withdrawal_requests, withdrawal_batches, wallet_transactions, wallet_balances, audit_logs CASCADE");
     await db.getRepository(UserEntity).update(reviewer.id, { status: "active" });
     await db.getRepository(WalletBalanceEntity).save({ ownerId: collector.id, totalBalance: "10.00", availableBalance: "10.00" });
   });
   afterAll(async () => { await app?.close(); if (db?.isInitialized) await db.destroy(); vi.unstubAllEnvs(); });
+
+  it("persists self-only encrypted slots for every active role without leaking into wallet or audit views", async () => {
+    const recipient = { name: "私人收款姓名", account: "private-recipient@example.test", bankName: "" };
+    for (const role of ["collector", "leader", "admin"]) {
+      const saved = await request(app.getHttpServer()).put("/api/v1/wallet/recipients/alipay").set("Origin", origin).set("x-test-actor", role).send(recipient).expect(200);
+      expect(saved.body).toEqual({ recipient: { ...recipient, method: "alipay" } });
+      expect(saved.headers["cache-control"]).toBe("no-store");
+    }
+    const read = await request(app.getHttpServer()).get("/api/v1/wallet/recipients").expect(200);
+    expect(read.body).toEqual({ recipients: [{ ...recipient, method: "alipay" }] });
+    expect(read.headers["cache-control"]).toBe("no-store");
+    expect((await request(app.getHttpServer()).get("/api/v1/wallet/recipients?ownerId=payout-collector").set("x-test-actor", "other").expect(200)).body).toEqual({ recipients: [] });
+    await request(app.getHttpServer()).put("/api/v1/wallet/recipients/alipay").set("Origin", origin).set("x-test-actor", "other").send({ ...recipient, ownerId: collector.id }).expect(400);
+    await request(app.getHttpServer()).delete("/api/v1/wallet/recipients/alipay").set("Origin", origin).set("x-test-actor", "other").expect(200);
+    const fresh = new SavedPayoutRecipientService(db, new AuditService(db.getRepository(AuditLogEntity)));
+    expect(await fresh.list(collector)).toEqual([{ ...recipient, method: "alipay" }]);
+    const stored = JSON.stringify(await db.query("SELECT * FROM saved_payout_recipients"));
+    const audits = JSON.stringify(await db.getRepository(AuditLogEntity).find());
+    const wallets = JSON.stringify((await request(app.getHttpServer()).get("/api/v1/wallet").set("x-test-actor", "admin").expect(200)).body);
+    for (const secret of [recipient.name, recipient.account]) {
+      expect(stored).not.toContain(secret);
+      expect(audits).not.toContain(secret);
+      expect(wallets).not.toContain(secret);
+    }
+  });
+
+  it("upserts concurrent saves into one slot and leaves submitted snapshots untouched by edits and deletion", async () => {
+    const recipients = [
+      { name: "原收款人", account: "original-bank-account", bankName: "原银行" },
+      { name: "新收款人", account: "replacement-bank-account", bankName: "新银行" },
+    ];
+    await Promise.all(recipients.map(recipient => request(app.getHttpServer()).put("/api/v1/wallet/recipients/bank").set("Origin", origin).send(recipient).expect(200)));
+    expect(await db.getRepository(SavedPayoutRecipientEntity).countBy({ ownerId: collector.id, method: "bank" })).toBe(1);
+    const saved = (await request(app.getHttpServer()).get("/api/v1/wallet/recipients").expect(200)).body.recipients[0];
+    expect(recipients).toContainEqual({ name: saved.name, account: saved.account, bankName: saved.bankName });
+    const submitted = await request(app.getHttpServer()).post("/api/v1/wallet/withdraw").set("Origin", origin)
+      .send({ ...saved, account: "manually-edited-snapshot-account", amount: 1, idempotencyKey: "saved-snapshot" }).expect(200);
+    const snapshot = await db.query("SELECT * FROM withdrawal_requests WHERE id=$1", [submitted.body.request.id]);
+    await request(app.getHttpServer()).put("/api/v1/wallet/recipients/bank").set("Origin", origin).send(recipients[1]).expect(200);
+    for (let i = 0; i < 2; i++) {
+      const deleted = await request(app.getHttpServer()).delete("/api/v1/wallet/recipients/bank").set("Origin", origin).expect(200);
+      expect(deleted.body).toEqual({ ok: true });
+      expect(deleted.headers["cache-control"]).toBe("no-store");
+    }
+    expect((await request(app.getHttpServer()).get("/api/v1/wallet/recipients").expect(200)).body).toEqual({ recipients: [] });
+    expect(await db.query("SELECT * FROM withdrawal_requests WHERE id=$1", [submitted.body.request.id])).toEqual(snapshot);
+    expect((await payouts.listPayouts(admin)).requests[0]!.recipient).toEqual({ ...saved, account: "manually-edited-snapshot-account" });
+    await request(app.getHttpServer()).post("/api/v1/wallet/withdraw").set("Origin", origin).set("x-test-actor", "leader").send(input("leader-still-forbidden")).expect(403);
+  });
+
+  it("binds saved ciphertext to both owner and payment method", async () => {
+    const recipient = { name: "绑定收款人", account: "bound-account", bankName: "绑定银行" };
+    await request(app.getHttpServer()).put("/api/v1/wallet/recipients/bank").set("Origin", origin).send(recipient).expect(200);
+    const [{ recipient_encrypted: ciphertext }] = await db.query("SELECT recipient_encrypted FROM saved_payout_recipients WHERE owner_id=$1", [collector.id]);
+    await db.getRepository(SavedPayoutRecipientEntity).insert({ ownerId: other.id, method: "bank", recipientEncrypted: ciphertext });
+    await request(app.getHttpServer()).get("/api/v1/wallet/recipients").set("x-test-actor", "other").expect(503);
+    await db.getRepository(SavedPayoutRecipientEntity).insert({ ownerId: collector.id, method: "alipay", recipientEncrypted: ciphertext });
+    await request(app.getHttpServer()).get("/api/v1/wallet/recipients").expect(503);
+    const audits = JSON.stringify(await db.getRepository(AuditLogEntity).find());
+    for (const secret of [recipient.name, recipient.account, recipient.bankName, ciphertext]) expect(audits).not.toContain(secret);
+  });
+
+  it("rejects invalid saved details, foreign origins and disabled users without modifying slots", async () => {
+    const recipient = { name: "有效姓名", account: "valid-account", bankName: "有效银行" };
+    for (const invalid of [{ ...recipient, name: " " }, { ...recipient, account: "bad\u0000account" }, { ...recipient, account: "x".repeat(201) }, { ...recipient, name: "x".repeat(121) }, { ...recipient, bankName: "" }, { ...recipient, bankName: "x".repeat(121) }]) {
+      const response = await request(app.getHttpServer()).put("/api/v1/wallet/recipients/bank").set("Origin", origin).send(invalid).expect(400);
+      expect(response.headers["cache-control"]).toBe("no-store");
+    }
+    await request(app.getHttpServer()).put("/api/v1/wallet/recipients/cash").set("Origin", origin).send(recipient).expect(400);
+    await request(app.getHttpServer()).delete("/api/v1/wallet/recipients/cash").set("Origin", origin).expect(400);
+    await request(app.getHttpServer()).put("/api/v1/wallet/recipients/bank").set("Origin", "https://evil.invalid").send(recipient).expect(403);
+    await request(app.getHttpServer()).delete("/api/v1/wallet/recipients/bank").set("Origin", "https://evil.invalid").expect(403);
+    await db.getRepository(UserEntity).update(reviewer.id, { status: "disabled" });
+    await request(app.getHttpServer()).get("/api/v1/wallet/recipients").set("x-test-actor", "reviewer").expect(403);
+    await request(app.getHttpServer()).put("/api/v1/wallet/recipients/bank").set("Origin", origin).set("x-test-actor", "reviewer").send(recipient).expect(403);
+    await request(app.getHttpServer()).delete("/api/v1/wallet/recipients/bank").set("Origin", origin).set("x-test-actor", "reviewer").expect(403);
+    expect(await db.getRepository(SavedPayoutRecipientEntity).count()).toBe(0);
+  });
 
   it("serializes competing requests and retries without double spending or changing snapshots", async () => {
     const results = await Promise.allSettled([payouts.submit(collector, input("first")), payouts.submit(collector, input("second"))]);

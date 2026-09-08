@@ -32,6 +32,13 @@ export type WithdrawInput = {
   bankName?: string;
 };
 
+export type SavedPayoutRecipient = {
+  method: "alipay" | "bank";
+  name: string;
+  account: string;
+  bankName: string;
+};
+
 /** 流水统计点（日/周/月聚合；withdraw 为负值=流出） */
 export type WalletFlowPoint = {
   bucket: string;

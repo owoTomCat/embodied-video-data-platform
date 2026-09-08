@@ -101,6 +101,8 @@ import { PayoutEvidence2026092300001 } from "./migrations/202609230001-payout-ev
 import { SimplePayouts2026092400001 } from "./migrations/202609240001-simple-payouts.js";
 import { ManualPayouts2026092000001 } from "./migrations/202609200001-manual-payouts.js";
 import { NextDaySettlement2026092100001 } from "./migrations/202609210001-next-day-settlement.js";
+import { SavedPayoutRecipientEntity } from "./entities/saved-payout-recipient.entity.js";
+import { SavedPayoutRecipients2026092500001 } from "./migrations/202609250001-saved-payout-recipients.js";
 
 export const identityEntities = [
   TeamEntity,
@@ -138,6 +140,7 @@ export const identityEntities = [
   WithdrawalRegistrationEntity,
   WithdrawalEventEntity,
   WithdrawalEvidenceEntity,
+  SavedPayoutRecipientEntity,
   SceneCategoryPricingEntity,
   SceneEntity,
   SceneLibraryEntity,
@@ -219,6 +222,7 @@ export function createDataSource(
       PayoutSupervision2026092200001,
       PayoutEvidence2026092300001,
       SimplePayouts2026092400001,
+      SavedPayoutRecipients2026092500001,
     ],
     synchronize: false,
     logging: false,

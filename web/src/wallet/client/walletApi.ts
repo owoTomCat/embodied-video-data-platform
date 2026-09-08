@@ -9,6 +9,7 @@ import type {
   WithdrawalList,
   WithdrawalStatus,
   PayoutList, PayoutRequest, PayoutStatus,
+  SavedPayoutRecipient,
 } from "../contracts";
 
 export class WalletApiError extends Error {
@@ -81,6 +82,27 @@ export async function withdrawWallet(input: WithdrawInput): Promise<WithdrawalRe
     body: JSON.stringify(input),
   });
   return result.request;
+}
+
+export async function getSavedPayoutRecipients(): Promise<SavedPayoutRecipient[]> {
+  const result = await requestJson<{ recipients: SavedPayoutRecipient[] }>("/wallet/recipients", { cache: "no-store" });
+  return result.recipients;
+}
+
+export async function savePayoutRecipient(
+  method: SavedPayoutRecipient["method"],
+  input: { name: string; account: string; bankName?: string },
+): Promise<SavedPayoutRecipient> {
+  const result = await requestJson<{ recipient: SavedPayoutRecipient }>(`/wallet/recipients/${method}`, {
+    method: "PUT",
+    cache: "no-store",
+    body: JSON.stringify(input),
+  });
+  return result.recipient;
+}
+
+export async function deletePayoutRecipient(method: SavedPayoutRecipient["method"]): Promise<void> {
+  await requestJson<{ ok: true }>(`/wallet/recipients/${method}`, { method: "DELETE", cache: "no-store" });
 }
 
 /** 指定成员的钱包流水（管理员查看任意成员 / 团长查看本队成员） */
