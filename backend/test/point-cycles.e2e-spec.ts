@@ -774,11 +774,8 @@ describe("point cycle API", () => {
       availableBalance: Math.round((before.availableBalance + Number(cycle.totalPoints) - 0.1) * 100) / 100,
       reservedBalance: 0.1, withdrawnBalance: 0,
     });
-    const batch = await request(app.getHttpServer()).post("/api/v1/wallet/withdrawal-batches").set("Origin", WEB_ORIGIN).set("Cookie", admin)
-      .send({ ids: [withdrawn.body.request.id] }).expect(200);
-    await request(app.getHttpServer()).post(`/api/v1/wallet/withdrawal-batches/${batch.body.batchId}/export`).set("Origin", WEB_ORIGIN).set("Cookie", admin).expect(200);
-    await request(app.getHttpServer()).post(`/api/v1/wallet/withdrawals/${withdrawn.body.request.id}/status`).set("Origin", WEB_ORIGIN).set("Cookie", admin)
-      .send({ status: "paid", transferReference: "point-manual-transfer", paidAt: new Date().toISOString() }).expect(200);
+    await request(app.getHttpServer()).post(`/api/v1/wallet/payouts/${withdrawn.body.request.id}/confirm`)
+      .set("Origin", WEB_ORIGIN).set("Cookie", admin).expect(200);
     const paid = await app.get(WalletService).getWallet("U-PC-COLLECTOR");
     expect(paid).toMatchObject({ reservedBalance: 0, withdrawnBalance: 0.1, cumulativeWithdrawn: 0.1, totalBalance: before.totalBalance });
     await app.get(PointCyclesService).settleCycle(cycle.id, cycle.settleDueAt!);

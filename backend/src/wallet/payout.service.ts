@@ -3,25 +3,29 @@ import { Injectable } from "@nestjs/common";
 import { DataSource, EntityManager } from "typeorm";
 import type { PublicUser } from "../auth/auth.types.js";
 import { AuditService } from "../audit/audit.service.js";
-import { csvDocument } from "../csv/csv.js";
 import { WalletBalanceEntity, WalletTransactionEntity } from "../database/entities/wallet.entity.js";
-import { WithdrawalBatchEntity, WithdrawalRequestEntity, type WithdrawalStatus } from "../database/entities/withdrawal.entity.js";
+import { WithdrawalRequestEntity, WithdrawalRegistrationEntity, WithdrawalEventEntity, type WithdrawalStatus } from "../database/entities/withdrawal.entity.js";
 import { UserEntity } from "../database/entities/user.entity.js";
+import { PayoutEvidenceService } from "./payout-evidence.service.js";
 import { WalletFailure } from "./wallet.failure.js";
-import { centsMoney, decryptRecipient, encryptRecipient, moneyCents, normalizeWithdrawal, payoutHash, payoutKey, requiredText, type WithdrawalInput } from "./payout-recipient.js";
+import { centsMoney, decryptRecipient, encryptRecipient, moneyCents, normalizeWithdrawal, payoutHash, payoutKey, type WithdrawalInput } from "./payout-recipient.js";
 
 export function withdrawalView(row: WithdrawalRequestEntity) {
   return { id: row.id, ownerId: row.ownerId, amount: Number(row.amount), status: row.status, method: row.method,
     accountMasked: row.accountMasked, nameMasked: row.nameMasked, batchId: row.batchId, reason: row.reason,
     transferReference: row.transferReference, paidAt: row.paidAt?.toISOString() ?? null,
-    createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString() };
+    createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString(),
+    ownerName: null as string | null, teamName: null as string | null, assigneeId: row.assigneeId, assigneeName: null as string | null,
+    assignedAt: row.assignedAt?.toISOString() ?? null, registeredById: row.registeredById, reviewedById: row.reviewedById,
+    reviewedAt: row.reviewedAt?.toISOString() ?? null, reviewMode: row.reviewMode, latestRegistrationId: row.latestRegistrationId,
+    revision: row.revision, overdue: ["pending", "processing", "review_pending", "investigating"].includes(row.status) && Date.now() - row.createdAt.getTime() >= 86_400_000 };
 }
 @Injectable()
 export class PayoutService {
-  constructor(private readonly dataSource: DataSource, private readonly audit: AuditService) {}
+  constructor(private readonly dataSource: DataSource, private readonly audit: AuditService, private readonly evidence: PayoutEvidenceService) {}
 
   private admin(actor: PublicUser) {
-    if (actor.role !== "admin") throw new WalletFailure("FORBIDDEN", "仅管理员可操作财务提现", 403);
+    if (actor.role !== "admin" || actor.status !== "active") throw new WalletFailure("FORBIDDEN", "仅有效管理员可操作财务提现", 403);
   }
   private async lockedBalance(manager: EntityManager, ownerId: string) {
     await manager.getRepository(WalletBalanceEntity).createQueryBuilder().insert().values({ ownerId }).orIgnore().execute();
@@ -30,6 +34,9 @@ export class PayoutService {
   private async auditState(manager: EntityManager, actor: PublicUser, action: string, row: WithdrawalRequestEntity) {
     await this.audit.record(manager, actor, action, { id: row.ownerId, name: row.ownerId }, `提现 ${row.id}：${row.status}`, null,
       { requestId: row.id, batchId: row.batchId, status: row.status, amount: row.amount, accountMasked: row.accountMasked });
+    await manager.getRepository(WithdrawalEventEntity).insert({ id: `WE-${randomUUID()}`, requestId: row.id, action,
+      actorId: actor.id, actorName: actor.displayName, reason: action === "withdrawal.paid" ? null : row.reason, registrationId: row.latestRegistrationId,
+      details: { revision: row.revision, status: row.status, amount: row.amount, assigneeId: row.assigneeId, reviewMode: row.reviewMode } });
   }
   async submit(actor: PublicUser, input: WithdrawalInput) {
     if (actor.role !== "collector") throw new WalletFailure("FORBIDDEN", "仅数采人员可申请提现", 403);
@@ -57,85 +64,125 @@ export class PayoutService {
       return withdrawalView(row);
     });
   }
-  async list(actor: PublicUser, input: { page?: number; pageSize?: number; status?: WithdrawalStatus; ownerId?: string; batchId?: string } = {}) {
+  async list(actor: PublicUser, input: { page?: number; pageSize?: number; status?: WithdrawalStatus; ownerId?: string; batchId?: string; scope?: "mine"; overdue?: "true" | "false" } = {}) {
     if (actor.role !== "collector") this.admin(actor);
     const page = input.page ?? 1, pageSize = input.pageSize ?? 25;
     if (!Number.isInteger(page) || page < 1 || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100) throw new WalletFailure("VALIDATION", "分页参数无效", 400);
-    if (input.status && !["pending", "processing", "paid", "rejected", "failed"].includes(input.status)) throw new WalletFailure("VALIDATION", "状态无效", 400);
+    if (input.status && !["pending", "processing", "review_pending", "investigating", "paid", "rejected", "failed"].includes(input.status)) throw new WalletFailure("VALIDATION", "状态无效", 400);
     if (actor.role === "collector" && input.ownerId && input.ownerId !== actor.id) throw new WalletFailure("FORBIDDEN", "不可读取他人申请", 403);
     const query = this.dataSource.getRepository(WithdrawalRequestEntity).createQueryBuilder("request");
     const ownerId = actor.role === "collector" ? actor.id : input.ownerId;
     if (ownerId) query.andWhere("request.ownerId = :ownerId", { ownerId });
     if (input.status) query.andWhere("request.status = :status", { status: input.status });
     if (input.batchId) query.andWhere("request.batchId = :batchId", { batchId: input.batchId });
+    if (input.scope === "mine") query.andWhere("request.assigneeId = :actorId", { actorId: actor.id });
+    if (input.overdue === "true") query.andWhere("request.status IN (:...open) AND request.createdAt <= :cutoff", { open: ["pending", "processing", "review_pending", "investigating"], cutoff: new Date(Date.now() - 86_400_000) });
     const [rows, total] = await query.orderBy("request.createdAt", "DESC").addOrderBy("request.id", "DESC").skip((page - 1) * pageSize).take(pageSize).getManyAndCount();
-    return { requests: rows.map(withdrawalView), pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) } };
+    return { requests: await Promise.all(rows.map(row => this.view(this.dataSource.manager, row))), pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) } };
   }
-  async claim(actor: PublicUser, ids: string[]) {
+  private async view(manager: EntityManager, row: WithdrawalRequestEntity) {
+    const owner = await manager.getRepository(UserEntity).findOne({ where: { id: row.ownerId }, relations: { team: true } });
+    const assignee = row.assigneeId ? await manager.getRepository(UserEntity).findOneBy({ id: row.assigneeId }) : null;
+    return { ...withdrawalView(row), ownerName: owner?.displayName ?? null, teamName: owner?.team?.name ?? null, assigneeName: assignee?.displayName ?? null };
+  }
+  private async activeAdmin(manager: EntityManager, actor: PublicUser) {
     this.admin(actor);
-    if (!Array.isArray(ids) || ids.length < 1 || ids.length > 100 || new Set(ids).size !== ids.length || ids.some(id => typeof id !== "string" || id.length > 64)) throw new WalletFailure("VALIDATION", "请选择 1 至 100 条不同申请", 400);
+    const user = await manager.getRepository(UserEntity).findOneBy({ id: actor.id, role: "admin", status: "active" });
+    if (!user) throw new WalletFailure("FORBIDDEN", "需要有效管理员身份", 403);
+  }
+  private async lockedRequest(manager: EntityManager, id: string) {
+    const row = await manager.getRepository(WithdrawalRequestEntity).createQueryBuilder("request")
+      .addSelect("request.recipientEncrypted").where("request.id = :id", { id }).setLock("pessimistic_write").getOne();
+    if (!row) throw new WalletFailure("NOT_FOUND", "申请不存在", 404);
+    return row;
+  }
+  async detail(actor: PublicUser, id: string) {
     return this.dataSource.transaction(async manager => {
-      const repo = manager.getRepository(WithdrawalRequestEntity);
-      const rows = await repo.createQueryBuilder("request").where("request.id IN (:...ids)", { ids }).orderBy("request.id", "ASC").setLock("pessimistic_write").getMany();
-      if (rows.length !== ids.length || rows.some(row => row.status !== "pending" || row.batchId)) throw new WalletFailure("STATE_CONFLICT", "部分申请已被领取或不再待处理，请刷新；未创建批次", 409);
-      const batch = await manager.getRepository(WithdrawalBatchEntity).save({ id: `WB-${randomUUID()}`, createdBy: actor.id });
-      for (const row of rows) {
-        row.status = "processing"; row.batchId = batch.id;
-        await repo.save(row);
-        await this.auditState(manager, actor, "withdrawal.claimed", row);
-      }
-      return { batchId: batch.id, requests: rows.map(withdrawalView) };
+      await this.activeAdmin(manager, actor);
+      const row = await this.lockedRequest(manager, id);
+      const registrations = await manager.getRepository(WithdrawalRegistrationEntity).find({ where: { requestId: id }, order: { requestRevision: "ASC" } });
+      const events = await manager.getRepository(WithdrawalEventEntity).find({ where: { requestId: id }, order: { sequence: "ASC" } });
+      return { request: await this.view(manager, row),
+        registrations: registrations.map(r => ({ id: r.id, registeredById: r.registeredById, registeredByName: r.registeredByName, transferReference: r.transferReference, paidAt: r.paidAt.toISOString(), evidenceIds: r.evidenceIds, note: r.note, createdAt: r.createdAt.toISOString() })),
+        evidence: await this.evidence.listForRequest(manager, id),
+        timeline: events.map(e => ({ id: e.id, action: e.action, actorId: e.actorId, actorName: e.actorName, reason: e.reason, registrationId: e.registrationId, createdAt: e.createdAt.toISOString(),
+          evidenceIds: Array.isArray(e.details.evidenceIds) ? e.details.evidenceIds.filter((id): id is string => typeof id === "string") : [],
+          assignment: e.action === "withdrawal.assigned" && typeof e.details.newAssigneeId === "string" ? {
+            fromId: typeof e.details.oldAssigneeId === "string" ? e.details.oldAssigneeId : null,
+            fromName: typeof e.details.oldAssigneeName === "string" ? e.details.oldAssigneeName : null,
+            toId: e.details.newAssigneeId, toName: typeof e.details.newAssigneeName === "string" ? e.details.newAssigneeName : null,
+          } : null })) };
     });
   }
-  async exportBatch(actor: PublicUser, batchId: string) {
-    this.admin(actor);
-    const key = payoutKey();
+  private async moveReserve(manager: EntityManager, actor: PublicUser, row: WithdrawalRequestEntity) {
+    const balance = await this.lockedBalance(manager, row.ownerId), cents = moneyCents(row.amount);
+    if (moneyCents(balance.reservedBalance) < cents) throw new WalletFailure("BALANCE_CONFLICT", "预留余额异常，请核对", 409);
+    const before = { reservedBalance: balance.reservedBalance, availableBalance: balance.availableBalance, withdrawnBalance: balance.withdrawnBalance };
+    balance.reservedBalance = centsMoney(moneyCents(balance.reservedBalance) - cents);
+    balance.withdrawnBalance = centsMoney(moneyCents(balance.withdrawnBalance) + cents);
+    balance.cumulativeWithdrawn = centsMoney(moneyCents(balance.cumulativeWithdrawn) + cents);
+    await manager.getRepository(WalletTransactionEntity).insert({ id: `WT-${randomUUID()}`, ownerId: row.ownerId, type: "withdraw", amount: `-${row.amount}`, balanceAfter: balance.totalBalance, remark: `人工付款确认：${row.id}`, createdByAccountId: actor.id });
+    await manager.getRepository(WalletBalanceEntity).save(balance);
+    await this.audit.record(manager, actor, "withdrawal.reserve_paid", { id: row.id, name: row.id }, `提现 ${row.id}`, before,
+      { reservedBalance: balance.reservedBalance, availableBalance: balance.availableBalance, withdrawnBalance: balance.withdrawnBalance, requestId: row.id, registrationId: row.latestRegistrationId, revision: row.revision, reviewMode: row.reviewMode });
+  }
+  async listPayouts(actor: PublicUser, input: { page?: number; pageSize?: number; q?: string; status?: "unpaid" | "paid" | "all" } = {}) {
+    const page = input.page ?? 1, pageSize = input.pageSize ?? 25, status = input.status ?? "unpaid";
+    if (!Number.isInteger(page) || page < 1 || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100
+      || !["unpaid", "paid", "all"].includes(status) || (input.q !== undefined && (typeof input.q !== "string" || input.q.length > 200))) {
+      throw new WalletFailure("VALIDATION", "查询参数无效", 400);
+    }
     return this.dataSource.transaction(async manager => {
-      const batch = await manager.getRepository(WithdrawalBatchEntity).findOneBy({ id: batchId });
-      if (!batch) throw new WalletFailure("NOT_FOUND", "批次不存在", 404);
-      const rows = await manager.getRepository(WithdrawalRequestEntity).createQueryBuilder("request").addSelect("request.recipientEncrypted").where("request.batchId = :batchId", { batchId }).orderBy("request.id", "ASC").getMany();
-      const csvRows = [["request_id", "batch_id", "owner_id", "owner_name", "method", "recipient_name", "account_text", "bank_name", "amount_CNY", "submitted_at", "current_status", "notice"]];
-      for (const row of rows) {
-        const recipient = decryptRecipient(row.recipientEncrypted, row.id, key);
-        const owner = await manager.getRepository(UserEntity).findOneBy({ id: row.ownerId });
-        // Apostrophe is an intentional text marker, not an Excel formula. Import account_text as text and remove the marker before transfer.
-        csvRows.push([row.id, batchId, row.ownerId, owner?.displayName ?? row.ownerId, recipient.method, recipient.name, `'${recipient.account}`, recipient.bankName, row.amount, row.createdAt.toISOString(), row.status, "EXPORT IS NOT PAYMENT; reconcile request_id before transfer"]);
-      }
-      const csv = csvDocument(csvRows);
-      await this.audit.record(manager, actor, "withdrawal.exported", { id: batchId, name: batchId }, `导出提现批次 ${batchId}（${rows.length} 条），导出不是付款`, null, { batchId, count: rows.length });
-      return csv;
+      await this.activeAdmin(manager, actor);
+      const query = manager.getRepository(WithdrawalRequestEntity).createQueryBuilder("request")
+        .addSelect("request.recipientEncrypted").leftJoin(UserEntity, "owner", "owner.id = request.ownerId")
+        .leftJoin("owner.team", "team");
+      if (status === "unpaid") query.andWhere("request.status IN (:...statuses)", { statuses: ["pending", "processing", "review_pending", "investigating"] });
+      else if (status === "paid") query.andWhere("request.status = :status", { status });
+      const search = input.q?.trim();
+      if (search) query.andWhere("(strpos(lower(request.id), :search) > 0 OR strpos(lower(request.ownerId), :search) > 0 OR strpos(lower(owner.username), :search) > 0 OR strpos(lower(owner.displayName), :search) > 0 OR strpos(lower(team.name), :search) > 0)", { search: search.toLowerCase() });
+      const [rows, total] = await query.orderBy("request.createdAt", "DESC").addOrderBy("request.id", "DESC")
+        .skip((page - 1) * pageSize).take(pageSize).getManyAndCount();
+      const requests = [];
+      for (const row of rows) requests.push(await this.payoutView(manager, row));
+      await this.audit.record(manager, actor, "withdrawal.recipients_viewed", { id: actor.id, name: actor.displayName },
+        "查看提现收款表格", null, { requestIds: rows.map(row => row.id), page, pageSize, status });
+      return { requests, pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) } };
     });
   }
-  async transition(actor: PublicUser, id: string, input: { status: "paid" | "rejected" | "failed"; reason?: string; transferReference?: string; paidAt?: string; fundsNotTransferred?: boolean }) {
-    this.admin(actor);
-    if (!["paid", "rejected", "failed"].includes(input.status)) throw new WalletFailure("VALIDATION", "不支持的状态", 400);
-    const reason = input.status === "paid" ? null : requiredText(input.reason, 500);
-    const reference = input.status === "paid" ? requiredText(input.transferReference, 120) : null;
-    const paidAt = input.status === "paid" && input.paidAt ? new Date(input.paidAt) : null;
-    if (input.status === "paid" && (!paidAt || !Number.isFinite(paidAt.getTime()) || paidAt.getTime() > Date.now())) throw new WalletFailure("VALIDATION", "请提供实际付款时间（不可为未来）", 400);
-    if (input.status === "failed" && input.fundsNotTransferred !== true) throw new WalletFailure("VALIDATION", "必须经财务确认未实际转账或款项已退回后才能释放余额", 400);
+
+  private async payoutView(manager: EntityManager, row: WithdrawalRequestEntity) {
+    const confirmedById = row.status === "paid" ? row.reviewedById : null;
+    const confirmer = confirmedById ? await manager.getRepository(UserEntity).findOneBy({ id: confirmedById }) : null;
+    const event = row.status === "paid" ? await manager.getRepository(WithdrawalEventEntity).findOne({
+      where: { requestId: row.id, action: "withdrawal.paid" }, order: { sequence: "DESC" },
+    }) : null;
+    return { ...await this.view(manager, row), recipient: decryptRecipient(row.recipientEncrypted, row.id, payoutKey()),
+      confirmedById: confirmedById ?? event?.actorId ?? null,
+      confirmedByName: event?.actorName ?? confirmer?.displayName ?? null,
+      confirmedAt: row.status === "paid" ? (row.reviewedAt ?? event?.createdAt)?.toISOString() ?? null : null };
+  }
+
+  async confirm(actor: PublicUser, id: string) {
     return this.dataSource.transaction(async manager => {
-      const repo = manager.getRepository(WithdrawalRequestEntity);
-      const row = await repo.findOne({ where: { id }, lock: { mode: "pessimistic_write" } });
-      if (!row) throw new WalletFailure("NOT_FOUND", "申请不存在", 404);
-      if (row.status === input.status && row.reason === reason && row.transferReference === reference && (row.paidAt?.getTime() ?? null) === (paidAt?.getTime() ?? null)) return withdrawalView(row);
-      const expected = input.status === "rejected" ? "pending" : "processing";
-      if (row.status !== expected) throw new WalletFailure("STATE_CONFLICT", "申请状态已变化，不能重复付款或退款", 409);
-      if (paidAt && paidAt < row.createdAt) throw new WalletFailure("VALIDATION", "付款时间不能早于申请时间", 400);
-      const balance = await this.lockedBalance(manager, row.ownerId);
-      const cents = moneyCents(row.amount);
-      if (moneyCents(balance.reservedBalance) < cents) throw new WalletFailure("BALANCE_CONFLICT", "预留余额异常，请财务核对", 409);
-      balance.reservedBalance = centsMoney(moneyCents(balance.reservedBalance) - cents);
-      if (input.status === "paid") {
-        balance.withdrawnBalance = centsMoney(moneyCents(balance.withdrawnBalance) + cents);
-        balance.cumulativeWithdrawn = centsMoney(moneyCents(balance.cumulativeWithdrawn) + cents);
-        await manager.getRepository(WalletTransactionEntity).save({ id: `WT-${randomUUID()}`, ownerId: row.ownerId, type: "withdraw", amount: `-${row.amount}`, balanceAfter: balance.totalBalance, remark: `人工付款已确认：${row.id}`, createdByAccountId: actor.id });
-      } else balance.availableBalance = centsMoney(moneyCents(balance.availableBalance) + cents);
-      row.status = input.status; row.reason = reason; row.transferReference = reference; row.paidAt = paidAt;
-      await manager.getRepository(WalletBalanceEntity).save(balance);
-      await repo.save(row);
-      await this.auditState(manager, actor, `withdrawal.${input.status}`, row);
-      return withdrawalView(row);
+      await this.activeAdmin(manager, actor);
+      const row = await this.lockedRequest(manager, id);
+      if (row.status !== "paid") {
+        if (!["pending", "processing", "review_pending", "investigating"].includes(row.status)) {
+          throw new WalletFailure("STATE_CONFLICT", "已终结的申请不可确认打款", 409);
+        }
+        row.reviewedById = actor.id;
+        row.reviewedAt = new Date();
+        row.reviewMode = "manual";
+        row.revision++;
+        await this.moveReserve(manager, actor, row);
+        row.status = "paid";
+        await manager.getRepository(WithdrawalRequestEntity).save(row);
+        await this.auditState(manager, actor, "withdrawal.paid", row);
+      }
+      const result = await this.payoutView(manager, row);
+      await this.audit.record(manager, actor, "withdrawal.recipient_viewed", { id, name: id }, "查看提现收款信息", null, { requestId: id });
+      return result;
     });
   }
 }

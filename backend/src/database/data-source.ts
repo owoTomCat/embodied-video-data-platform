@@ -94,9 +94,15 @@ import { SceneSingleLayer2026091500001 } from "./migrations/202609150001-scene-s
 import { TaskSceneBinding2026091600001 } from "./migrations/202609160001-task-scene-binding.js";
 import { PriceFieldRename2026091800001 } from "./migrations/202609180001-price-field-rename.js";
 import { TaskSegmentFkCascade2026091900001 } from "./migrations/202609190001-task-segment-fk-cascade.js";
-import { WithdrawalBatchEntity, WithdrawalRequestEntity } from "./entities/withdrawal.entity.js";
+import { WithdrawalBatchEntity, WithdrawalRequestEntity, WithdrawalRegistrationEntity, WithdrawalEventEntity } from "./entities/withdrawal.entity.js";
+import { WithdrawalEvidenceEntity } from "./entities/withdrawal-evidence.entity.js";
+import { PayoutSupervision2026092200001 } from "./migrations/202609220001-payout-supervision.js";
+import { PayoutEvidence2026092300001 } from "./migrations/202609230001-payout-evidence.js";
+import { SimplePayouts2026092400001 } from "./migrations/202609240001-simple-payouts.js";
 import { ManualPayouts2026092000001 } from "./migrations/202609200001-manual-payouts.js";
 import { NextDaySettlement2026092100001 } from "./migrations/202609210001-next-day-settlement.js";
+import { SavedPayoutRecipientEntity } from "./entities/saved-payout-recipient.entity.js";
+import { SavedPayoutRecipients2026092500001 } from "./migrations/202609250001-saved-payout-recipients.js";
 
 export const identityEntities = [
   TeamEntity,
@@ -131,6 +137,10 @@ export const identityEntities = [
   WalletTransactionEntity,
   WithdrawalBatchEntity,
   WithdrawalRequestEntity,
+  WithdrawalRegistrationEntity,
+  WithdrawalEventEntity,
+  WithdrawalEvidenceEntity,
+  SavedPayoutRecipientEntity,
   SceneCategoryPricingEntity,
   SceneEntity,
   SceneLibraryEntity,
@@ -209,6 +219,10 @@ export function createDataSource(
       TaskSegmentFkCascade2026091900001,
       ManualPayouts2026092000001,
       NextDaySettlement2026092100001,
+      PayoutSupervision2026092200001,
+      PayoutEvidence2026092300001,
+      SimplePayouts2026092400001,
+      SavedPayoutRecipients2026092500001,
     ],
     synchronize: false,
     logging: false,

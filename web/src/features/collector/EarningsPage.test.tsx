@@ -9,12 +9,14 @@ import { EarningsPage } from "./EarningsPage";
 
 const walletApi = vi.hoisted(() => ({
   getMyWallet: vi.fn(),
+  getSavedPayoutRecipients: vi.fn(),
   withdrawWallet: vi.fn(),
   listWithdrawals: vi.fn(),
 }));
 
 vi.mock("../../wallet/client/walletApi", () => ({
   getMyWallet: walletApi.getMyWallet,
+  getSavedPayoutRecipients: walletApi.getSavedPayoutRecipients,
   withdrawWallet: walletApi.withdrawWallet,
   listWithdrawals: walletApi.listWithdrawals,
 }));
@@ -80,7 +82,7 @@ function renderPage() {
         accounts={demoAccounts}
         teams={[]}
       >
-        <EarningsPage />
+        <EarningsPage navigate={vi.fn()} />
       </IdentityProvider>
     </InteractionProvider>,
   );
@@ -90,6 +92,7 @@ describe("collector wallet page", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     walletApi.getMyWallet.mockResolvedValue(detail);
+    walletApi.getSavedPayoutRecipients.mockResolvedValue([]);
     walletApi.listWithdrawals.mockResolvedValue({ requests: [], pagination: { page: 1, pageSize: 25, total: 0, totalPages: 1 } });
     walletApi.withdrawWallet.mockResolvedValue({ id: "WR-test", status: "pending" });
   });

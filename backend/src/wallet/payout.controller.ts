@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Header, HttpCode, Param, Post, Query, UseFilters, UseGuards } from "@nestjs/common";
 import { Type } from "class-transformer";
-import { ArrayMaxSize, ArrayMinSize, ArrayUnique, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min } from "class-validator";
+import { IsIn, IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min } from "class-validator";
 import type { PublicUser } from "../auth/auth.types.js";
 import { CurrentUser } from "../auth/current-user.decorator.js";
 import { SessionGuard } from "../auth/session.guard.js";
@@ -20,19 +20,17 @@ export class SubmitWithdrawalDto {
 export class WithdrawalQueryDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) page?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) pageSize?: number;
-  @IsOptional() @IsIn(["pending", "processing", "paid", "rejected", "failed"]) status?: WithdrawalStatus;
+  @IsOptional() @IsIn(["pending", "processing", "review_pending", "investigating", "paid", "rejected", "failed"]) status?: WithdrawalStatus;
   @IsOptional() @IsString() @MaxLength(64) ownerId?: string;
   @IsOptional() @IsString() @MaxLength(64) batchId?: string;
+  @IsOptional() @IsIn(["mine"]) scope?: "mine";
+  @IsOptional() @IsIn(["true", "false"]) overdue?: "true" | "false";
 }
-export class ClaimWithdrawalsDto {
-  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(100) @ArrayUnique() @IsString({ each: true }) @MaxLength(64, { each: true }) ids!: string[];
-}
-export class TransitionWithdrawalDto {
-  @IsIn(["paid", "rejected", "failed"]) status!: "paid" | "rejected" | "failed";
-  @IsOptional() @IsString() @MaxLength(500) reason?: string;
-  @IsOptional() @IsString() @MaxLength(120) transferReference?: string;
-  @IsOptional() @IsDateString() paidAt?: string;
-  @IsOptional() @IsBoolean() fundsNotTransferred?: boolean;
+export class PayoutQueryDto {
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) page?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) pageSize?: number;
+  @IsOptional() @IsString() @MaxLength(200) q?: string;
+  @IsOptional() @IsIn(["unpaid", "paid", "all"]) status?: "unpaid" | "paid" | "all";
 }
 @Controller("wallet")
 @UseGuards(SessionGuard)
@@ -45,14 +43,10 @@ export class PayoutController {
   }
   @Get("withdrawals") @Header("Cache-Control", "no-store")
   list(@CurrentUser() actor: PublicUser, @Query() query: WithdrawalQueryDto) { return this.payouts.list(actor, query); }
-  @Post("withdrawal-batches") @HttpCode(200) @UseGuards(AllowedOriginGuard)
-  claim(@CurrentUser() actor: PublicUser, @Body() input: ClaimWithdrawalsDto) { return this.payouts.claim(actor, input.ids); }
-  // Explicit POST export: authenticated, origin checked and audited every time, including re-downloads.
-  @Post("withdrawal-batches/:id/export") @HttpCode(200) @UseGuards(AllowedOriginGuard)
-  @Header("Content-Type", "text/csv; charset=utf-8") @Header("Content-Disposition", 'attachment; filename="manual-payouts.csv"') @Header("Cache-Control", "no-store")
-  export(@CurrentUser() actor: PublicUser, @Param("id") id: string) { return this.payouts.exportBatch(actor, id); }
-  @Post("withdrawals/:id/status") @HttpCode(200) @UseGuards(AllowedOriginGuard)
-  async transition(@CurrentUser() actor: PublicUser, @Param("id") id: string, @Body() input: TransitionWithdrawalDto) {
-    return { request: await this.payouts.transition(actor, id, input) };
-  }
+  @Get("withdrawals/:id") @Header("Cache-Control", "no-store")
+  detail(@CurrentUser() actor: PublicUser, @Param("id") id: string) { return this.payouts.detail(actor, id); }
+  @Get("payouts") @Header("Cache-Control", "no-store")
+  payoutsTable(@CurrentUser() actor: PublicUser, @Query() query: PayoutQueryDto) { return this.payouts.listPayouts(actor, query); }
+  @Post("payouts/:id/confirm") @HttpCode(200) @UseGuards(AllowedOriginGuard) @Header("Cache-Control", "no-store")
+  async confirm(@CurrentUser() actor: PublicUser, @Param("id") id: string) { return { request: await this.payouts.confirm(actor, id) }; }
 }

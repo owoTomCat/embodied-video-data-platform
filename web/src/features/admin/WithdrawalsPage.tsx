@@ -1,102 +1,117 @@
 "use client";
-import { useEffect, useState, type FormEvent } from "react";
-import { claimWithdrawals, exportWithdrawalBatch, listWithdrawals, updateWithdrawal } from "../../wallet/client/walletApi";
-import { withdrawalLabels, type WithdrawalList, type WithdrawalRequest, type WithdrawalStatus } from "../../wallet/contracts";
-import { useInteractions } from "../../interactions/InteractionContext";
-import { Modal } from "../../components/Modal";
+
+import { Check, CheckCircle2, ChevronLeft, ChevronRight, CircleDollarSign, Copy, Inbox, Landmark, LoaderCircle, RefreshCw, Search, ShieldCheck, Wallet, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { StatusBadge } from "../../components/StatusBadge";
+import { confirmPayout, listPayouts } from "../../wallet/client/walletApi";
+import { shanghaiTime, withdrawalLabels, type PayoutList, type PayoutRequest, type PayoutStatus } from "../../wallet/contracts";
+
+const tabs = { unpaid: "待打款", paid: "已打款", all: "全部" } as const;
+const titles = { unpaid: "待打款申请", paid: "已打款记录", all: "全部提现记录" } as const;
+const money = new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const date = new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" });
+const clock = new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+
+function PayoutTime({ value }: { value: string }) {
+  const instant = new Date(value);
+  return <time className="payout-time" dateTime={value} title={shanghaiTime(value)}><span>{date.format(instant)}</span><small>{clock.format(instant)} · 上海</small></time>;
+}
 
 export function WithdrawalsPage() {
-  const { notify } = useInteractions();
-  const [result, setResult] = useState<{ requestKey: string; data: WithdrawalList | null; error: string } | null>(null);
+  const [status, setStatus] = useState<PayoutStatus>("unpaid");
   const [page, setPage] = useState(1);
-  const [status, setStatus] = useState<WithdrawalStatus | "">("pending");
-  const [ownerId, setOwnerId] = useState("");
-  const [batchFilter, setBatchFilter] = useState("");
-  const [exportId, setExportId] = useState("");
-  const [selected, setSelected] = useState<{ requestKey: string; ids: string[] } | null>(null);
+  const [pageSize, setPageSize] = useState(20);
+  const [search, setSearch] = useState("");
+  const [q, setQ] = useState("");
   const [revision, setRevision] = useState(0);
-  const [busy, setBusy] = useState(false);
-  const [action, setAction] = useState<{ row: WithdrawalRequest; status: "paid" | "rejected" | "failed" } | null>(null);
-  const [reason, setReason] = useState("");
-  const [reference, setReference] = useState("");
-  const [paidAt, setPaidAt] = useState("");
+  const [result, setResult] = useState<{ viewKey: string; requestKey: string; data: PayoutList | null; error: string; loadedAt: number | null } | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const pending = useRef(false);
+  const [message, setMessage] = useState("");
+  const [actionError, setActionError] = useState("");
   const [confirmed, setConfirmed] = useState(false);
-  const requestKey = JSON.stringify([page, status, ownerId, batchFilter, revision]);
-  const data = result?.requestKey === requestKey ? result.data : null;
-  const error = result?.requestKey === requestKey ? result.error : "";
-  const selection = data && selected?.requestKey === requestKey ? selected.ids : [];
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const viewKey = JSON.stringify([page, pageSize, status, q]);
+  const requestKey = JSON.stringify([viewKey, revision]);
+  const data = result?.viewKey === viewKey ? result.data : null;
+  const error = result?.viewKey === viewKey ? result.error : "";
+  const loading = result?.requestKey !== requestKey;
+  const pageAmount = data?.requests.reduce((sum, row) => sum + Math.round(row.amount * 100), 0);
+  const total = data?.pagination.total ?? 0;
+  const totalPages = Math.max(1, data?.pagination.totalPages ?? 1);
+
   useEffect(() => {
     let active = true;
-    listWithdrawals({ page, status: status || undefined, ownerId: ownerId.trim() || undefined, batchId: batchFilter.trim() || undefined })
-      .then(data => { if (active) setResult({ requestKey, data, error: "" }); })
-      .catch(() => { if (active) setResult({ requestKey, data: null, error: "提现申请读取失败，请刷新或检查管理员权限" }); });
+    listPayouts({ page, pageSize, status, q }).then(data => {
+      if (!active) return;
+      if (page > Math.max(1, data.pagination.totalPages)) { setPage(Math.max(1, data.pagination.totalPages)); return; }
+      setResult({ viewKey, requestKey, data, error: "", loadedAt: Date.now() });
+    }).catch(error => {
+      if (active) setResult(current => ({ viewKey, requestKey, data: current?.viewKey === viewKey ? current.data : null, error: error instanceof Error ? error.message : "列表读取失败", loadedAt: current?.viewKey === viewKey ? current.loadedAt : null }));
+    });
     return () => { active = false; };
-  }, [page, status, ownerId, batchFilter, revision, requestKey]);
-  async function claim() {
-    if (busy || !selection.length || !window.confirm(`领取 ${selection.length} 条申请并创建不可变批次？金额仍预留；导出不是付款。`)) return;
-    setBusy(true);
+  }, [viewKey, requestKey, page, pageSize, status, q]);
+
+  function clearSearch() { setSearch(""); setQ(""); setPage(1); }
+  async function confirm(row: PayoutRequest) {
+    if (pending.current || loading || error || ["paid", "rejected", "failed"].includes(row.status)) return;
+    pending.current = true;
+    setBusy(row.id); setActionError(""); setMessage(""); setConfirmed(false);
     try {
-      const result = await claimWithdrawals(selection);
-      setExportId(result.batchId); setRevision(value => value + 1);
-      notify("success", `批次已创建：${result.batchId}。尚未付款，请显式导出。`);
-    } catch (error) { notify("error", error instanceof Error ? error.message : "领取失败"); }
-    finally { setBusy(false); }
+      const { request } = await confirmPayout(row.id);
+      setResult(current => current?.viewKey === viewKey && current.data ? { ...current, data: { ...current.data, requests: current.data.requests.map(item => item.id === request.id ? request : item) } } : current);
+      setMessage(`${request.ownerName ?? request.ownerId} · ¥${money.format(request.amount)} 已记录为已打款，由 ${request.confirmedByName ?? request.confirmedById ?? "历史记录账号"} 确认。`);
+      setConfirmed(true);
+      setRevision(value => value + 1);
+    } catch (error) { setActionError(error instanceof Error ? error.message : "暂时无法确认记录结果，请刷新核对，勿再次转账。"); }
+    finally { pending.current = false; setBusy(null); }
   }
-  async function exportBatch() {
-    const id = exportId.trim();
-    if (busy || !id || !window.confirm(`导出/重新导出批次 ${id}？文件含完整收款信息。导出不是付款；重复导出须按申请 ID 核对，禁止重复转账。`)) return;
-    setBusy(true);
-    try {
-      const blob = await exportWithdrawalBatch(id);
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a"); anchor.href = url; anchor.download = "manual-payouts.csv";
-      document.body.appendChild(anchor); anchor.click(); anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
-      notify("success", "已导出，未改变付款状态。请妥善保管并在完成核对后安全删除文件。");
-    } catch (error) { notify("error", error instanceof Error ? error.message : "导出失败"); }
-    finally { setBusy(false); }
+  async function copyAccount(row: PayoutRequest) {
+    setActionError("");
+    try { await navigator.clipboard.writeText(row.recipient.account); setCopiedId(row.id); setMessage(`${row.recipient.name} 的收款账号已复制。`); setConfirmed(false); }
+    catch { setActionError("复制失败，请手动选择并复制表格中的收款账号。"); }
   }
-  function openAction(row: WithdrawalRequest, next: "paid" | "rejected" | "failed") {
-    setAction({ row, status: next }); setReason(""); setReference(""); setPaidAt(""); setConfirmed(false);
-  }
-  async function submitAction(event: FormEvent) {
-    event.preventDefault();
-    if (!action || busy || !confirmed) return;
-    setBusy(true);
-    try {
-      await updateWithdrawal(action.row.id, action.status === "paid" ? { status: "paid", transferReference: reference.trim(), paidAt: new Date(paidAt).toISOString() }
-        : { status: action.status, reason: reason.trim(), ...(action.status === "failed" ? { fundsNotTransferred: true } : {}) });
-      setAction(null); setRevision(value => value + 1); notify("success", "财务状态已更新");
-    } catch (error) { notify("error", error instanceof Error ? error.message : "更新失败"); }
-    finally { setBusy(false); }
-  }
-  return <div className="page-stack">
-    <div className="page-heading"><div><p className="page-kicker">管理员财务</p><h1>人工提现</h1><span>领取 → 显式导出 → 财务在平台外转账 → 核对凭证并确认付款</span></div></div>
-    <section className="content-card"><h2>导出不是付款</h2><p>本平台不调用支付接口。处理中资金持续预留；银行结果不明确时不要标记失败或退款。仅确认未转账或款项已退回，才能释放预留。</p>
-      <p>CSV 的 account_text 列以单引号标记文本，防止长账号被科学计数或舍入；导入为文本，转账前去掉首个标记单引号。不要把文件用于自动支付导入，须人工核对账号和金额。其他文本字段也会防护表格公式。</p>
-      <div className="modal-form wallet-withdraw-form"><label>批次 ID<input aria-label="导出批次 ID" value={exportId} onChange={event => setExportId(event.target.value)} maxLength={64} /></label><button className="button button-primary" disabled={busy || !exportId.trim()} onClick={exportBatch}>显式导出 / 重新导出批次</button></div>
+
+  return <div className="page-stack payout-page">
+    <div className="page-heading payout-heading">
+      <div className="payout-heading-title"><span className="payout-heading-icon"><CircleDollarSign size={25} aria-hidden="true" /></span><div><p className="page-kicker">财务管理</p><h1>提现打款</h1><span>核对收款资料，线下转账后勾选已打款。</span></div></div>
+      <span className="payout-security"><ShieldCheck size={15} aria-hidden="true" />管理员专属 · 操作留痕</span>
+    </div>
+
+    {message && <div className="payout-feedback payout-feedback-success" role="status"><CheckCircle2 size={18} aria-hidden="true" /><span>{message}</span>{confirmed && status !== "paid" && <button type="button" className="table-action" disabled={busy !== null} onClick={() => { setStatus("paid"); setPage(1); }}>查看已打款</button>}<button type="button" className="payout-dismiss" aria-label="关闭操作提示" onClick={() => setMessage("")}><X size={16} aria-hidden="true" /></button></div>}
+    {actionError && <div className="payout-feedback payout-feedback-error" role="alert"><span>{actionError}</span><button type="button" className="payout-dismiss" aria-label="关闭错误提示" onClick={() => setActionError("")}><X size={16} aria-hidden="true" /></button></div>}
+
+    <section className="content-card table-card payout-card" aria-label="提现申请">
+      <div className="payout-card-heading"><div><h2>{titles[status]} <span className="payout-count">{data ? `${total} 笔` : "—"}</span></h2><p>{status === "paid" ? "每笔记录保留首次勾选的管理员账号与时间。" : status === "unpaid" ? "请先完成实际转账，再在对应申请右侧勾选。" : "集中查看提现申请与人工打款记录。"}</p></div><div className="payout-refresh"><span>{data && result?.loadedAt ? `更新于 ${clock.format(result.loadedAt)}` : ""}</span><button type="button" className="button button-secondary" disabled={busy !== null || loading} onClick={() => setRevision(value => value + 1)}><RefreshCw size={14} className={loading ? "payout-spinning" : undefined} aria-hidden="true" />刷新</button></div></div>
+      <div className="payout-toolbar">
+        <div className="segmented-control" aria-label="打款状态">{Object.entries(tabs).map(([value, label]) => <button type="button" key={value} className={status === value ? "active" : undefined} aria-pressed={status === value} disabled={busy !== null} onClick={() => { setStatus(value as PayoutStatus); setPage(1); }}>{label}</button>)}</div>
+        <form className="payout-search" role="search" onSubmit={event => { event.preventDefault(); if (pending.current) return; setQ(search.trim()); setPage(1); setRevision(value => value + 1); }}>
+          <label className="sr-only" htmlFor="payout-search">搜索申请 / 用户 / 姓名 / 团队</label><Search size={16} aria-hidden="true" /><input id="payout-search" placeholder="搜索申请人、团队或申请号" value={search} disabled={busy !== null} onChange={event => setSearch(event.target.value)} />
+          {search && <button type="button" className="payout-search-clear" aria-label="清除搜索" disabled={busy !== null} onClick={clearSearch}><X size={15} aria-hidden="true" /></button>}<button type="submit" className="button button-primary" disabled={busy !== null}>搜索</button>
+        </form>
+      </div>
+      {q && <div className="payout-filter-note">搜索结果 <span>“{q}”</span><button type="button" disabled={busy !== null} onClick={clearSearch}>清除筛选</button></div>}
+      {error && <div className="payout-feedback payout-feedback-error" role="alert"><span>{error}。请刷新核对最新状态。</span><button type="button" className="button button-secondary" disabled={loading} onClick={() => setRevision(value => value + 1)}>重新加载</button></div>}
+      {loading && <p className="payout-loading" role="status"><LoaderCircle size={15} className="payout-spinning" aria-hidden="true" />{data ? "正在更新列表…" : "正在读取申请…"}</p>}
+      <div className="table-scroll payout-table-scroll"><table className={`data-table payout-table${status !== "unpaid" ? " payout-table-history" : ""}`} aria-busy={loading}>
+        <caption className="sr-only">提现收款明细，金额单位为人民币</caption>
+        <thead><tr><th scope="col">申请人 / 团队</th><th scope="col">收款人</th><th scope="col">收款账号 / 开户行</th><th scope="col" className="payout-amount">提现金额</th><th scope="col">申请时间</th>{status !== "unpaid" && <th scope="col">勾选记录</th>}<th scope="col" className="payout-check">打款确认</th></tr></thead>
+        <tbody>{data?.requests.map(row => {
+          const paid = row.status === "paid";
+          const closed = ["rejected", "failed"].includes(row.status);
+          return <tr key={row.id} className={paid ? "payout-row-paid" : undefined}>
+            <td><strong className="payout-person">{row.ownerName ?? row.ownerId}</strong><span className="payout-secondary">{row.teamName ?? "未分配团队"} · {row.ownerId}</span><span className="payout-request-id" title={`申请号：${row.id}`}>{row.id}</span></td>
+            <td><strong className="payout-recipient">{row.recipient.name}</strong><StatusBadge label={row.recipient.method === "bank" ? "银行卡" : "支付宝"} tone={row.recipient.method === "bank" ? "neutral" : "info"} /></td>
+            <td><div className="payout-account-line"><span className="payout-account">{row.recipient.account}</span><button type="button" className={`table-action payout-copy${copiedId === row.id ? " is-copied" : ""}`} aria-label={`复制收款账号 ${row.id}`} onClick={() => void copyAccount(row)}>{copiedId === row.id ? <Check size={13} aria-hidden="true" /> : <Copy size={13} aria-hidden="true" />}{copiedId === row.id ? "已复制" : "复制"}</button></div><span className="payout-bank">{row.recipient.method === "bank" ? <Landmark size={12} aria-hidden="true" /> : <Wallet size={12} aria-hidden="true" />}{row.recipient.method === "bank" ? row.recipient.bankName || "银行信息未记录" : "支付宝收款账号"}</span></td>
+            <td className="payout-amount"><strong><small>¥</small>{money.format(row.amount)}</strong></td>
+            <td><PayoutTime value={row.createdAt} /></td>
+            {status !== "unpaid" && <td>{row.confirmedById || row.confirmedByName ? <><strong className="payout-recipient">{row.confirmedByName ?? row.confirmedById}</strong><span className="payout-secondary">{row.confirmedById}</span></> : <span className="payout-secondary">{row.confirmedAt ? "历史账号未记录" : "—"}</span>}{row.confirmedAt && <PayoutTime value={row.confirmedAt} />}</td>}
+            <td className="payout-check"><label className={`payout-confirm${paid ? " is-paid" : ""}${closed ? " is-closed" : ""}`}><input type="checkbox" aria-label={`已打款 ${row.id}`} checked={paid} disabled={busy !== null || loading || !!error || paid || closed} onChange={() => void confirm(row)} /><span>{busy === row.id ? "记录中…" : paid ? "已打款" : closed ? "已关闭" : "标记已打款"}</span></label>{(closed || ["review_pending", "investigating"].includes(row.status)) && <small className="payout-row-note">{withdrawalLabels[row.status]}</small>}</td>
+          </tr>;
+        })}{data?.requests.length === 0 && !loading && <tr><td colSpan={status === "unpaid" ? 6 : 7}><div className="empty-state payout-empty"><Inbox size={32} aria-hidden="true" /><strong>暂无匹配申请</strong><span>{q ? "试试申请人姓名、团队或完整申请号。" : status === "unpaid" ? "用户提交提现后，申请会显示在这里。" : "完成打款后，可在这里查询操作记录。"}</span>{q && <button type="button" className="table-action" onClick={clearSearch}>查看全部申请人</button>}</div></td></tr>}</tbody>
+      </table></div>
+      <div className="payout-footer"><div className="payout-page-total"><span>本页申请金额</span><strong>{pageAmount === undefined ? "—" : `¥${money.format(pageAmount / 100)}`}</strong></div><div className="payout-pagination"><label>每页<select aria-label="每页条数" value={pageSize} disabled={busy !== null || loading} onChange={event => { setPageSize(Number(event.target.value)); setPage(1); }}>{[20, 50, 100].map(size => <option key={size} value={size}>{size} 条</option>)}</select></label><span>{data ? `${total ? (page - 1) * pageSize + 1 : 0}–${Math.min(page * pageSize, total)} / ${total} 笔` : "—"}</span><button type="button" className="button button-secondary" aria-label="上一页" disabled={busy !== null || loading || !data || page <= 1} onClick={() => setPage(page - 1)}><ChevronLeft size={16} aria-hidden="true" /></button><span>{page} / {totalPages}</span><button type="button" className="button button-secondary" aria-label="下一页" disabled={busy !== null || loading || !data || page >= totalPages} onClick={() => setPage(page + 1)}><ChevronRight size={16} aria-hidden="true" /></button></div></div>
     </section>
-    <section className="content-card table-card">
-      <div className="card-heading"><h2>提现申请</h2><button className="button button-primary" disabled={busy || !selection.length} onClick={claim}>领取所选并创建批次（{selection.length}）</button></div>
-      <div className="filter-bar modal-form wallet-withdraw-form"><label>状态<select aria-label="提现状态" value={status} onChange={event => { setStatus(event.target.value as WithdrawalStatus | ""); setPage(1); }}><option value="">全部</option>{Object.entries(withdrawalLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
-        <label>数采用户 ID<input value={ownerId} onChange={event => { setOwnerId(event.target.value); setPage(1); }} maxLength={64} /></label>
-        <label>筛选批次 ID<input value={batchFilter} onChange={event => { setBatchFilter(event.target.value); setPage(1); }} maxLength={64} /></label><button className="button button-secondary" onClick={() => setRevision(value => value + 1)}>刷新</button></div>
-      {error && <p role="alert">{error}</p>}
-      <div className="table-scroll"><table className="data-table"><thead><tr><th>选择</th><th>申请 / 用户</th><th>提交时间</th><th>收款信息（脱敏）</th><th>金额</th><th>状态 / 结果</th><th>批次 / 操作</th></tr></thead><tbody>
-        {data?.requests.map(row => <tr key={row.id}><td><input type="checkbox" aria-label={`选择 ${row.id}`} disabled={busy || row.status !== "pending"} checked={selection.includes(row.id)} onChange={event => setSelected({ requestKey, ids: event.target.checked ? [...selection, row.id] : selection.filter(id => id !== row.id) })} /></td><td>{row.id}<small className="row-sub">{row.ownerId}</small></td><td>{new Date(row.createdAt).toLocaleString()}</td><td>{row.method === "bank" ? "银行账户" : "支付宝"} {row.accountMasked} / {row.nameMasked}</td><td>{row.amount.toFixed(2)} 元</td><td>{withdrawalLabels[row.status]}<small className="row-sub">{row.reason ?? row.transferReference}{row.paidAt && ` / ${new Date(row.paidAt).toLocaleString()}`}</small></td><td>
-          {row.batchId && <button className="table-action" onClick={() => setExportId(row.batchId!)}>{row.batchId}（选择导出）</button>}
-          {row.status === "pending" && <button className="table-action" disabled={busy} onClick={() => openAction(row, "rejected")}>拒绝并退回余额</button>}
-          {row.status === "processing" && <><button className="table-action" disabled={busy} onClick={() => openAction(row, "paid")}>确认实际付款</button><button className="table-action" disabled={busy} onClick={() => openAction(row, "failed")}>确认未付 / 已退回</button></>}
-        </td></tr>)}
-        {data?.requests.length === 0 && <tr><td colSpan={7}>暂无匹配申请</td></tr>}
-      </tbody></table></div>
-      <div className="card-heading"><button disabled={page <= 1} onClick={() => setPage(page - 1)}>上一页</button><span>第 {page} / {data?.pagination.totalPages ?? 1} 页，共 {data?.pagination.total ?? 0} 条</span><button disabled={!data || page >= data.pagination.totalPages} onClick={() => setPage(page + 1)}>下一页</button></div>
-    </section>
-    {action && <Modal open title={withdrawalLabels[action.status]} onClose={() => { if (!busy) setAction(null); }}><form className="modal-form" onSubmit={submitAction}>
-      <p>{action.row.id} / {action.row.amount.toFixed(2)} 元 / {action.row.accountMasked}</p>
-      {action.status === "paid" ? <><label>实际转账凭证 / 交易参考号<input aria-label="转账参考号" value={reference} onChange={event => setReference(event.target.value)} maxLength={120} required /></label><label>实际付款时间（本地时区）<input aria-label="付款时间" type="datetime-local" value={paidAt} onChange={event => setPaidAt(event.target.value)} required /></label></>
-        : <label>原因（不要填写完整收款账号等敏感信息）<textarea aria-label="处理原因" value={reason} onChange={event => setReason(event.target.value)} maxLength={500} required /></label>}
-      <label className="checkbox-field"><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} required />{action.status === "paid" ? "我已核对银行/支付宝记录，确认款项实际支付；此操作不是发起支付" : action.status === "failed" ? "财务已确认未转账或款项已退回（不是状态未知），允许释放预留余额" : "确认拒绝此待处理申请并退回预留余额"}</label>
-      <button className="button button-primary" disabled={busy || !confirmed} type="submit">提交财务确认</button>
-    </form></Modal>}
+    <p className="payout-footnote"><ShieldCheck size={14} aria-hidden="true" /><span>收款资料仅供管理员打款使用，请勿外传。勾选后不可取消；勾选时间为平台记录时间，不代表银行到账核验。</span></p>
   </div>;
 }

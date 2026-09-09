@@ -423,8 +423,6 @@ export class TasksService {
     }
     if (input.sceneName !== undefined) {
       task.sceneName = input.sceneName.trim();
-      // 场景变化后，已确认的规范化要求可能不再适用，需要重新规范化
-      task.normalizationStatus = "pending";
     }
     if (input.taskType !== undefined) {
       task.taskType = input.taskType;
@@ -434,7 +432,6 @@ export class TasksService {
     }
     if (input.rawRequirements !== undefined) {
       task.rawRequirements = input.rawRequirements.trim();
-      task.normalizationStatus = "pending";
     }
     if (input.pricePerHour !== undefined) {
       task.pricePerHour =
@@ -442,6 +439,12 @@ export class TasksService {
           ? null
           : input.pricePerHour.toFixed(2);
     }
+    const promptChanged =
+      task.sceneName !== before.sceneName ||
+      task.description !== before.description ||
+      task.rawRequirements !== before.rawRequirements;
+    if (promptChanged) task.normalizationStatus = "pending";
+
     const saved = await this.tasks.save(task);
     await this.audit.record(
       this.dataSource.manager,
@@ -481,12 +484,6 @@ export class TasksService {
         savedSceneTargets = existing;
       }
     }
-
-    // 提示词相关内容是否变化（场景名 / 说明 / 原始要求）
-    const promptChanged =
-      saved.sceneName !== before.sceneName ||
-      saved.description !== before.description ||
-      saved.rawRequirements !== before.rawRequirements;
 
     if (!promptChanged) {
       return {

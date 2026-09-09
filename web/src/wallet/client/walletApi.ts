@@ -8,6 +8,8 @@ import type {
   WithdrawalRequest,
   WithdrawalList,
   WithdrawalStatus,
+  PayoutList, PayoutRequest, PayoutStatus,
+  SavedPayoutRecipient,
 } from "../contracts";
 
 export class WalletApiError extends Error {
@@ -34,7 +36,7 @@ async function requestJson<T>(
   init: RequestInit = {},
 ): Promise<T> {
   const headers = new Headers(init.headers);
-  if (init.body !== undefined) headers.set("content-type", "application/json");
+  if (init.body !== undefined && !(init.body instanceof FormData)) headers.set("content-type", "application/json");
   const response = await fetch(apiUrl(path), {
     ...init,
     headers,
@@ -82,6 +84,27 @@ export async function withdrawWallet(input: WithdrawInput): Promise<WithdrawalRe
   return result.request;
 }
 
+export async function getSavedPayoutRecipients(): Promise<SavedPayoutRecipient[]> {
+  const result = await requestJson<{ recipients: SavedPayoutRecipient[] }>("/wallet/recipients", { cache: "no-store" });
+  return result.recipients;
+}
+
+export async function savePayoutRecipient(
+  method: SavedPayoutRecipient["method"],
+  input: { name: string; account: string; bankName?: string },
+): Promise<SavedPayoutRecipient> {
+  const result = await requestJson<{ recipient: SavedPayoutRecipient }>(`/wallet/recipients/${method}`, {
+    method: "PUT",
+    cache: "no-store",
+    body: JSON.stringify(input),
+  });
+  return result.recipient;
+}
+
+export async function deletePayoutRecipient(method: SavedPayoutRecipient["method"]): Promise<void> {
+  await requestJson<{ ok: true }>(`/wallet/recipients/${method}`, { method: "DELETE", cache: "no-store" });
+}
+
 /** 指定成员的钱包流水（管理员查看任意成员 / 团长查看本队成员） */
 export async function listMemberTransactions(
   ownerId: string,
@@ -122,19 +145,18 @@ export async function getWalletTeamStats(
   return result.teams;
 }
 
-export async function listWithdrawals(input: { page?: number; status?: WithdrawalStatus; ownerId?: string; batchId?: string } = {}): Promise<WithdrawalList> {
+export async function listWithdrawals(input: { page?: number; status?: WithdrawalStatus } = {}): Promise<WithdrawalList> {
   const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(input)) if (value !== undefined && value !== "") params.set(key, String(value));
+  for (const [key, value] of Object.entries(input)) if (value !== undefined) params.set(key, String(value));
   return requestJson<WithdrawalList>(`/wallet/withdrawals?${params.toString()}`);
 }
-export async function claimWithdrawals(ids: string[]): Promise<{ batchId: string; requests: WithdrawalRequest[] }> {
-  return requestJson("/wallet/withdrawal-batches", { method: "POST", body: JSON.stringify({ ids }) });
+
+export async function listPayouts(input: { page?: number; pageSize?: number; q?: string; status?: PayoutStatus } = {}): Promise<PayoutList> {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(input)) if (value !== undefined && value !== "") params.set(key, String(value));
+  return requestJson<PayoutList>(`/wallet/payouts?${params.toString()}`, { cache: "no-store" });
 }
-export async function updateWithdrawal(id: string, input: { status: "paid" | "rejected" | "failed"; reason?: string; transferReference?: string; paidAt?: string; fundsNotTransferred?: boolean }): Promise<{ request: WithdrawalRequest }> {
-  return requestJson(`/wallet/withdrawals/${encodeURIComponent(id)}/status`, { method: "POST", body: JSON.stringify(input) });
-}
-export async function exportWithdrawalBatch(batchId: string): Promise<Blob> {
-  const response = await fetch(apiUrl(`/wallet/withdrawal-batches/${encodeURIComponent(batchId)}/export`), { method: "POST", credentials: "include" });
-  if (!response.ok) throw new WalletApiError(response.status, "导出失败，请检查权限、批次与密钥配置");
-  return response.blob();
+
+export function confirmPayout(id: string): Promise<{ request: PayoutRequest }> {
+  return requestJson(`/wallet/payouts/${encodeURIComponent(id)}/confirm`, { method: "POST" });
 }

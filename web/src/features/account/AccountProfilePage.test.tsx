@@ -7,6 +7,7 @@ import { AccountApiError } from "../../auth/client/accountApi";
 import { IdentityProvider } from "../../auth/client/IdentityContext";
 import { InteractionProvider } from "../../interactions/InteractionContext";
 import { AccountProfilePage } from "./AccountProfilePage";
+import type * as WalletApi from "../../wallet/client/walletApi";
 
 const { changeOwnPassword } = vi.hoisted(() => ({
   changeOwnPassword: vi.fn(),
@@ -17,6 +18,11 @@ vi.mock("../../auth/client/accountApi", async () => {
     typeof import("../../auth/client/accountApi")
   >("../../auth/client/accountApi");
   return { ...actual, changeOwnPassword };
+});
+
+vi.mock("../../wallet/client/walletApi", async () => {
+  const actual = await vi.importActual<typeof WalletApi>("../../wallet/client/walletApi");
+  return { ...actual, getSavedPayoutRecipients: vi.fn().mockResolvedValue([]) };
 });
 
 const team: TeamPublic = {
