@@ -22,6 +22,7 @@ export type WalletBalanceView = {
   reservedBalance: number;
   withdrawnBalance: number;
   cumulativeWithdrawn: number;
+  nextSettlementAt: number | null;
 };
 
 function decimal(value: number, scale = 2): string {
@@ -31,6 +32,14 @@ function decimal(value: number, scale = 2): string {
 function numberOr(value: string | null | undefined): number {
   return Number(value ?? 0) || 0;
 }
+function requireConsistentBalance(row: WalletBalanceEntity): void {
+  const amounts = [row.totalBalance, row.settlingBalance, row.availableBalance, row.reservedBalance, row.withdrawnBalance].map((value) => Number(value));
+  if (amounts.some((value) => !Number.isFinite(value) || value < 0) ||
+      Math.round(amounts[0]! * 100) !== amounts.slice(1).reduce((sum, value) => sum + Math.round(value * 100), 0)) {
+    throw new WalletFailure("ACCOUNTING_INCONSISTENCY", "钱包分项余额与总额不一致", 409);
+  }
+}
+
 
 @Injectable()
 export class WalletService {
@@ -97,9 +106,13 @@ export class WalletService {
     },
   ): Promise<void> {
     const row = await this.balanceRow(manager, input.ownerId);
+    requireConsistentBalance(row);
     const amount = Math.round(input.amount * 100) / 100;
     const total = numberOr(row.totalBalance) + amount;
     const settling = numberOr(row.settlingBalance) + amount;
+    if (!Number.isFinite(amount) || total < 0 || Math.round(settling * 100) < 0) {
+      throw new WalletFailure("ACCOUNTING_INCONSISTENCY", "结算中余额不足或金额无效", 409);
+    }
     row.totalBalance = decimal(total);
     row.settlingBalance = decimal(settling);
     await manager.getRepository(WalletBalanceEntity).save(row);
@@ -130,8 +143,12 @@ export class WalletService {
     },
   ): Promise<void> {
     const row = await this.balanceRow(manager, input.ownerId);
+    requireConsistentBalance(row);
     const amount = Math.round(input.amount * 100) / 100;
-    const settling = Math.max(0, numberOr(row.settlingBalance) - amount);
+    const settling = Math.round((numberOr(row.settlingBalance) - amount) * 100) / 100;
+    if (!Number.isFinite(amount) || amount < 0 || settling < 0) {
+      throw new WalletFailure("ACCOUNTING_INCONSISTENCY", "结算中余额不足或金额无效", 409);
+    }
     const available = numberOr(row.availableBalance) + amount;
     const total = settling + available + numberOr(row.reservedBalance) + numberOr(row.withdrawnBalance);
     row.settlingBalance = decimal(settling);
@@ -155,6 +172,14 @@ export class WalletService {
     ownerId: string,
   ): Promise<WalletBalanceView> {
     const owner = await this.users.findOneBy({ id: ownerId });
+    const [due] = await this.balances.query(
+      `SELECT MIN(c.settle_due_at) AS due
+       FROM point_cycles c
+       JOIN wallet_transactions t ON t.cycle_id = c.id
+       WHERE c.status = 'locked' AND t.owner_id = $1 AND t.type = 'lock'
+       AND c.id IN (SELECT cycle_id FROM wallet_transactions WHERE owner_id = $1 AND type = 'lock' GROUP BY cycle_id HAVING SUM(amount) > 0)`,
+      [ownerId],
+    );
     return {
       ownerId,
       ownerName: owner?.displayName ?? ownerId,
@@ -164,6 +189,7 @@ export class WalletService {
       reservedBalance: numberOr(row.reservedBalance),
       withdrawnBalance: numberOr(row.withdrawnBalance),
       cumulativeWithdrawn: numberOr(row.cumulativeWithdrawn),
+      nextSettlementAt: due?.due ? new Date(due.due).getTime() : null,
     };
   }
 
@@ -180,6 +206,7 @@ export class WalletService {
         reservedBalance: 0,
         withdrawnBalance: 0,
         cumulativeWithdrawn: 0,
+        nextSettlementAt: null,
       };
     }
     return this.view(row, ownerId);
@@ -222,6 +249,8 @@ export class WalletService {
       submissionId: string | null;
       remark: string | null;
       createdAt: number;
+      settleDueAt: number | null;
+      fileName: string | null;
     }>
   > {
     await this.authorizeOwner(actor, ownerId);
@@ -230,6 +259,18 @@ export class WalletService {
       order: { createdAt: "DESC" },
       take: Math.min(100, Math.max(1, limit)),
     });
+    const ids = rows.map((row) => row.id);
+    const evidence: Array<{ id: string; due: Date | string | null; file_name: string | null }> = ids.length
+      ? await this.transactions.query(
+          `SELECT t.id, c.settle_due_at AS due, COALESCE(i.file_name, s.original_file_name) AS file_name
+           FROM wallet_transactions t
+           LEFT JOIN point_cycles c ON c.id = t.cycle_id
+           LEFT JOIN point_cycle_items i ON i.cycle_id = t.cycle_id AND i.submission_id = t.submission_id
+           LEFT JOIN submissions s ON s.id = t.submission_id
+           WHERE t.id = ANY($1::varchar[])`, [ids],
+        )
+      : [];
+    const byId = new Map(evidence.map((entry) => [entry.id, entry]));
     return rows.map((row) => ({
       id: row.id,
       type: row.type,
@@ -239,6 +280,8 @@ export class WalletService {
       submissionId: row.submissionId,
       remark: row.remark,
       createdAt: row.createdAt.getTime(),
+      settleDueAt: byId.get(row.id)?.due ? new Date(byId.get(row.id)!.due!).getTime() : null,
+      fileName: byId.get(row.id)?.file_name ?? null,
     }));
   }
 

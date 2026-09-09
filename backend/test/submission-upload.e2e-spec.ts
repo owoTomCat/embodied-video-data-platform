@@ -1,3 +1,4 @@
+import { SettlementSchedulerService } from "../src/points/settlement-scheduler.service.js";
 import type { INestApplication } from "@nestjs/common";
 import { Readable } from "node:stream";
 import { Test } from "@nestjs/testing";
@@ -252,6 +253,8 @@ describe("submission multipart upload API", () => {
         SubmissionsModule,
       ],
     })
+      .overrideProvider(SettlementSchedulerService)
+      .useValue({ onModuleInit() {}, onModuleDestroy() {} })
       .overrideProvider(OBJECT_STORAGE)
       .useValue(storage)
       .compile();
@@ -1141,7 +1144,7 @@ describe("submission multipart upload API", () => {
       .set("Origin", WEB_ORIGIN)
       .set("Cookie", adminCookie)
       .send({
-        finalScore: 92,
+        finalScore: 52,
         reason: "旧影子字段不得再写入正式复核",
         expectedReviewRevision: 0,
         issues: [],
@@ -1152,12 +1155,14 @@ describe("submission multipart upload API", () => {
     expect(await dataSource.getRepository(VideoQualityResultEntity).findOneByOrFail({
       submissionId: completedSubmissionId,
     })).toMatchObject({ reviewRevision: 0 });
+    // This workflow remains below the billing pass threshold so repeated review/reprocessing is permitted.
+    // Immediate approval accrual and immutable billed reviews are covered by point-cycles.e2e-spec.
     const reviewed = await request(app.getHttpServer())
       .patch(`/api/v1/submissions/${completedSubmissionId}/quality-review`)
       .set("Origin", WEB_ORIGIN)
       .set("Cookie", adminCookie)
       .send({
-        finalScore: 92,
+        finalScore: 52,
         reason: "证据区间复核后确认画面可用",
         expectedReviewRevision: 0,
         issues: [{ label: "轻微晃动", start: 1, end: 3.5 }],
@@ -1165,9 +1170,9 @@ describe("submission multipart upload API", () => {
       .expect(200);
 
     expect(reviewed.body.submission.quality).toMatchObject({
-      finalScore: 92,
+      finalScore: 52,
       aiFinalScore: 88,
-      settlementRatio: 1,
+      settlementRatio: 0,
       invalidDurationMs: 2500,
       billableDurationMs: 7500,
       reviewRevision: 1,
@@ -1175,7 +1180,7 @@ describe("submission multipart upload API", () => {
         reviewedByAccountId: "U-UPLOAD-ADMIN",
         reviewedByName: "上传管理员",
         reason: "证据区间复核后确认画面可用",
-        finalScore: 92,
+        finalScore: 52,
       },
     });
     expect(reviewed.body.submission.quality.annotationReview).toBeUndefined();
@@ -1188,7 +1193,7 @@ describe("submission multipart upload API", () => {
         action: "人工复核质量结果",
         reason: "证据区间复核后确认画面可用",
         previousScore: 88,
-        nextScore: 92,
+        nextScore: 52,
       }),
     ]);
     expect(await dataSource.getRepository(AuditLogEntity).countBy({
@@ -1201,7 +1206,7 @@ describe("submission multipart upload API", () => {
       .set("Origin", WEB_ORIGIN)
       .set("Cookie", adminCookie)
       .send({
-        finalScore: 91,
+        finalScore: 51,
         reason: "旧版本覆盖尝试",
         expectedReviewRevision: 0,
         issues: [],
@@ -1213,7 +1218,7 @@ describe("submission multipart upload API", () => {
       .set("Origin", WEB_ORIGIN)
       .set("Cookie", adminCookie)
       .send({
-        finalScore: 91,
+        finalScore: 51,
         reason: "画面包含隐私信息，转入敏感隔离",
         expectedReviewRevision: 1,
         issues: [],
@@ -1228,7 +1233,7 @@ describe("submission multipart upload API", () => {
         quarantinedByName: "上传管理员",
       },
       quality: {
-        finalScore: 91,
+        finalScore: 51,
         reviewRevision: 2,
       },
     });
@@ -1244,7 +1249,7 @@ describe("submission multipart upload API", () => {
       .set("Origin", WEB_ORIGIN)
       .set("Cookie", adminCookie)
       .send({
-        finalScore: 93,
+        finalScore: 53,
         reason: "已完成脱敏处理，解除隔离",
         expectedReviewRevision: 2,
         issues: [],
@@ -1254,7 +1259,7 @@ describe("submission multipart upload API", () => {
     expect(released.body.submission).toMatchObject({
       assetStatus: "active",
       quality: {
-        finalScore: 93,
+        finalScore: 53,
         reviewRevision: 3,
       },
     });
@@ -1272,7 +1277,7 @@ describe("submission multipart upload API", () => {
       .set("Origin", WEB_ORIGIN)
       .set("Cookie", collectorCookie)
       .send({
-        finalScore: 91,
+        finalScore: 51,
         reason: "数采尝试复核",
         expectedReviewRevision: 3,
         issues: [],

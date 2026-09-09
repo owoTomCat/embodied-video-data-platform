@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  CalendarClock,
   CircleDollarSign,
   Download,
   LockKeyhole,
@@ -16,12 +15,9 @@ import {
   listPointCycles,
   getPointRule,
   pointCycleExportUrl,
-  previewPointCycle,
-  settlePointCycle,
 } from "../../points/client/pointCycleApi";
 import type {
   BackendPointCycle,
-  BackendPointCyclePreview,
   BackendPointRule,
 } from "../../points/contracts";
 import { Modal } from "../../components/Modal";
@@ -38,7 +34,6 @@ import { useInteractions } from "../../interactions/InteractionContext";
 import { PointRuleModal } from "./PointRuleModal";
 import { WalletDetailModal } from "./WalletDetailModal";
 import { WalletStatsSection } from "./WalletStatsSection";
-import { SettlementConfirmModal } from "./SettlementConfirmModal";
 import { CycleDetailModal } from "./CycleDetailModal";
 
 function formatDate(value: string): string {
@@ -59,18 +54,15 @@ function formatSettleTime(timestamp: number | null): string {
 
 export function SettlementPage({ navigate }: { navigate(path: string): void }) {
   const { notify } = useInteractions();
-  const [confirmOpen, setConfirmOpen] = useState(false);
   const [ruleOpen, setRuleOpen] = useState(false);
   const [detailCycle, setDetailCycle] = useState<BackendPointCycle | null>(null);
   const [detailMember, setDetailMember] = useState<WalletBalance | null>(null);
   const [cycles, setCycles] = useState<BackendPointCycle[]>([]);
   const [wallets, setWallets] = useState<WalletBalance[]>([]);
-  const [preview, setPreview] = useState<BackendPointCyclePreview | null>(null);
   const [pointRule, setPointRule] = useState<BackendPointRule | null>(null);
   const [categories, setCategories] = useState<SceneCategoryPricing[]>([]);
   const [priceEdits, setPriceEdits] = useState<Record<string, string>>({});
   const [savingPriceKey, setSavingPriceKey] = useState<string>();
-  const [settlingId, setSettlingId] = useState<string>();
   const [backendMode, setBackendMode] = useState<
     "loading" | "live" | "unavailable"
   >(
@@ -87,8 +79,6 @@ export function SettlementPage({ navigate }: { navigate(path: string): void }) {
       ) / 100,
     [cycles],
   );
-  const pendingAmount = preview?.totalPoints ?? 0;
-  const pendingCount = preview?.submissionCount ?? 0;
   const totalWallet = useMemo(
     () => wallets.reduce((total, item) => total + item.totalBalance, 0),
     [wallets],
@@ -98,15 +88,13 @@ export function SettlementPage({ navigate }: { navigate(path: string): void }) {
     let active = true;
     Promise.all([
       listPointCycles(),
-      previewPointCycle(),
       getPointRule(),
       listWallets(),
       listSceneCategoryPricing(),
     ])
-      .then(([nextCycles, nextPreview, nextRule, nextWallets, nextCategories]) => {
+      .then(([nextCycles, nextRule, nextWallets, nextCategories]) => {
         if (!active) return;
         setCycles(nextCycles);
-        setPreview(nextPreview);
         setPointRule(nextRule);
         setWallets(nextWallets);
         setCategories(nextCategories);
@@ -115,7 +103,6 @@ export function SettlementPage({ navigate }: { navigate(path: string): void }) {
       .catch(() => {
         if (!active) return;
         setCycles([]);
-        setPreview(null);
         setPointRule(null);
         setWallets([]);
         setBackendMode("unavailable");
@@ -124,40 +111,6 @@ export function SettlementPage({ navigate }: { navigate(path: string): void }) {
       active = false;
     };
   }, []);
-
-  function handleCreated(cycle: BackendPointCycle) {
-    setCycles((current) => [cycle, ...current]);
-    setPreview({
-      submissionCount: 0,
-      effectiveDurationMs: 0,
-      effectiveMinutes: 0,
-      totalPoints: 0,
-      teamSummaries: [],
-    });
-    setBackendMode("live");
-  }
-
-  async function handleSettle(cycleId: string) {
-    if (
-      !window.confirm(
-        "立即结算该周期？结算后金额转入各数采人员钱包的「可提现」，周期标记为已结算且不可再变更。",
-      )
-    ) {
-      return;
-    }
-    setSettlingId(cycleId);
-    try {
-      const next = await settlePointCycle(cycleId);
-      setCycles((current) =>
-        current.map((cycle) => (cycle.id === cycleId ? next : cycle)),
-      );
-      notify("success", "周期已结算，金额已转入数采钱包");
-    } catch (reason) {
-      notify("error", reason instanceof Error ? reason.message : "结算失败，请重试");
-    } finally {
-      setSettlingId(undefined);
-    }
-  }
 
   async function handleSavePrice(key: string) {
     const raw = priceEdits[key]?.trim() ?? "";
@@ -242,10 +195,10 @@ export function SettlementPage({ navigate }: { navigate(path: string): void }) {
 
   return (
     <div className="page-stack">
-      <div className="page-heading"><div><p className="page-kicker">锁定 → 3 天自动结算 → 钱包</p><h1>结算与钱包</h1><span>每天 02:00 自动锁定合格数据，也可手动锁定；锁定 3 天后自动结算入数采人员钱包</span></div><div className="page-heading-actions"><button ref={ruleTriggerRef} className="button button-secondary" disabled={backendMode === "unavailable"} onClick={() => setRuleOpen(true)}>发布单价规则</button><button ref={triggerRef} className="button button-primary" disabled={backendMode === "unavailable"} onClick={() => setConfirmOpen(true)}>手动锁定</button></div></div>
-      <div className="metric-grid"><MetricCard label="默认单价" value={pointRule ? `${pointRule.defaultPointsPerMinute.toLocaleString("zh-CN")} 元/小时` : "—"} detail={pointRule ? `${pointRule.version} · V${pointRule.revision}` : backendMode === "loading" ? "正在读取" : "规则服务不可用"} icon={CircleDollarSign}/><MetricCard label="待锁定金额" value={`${pendingAmount.toLocaleString("zh-CN")} 元`} detail={`${pendingCount} 条数据`} icon={CalendarClock} tone="amber"/><MetricCard label="结算中金额" value={`${lockedAmount.toLocaleString("zh-CN")} 元`} detail={`${cycles.filter((cycle) => cycle.status === "locked").length} 个周期锁定中`} icon={LockKeyhole} tone="violet"/><MetricCard label="钱包总余额" value={`${totalWallet.toLocaleString("zh-CN")} 元`} detail={`${wallets.length} 个数采人员`} icon={Wallet} tone="green"/></div>
-      <div className="audit-summary"><Receipt size={18}/><span><strong>{backendMode === "live" ? "结算周期数据已同步" : backendMode === "loading" ? "正在读取结算周期" : "结算服务暂不可用"}</strong><small>{backendMode === "live" ? "锁定即进入数采钱包「结算中」，3 天后自动结算为「可提现」；锁定后周期不可编辑。" : backendMode === "loading" ? "页面会在接口返回后切换为真实数据。" : "数据服务暂不可用，请稍后重试。"}</small></span></div>
-      <div className="dashboard-grid"><section className="content-card table-card"><div className="card-heading"><div><h2>结算周期</h2><p>每天 02:00 自动锁定，也可手动锁定；锁定 3 天后自动结算入钱包</p></div></div><div className="table-scroll"><table className="data-table"><thead><tr><th>周期</th><th>日期</th><th>视频数</th><th>有效时长</th><th>金额</th><th>状态</th><th>结算时间</th><th/></tr></thead><tbody>{cycles.map((cycle) => <tr key={cycle.id}><td><strong>{cycle.id}</strong></td><td>{formatDate(cycle.businessDate)}</td><td>{cycle.submissionCount} 条</td><td>{cycle.effectiveMinutes} 分钟</td><td><strong>{cycle.totalPoints.toFixed(2)} 元</strong></td><td><StatusBadge label={cycle.status === "locked" ? "锁定中" : "已结算"} tone={cycle.status === "locked" ? "info" : "success"}/></td><td className="nowrap-cell">{cycle.status === "locked" ? `预计 ${formatSettleTime(cycle.settleDueAt)}` : `已结算 ${formatSettleTime(cycle.settledAt)}`}</td><td><span className="row-actions"><button className="table-action" onClick={() => setDetailCycle(cycle)}>查看条目</button>{cycle.status === "locked" ? <button className="table-action" disabled={settlingId === cycle.id} onClick={() => void handleSettle(cycle.id)}>{settlingId === cycle.id ? "结算中…" : "立即结算"}</button> : null}<a className="table-action" href={pointCycleExportUrl(cycle.id)}><Download size={14}/>导出</a></span></td></tr>)}</tbody></table></div></section><aside className="content-card"><div className="card-heading"><div><h2>质量系数</h2><p>{pointRule ? pointRule.description : "最终评分对应结算比例"}</p></div></div>{pointRule?.coefficientBands?.length ? <div className="coefficient-list">{pointRule.coefficientBands.map((band) => <div key={`${band.minScore}-${band.maxScore}`}><span>{band.minScore === 0 ? `低于 ${band.maxScore + 1} 分` : `${band.minScore} — ${band.maxScore} 分`}</span><strong>{band.ratio.toFixed(2)}</strong><em>{band.label}</em></div>)}</div> : <p className="form-message">单价规则暂不可用，无法展示质量系数。</p>}</aside></div>
+      <div className="page-heading"><div><p className="page-kicker">质检通过入账 → 次日可提现</p><h1>结算与钱包</h1><span>质检通过且符合计费条件即进入结算中；北京时间次日02:00自动转为可提现，非满24小时</span></div><div className="page-heading-actions"><button ref={ruleTriggerRef} className="button button-secondary" disabled={backendMode === "unavailable"} onClick={() => setRuleOpen(true)}>发布单价规则</button></div></div>
+      <div className="metric-grid"><MetricCard label="默认单价" value={pointRule ? `${pointRule.defaultPointsPerMinute.toLocaleString("zh-CN")} 元/小时` : "—"} detail={pointRule ? `${pointRule.version} · V${pointRule.revision}` : backendMode === "loading" ? "正在读取" : "规则服务不可用"} icon={CircleDollarSign}/><MetricCard label="结算中金额" value={`${lockedAmount.toLocaleString("zh-CN")} 元`} detail={`${cycles.filter((cycle) => cycle.status === "locked").length} 个周期结算中`} icon={LockKeyhole} tone="violet"/><MetricCard label="钱包总余额" value={`${totalWallet.toLocaleString("zh-CN")} 元`} detail={`${wallets.length} 个数采人员`} icon={Wallet} tone="green"/></div>
+      <div className="audit-summary"><Receipt size={18}/><span><strong>{backendMode === "live" ? "结算周期数据已同步" : backendMode === "loading" ? "正在读取结算周期" : "结算服务暂不可用"}</strong><small>{backendMode === "live" ? "无需人工生成或结算；服务启动时补记符合条件的历史收益，并每分钟补结算已到期金额。实际提现付款仍由财务处理。" : backendMode === "loading" ? "页面会在接口返回后切换为真实数据。" : "数据服务暂不可用，请稍后重试。"}</small></span></div>
+      <div className="dashboard-grid"><section className="content-card table-card"><div className="card-heading"><div><h2>结算周期</h2><p>按日汇总自动入账的视频及金额，保留条目和导出作为财务凭证</p></div></div><div className="table-scroll"><table className="data-table"><thead><tr><th>周期</th><th>日期</th><th>视频数</th><th>有效时长</th><th>金额</th><th>状态</th><th>结算时间（北京时间）</th><th/></tr></thead><tbody>{cycles.map((cycle) => <tr key={cycle.id}><td><strong>{cycle.id}</strong></td><td>{formatDate(cycle.businessDate)}</td><td>{cycle.submissionCount} 条</td><td>{cycle.effectiveMinutes} 分钟</td><td><strong>{cycle.totalPoints.toFixed(2)} 元</strong></td><td><StatusBadge label={cycle.status === "locked" ? "结算中" : "已结算"} tone={cycle.status === "locked" ? "info" : "success"}/></td><td className="nowrap-cell">{cycle.status === "locked" ? `预计 ${formatSettleTime(cycle.settleDueAt)}` : `已结算 ${formatSettleTime(cycle.settledAt)}`}</td><td><span className="row-actions"><button className="table-action" onClick={(event) => { triggerRef.current = event.currentTarget; setDetailCycle(cycle); }}>查看条目</button><a className="table-action" href={pointCycleExportUrl(cycle.id)}><Download size={14}/>导出</a></span></td></tr>)}</tbody></table></div></section><aside className="content-card"><div className="card-heading"><div><h2>质量系数</h2><p>{pointRule ? pointRule.description : "最终评分对应结算比例"}</p></div></div>{pointRule?.coefficientBands?.length ? <div className="coefficient-list">{pointRule.coefficientBands.map((band) => <div key={`${band.minScore}-${band.maxScore}`}><span>{band.minScore === 0 ? `低于 ${band.maxScore + 1} 分` : `${band.minScore} — ${band.maxScore} 分`}</span><strong>{band.ratio.toFixed(2)}</strong><em>{band.label}</em></div>)}</div> : <p className="form-message">单价规则暂不可用，无法展示质量系数。</p>}</aside></div>
       <section className="content-card table-card">
         <div className="card-heading"><div><h2>场景定价</h2><p>按场景大类计价（元/小时）：家庭最低 20，上限 40；同大类下的细分场景共用同一价格</p></div><button className="button button-secondary" onClick={() => setCreateCatOpen(true)}><Plus size={15}/>新增计费大类</button></div>
         <div className="table-scroll"><table className="data-table"><thead><tr><th>场景大类</th><th>单价</th><th>说明</th><th/></tr></thead><tbody>
@@ -294,16 +247,15 @@ export function SettlementPage({ navigate }: { navigate(path: string): void }) {
         <div className="card-heading"><div><h2>数采人员钱包</h2><p>总余额（元）= 结算中 + 可提现 + 提现处理中（预留）+ 已提现；<button className="table-action" onClick={() => navigate("/admin/withdrawals")}>管理人工提现申请</button></p></div></div>
         <div className="table-scroll"><table className="data-table"><thead><tr><th>数采人员</th><th>总余额</th><th>结算中</th><th>可提现</th><th>提现处理中（预留）</th><th>已提现</th><th>累计提现</th><th /></tr></thead><tbody>
           {wallets.map((wallet) => (
-            <tr key={wallet.ownerId}><td><strong>{wallet.ownerName}</strong></td><td><strong>{wallet.totalBalance.toFixed(2)} 元</strong></td><td>{wallet.settlingBalance.toFixed(2)} 元</td><td>{wallet.availableBalance.toFixed(2)} 元</td><td>{wallet.reservedBalance.toFixed(2)} 元</td><td>{wallet.withdrawnBalance.toFixed(2)} 元</td><td>{wallet.cumulativeWithdrawn.toFixed(2)} 元</td><td><button className="table-action" onClick={() => setDetailMember(wallet)}>提现记录</button></td></tr>
+            <tr key={wallet.ownerId}><td><strong>{wallet.ownerName}</strong></td><td><strong>{wallet.totalBalance.toFixed(2)} 元</strong></td><td>{wallet.settlingBalance.toFixed(2)} 元</td><td>{wallet.availableBalance.toFixed(2)} 元</td><td>{wallet.reservedBalance.toFixed(2)} 元</td><td>{wallet.withdrawnBalance.toFixed(2)} 元</td><td>{wallet.cumulativeWithdrawn.toFixed(2)} 元</td><td><button className="table-action" onClick={(event) => { triggerRef.current = event.currentTarget; setDetailMember(wallet); }}>钱包明细</button></td></tr>
           ))}
           {wallets.length === 0 && <tr><td colSpan={8}>暂无钱包数据</td></tr>}
         </tbody></table></div>
       </section>
       <WalletStatsSection />
-      <SettlementConfirmModal open={confirmOpen} onClose={() => setConfirmOpen(false)} returnFocusRef={triggerRef} preview={preview} onCreated={handleCreated} />
       <PointRuleModal open={ruleOpen} currentRule={pointRule ?? undefined} onCreated={setPointRule} onClose={() => setRuleOpen(false)} returnFocusRef={ruleTriggerRef} />
-      {detailCycle && <CycleDetailModal open cycle={detailCycle} onClose={() => setDetailCycle(null)} returnFocusRef={triggerRef} />}
-      {detailMember && <WalletDetailModal member={detailMember} onClose={() => setDetailMember(null)} returnFocusRef={triggerRef} />}
+      {detailCycle && <CycleDetailModal key={detailCycle.id} open cycle={detailCycle} onClose={() => setDetailCycle(null)} returnFocusRef={triggerRef} />}
+      {detailMember && <WalletDetailModal key={detailMember.ownerId} member={detailMember} onClose={() => setDetailMember(null)} returnFocusRef={triggerRef} />}
       {createCatOpen && (
         <Modal open title="新增计费大类" onClose={() => setCreateCatOpen(false)}>
           <div className="modal-form">

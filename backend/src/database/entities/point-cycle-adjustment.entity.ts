@@ -20,6 +20,10 @@ export class PointCycleAdjustmentEntity {
   @PrimaryColumn({ type: "varchar", length: 64 })
   id!: string;
 
+  /** Insertion order, independent of transaction-start timestamps and random IDs. */
+  @Column({ name: "sequence", type: "bigint", generated: "increment" })
+  sequence!: string;
+
   @Column({ name: "point_cycle_item_id", type: "varchar", length: 64 })
   pointCycleItemId!: string;
 
@@ -70,8 +74,8 @@ export class PointCycleAdjustmentEntity {
   @Column({ name: "reason", type: "text" })
   reason!: string;
 
-  @Column({ name: "created_by_account_id", type: "varchar", length: 64 })
-  createdByAccountId!: string;
+  @Column({ name: "created_by_account_id", type: "varchar", length: 64, nullable: true })
+  createdByAccountId: string | null = null;
 
   @ManyToOne(() => UserEntity, { onDelete: "RESTRICT" })
   @JoinColumn({ name: "created_by_account_id" })

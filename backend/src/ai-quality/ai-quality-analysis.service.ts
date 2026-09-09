@@ -7,6 +7,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { DataSource, Repository, type QueryRunner } from "typeorm";
 
+import { PointCyclesService } from "../points/point-cycles.service.js";
 import { MediaMetadataEntity } from "../database/entities/media-metadata.entity.js";
 import type { LabelSetVersionEntity } from "../database/entities/label-set-version.entity.js";
 import { QualityRuleVersionEntity } from "../database/entities/quality-rule-version.entity.js";
@@ -229,6 +230,7 @@ export class AiQualityAnalysisService {
     private readonly storage: ObjectStoragePort,
     @Inject(AI_QUALITY_EVALUATOR_FACTORY)
     private readonly evaluatorFactory: AiQualityEvaluatorFactory,
+    private readonly pointCycles: PointCyclesService,
   ) {}
 
   async process(input: {
@@ -602,6 +604,9 @@ export class AiQualityAnalysisService {
     normalized: NormalizedVideoQcResultV1,
   ): Promise<void> {
     await this.dataSource.transaction(async (manager) => {
+      await manager.getRepository(SubmissionEntity).findOneOrFail({
+        where: { id: submissionId }, lock: { mode: "pessimistic_write" },
+      });
       const repository = manager.getRepository(VideoQualityResultEntity);
       const result = await repository.findOne({
         where: { submissionId },
@@ -704,6 +709,7 @@ export class AiQualityAnalysisService {
             : {}),
         },
       );
+      await this.pointCycles.accrueSubmission(submissionId, manager);
     });
   }
 

@@ -11,12 +11,12 @@ function assertActive(actor: PublicUser): void {
 
 @Injectable()
 export class PointCyclesPolicy {
-  requireCreate(actor: PublicUser): void {
+  requireAdjust(actor: PublicUser): void {
     assertActive(actor);
     if (actor.role !== "admin") {
       throw new PointCycleFailure(
         "FORBIDDEN",
-        "仅管理员可锁定结算周期",
+        "仅管理员可调整结算中金额",
         403,
       );
     }

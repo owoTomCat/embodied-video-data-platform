@@ -14,13 +14,13 @@ function formatMoney(amount: number): string {
 
 function earnedTotal(balance: WalletBalance): number {
   return (
-    Math.round((balance.availableBalance + balance.reservedBalance + balance.withdrawnBalance) * 100) /
+    Math.round((balance.settlingBalance + balance.availableBalance + balance.reservedBalance + balance.withdrawnBalance) * 100) /
     100
   );
 }
 
 const transactionLabels: Record<string, string> = {
-  lock: "锁定入结算中",
+  lock: "质检通过入账",
   settle: "结算转可提现",
   withdraw: "提现",
 };
@@ -61,8 +61,6 @@ export function WalletDetailModal({
     };
   }, [member.ownerId]);
 
-  const withdrawals = transactions.filter((t) => t.type === "withdraw");
-
   return (
     <Modal
       open
@@ -78,16 +76,17 @@ export function WalletDetailModal({
           <span>结算中 <strong>{formatMoney(member.settlingBalance)}</strong></span>
           <span>提现处理中（预留） <strong>{formatMoney(member.reservedBalance)}</strong></span>
         </div>
+        <p className="form-help">最早预计可提现（北京时间）：{member.nextSettlementAt === null ? "暂无待结算时间" : new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(member.nextSettlementAt)}。质检通过次日02:00，非满24小时；实际付款以提现记录为准。</p>
 
-        <h3>提现记录（{withdrawals.length} 条）</h3>
+        <h3>钱包流水（{transactions.length} 条）</h3>
         {mode === "unavailable" ? (
           <p className="form-message">流水读取失败，请稍后重试。</p>
         ) : (
           <div className="table-scroll">
             <table className="data-table">
-              <thead><tr><th>时间</th><th>类型</th><th>金额</th><th>操作后总余额</th><th>说明</th></tr></thead>
+              <thead><tr><th>时间</th><th>类型</th><th>视频</th><th>预计可提现（北京时间）</th><th>金额</th><th>操作后总余额</th><th>说明</th></tr></thead>
               <tbody>
-                {withdrawals.map((t) => (
+                {transactions.map((t) => (
                   <tr key={t.id}>
                     <td className="nowrap-cell">
                       {new Intl.DateTimeFormat("zh-CN", {
@@ -100,13 +99,15 @@ export function WalletDetailModal({
                       }).format(t.createdAt)}
                     </td>
                     <td><StatusBadge label={transactionLabels[t.type] ?? t.type} tone={transactionTone(t.type)} /></td>
-                    <td className="money-out"><strong>{formatMoney(t.amount)}</strong></td>
+                    <td>{t.fileName ?? t.submissionId ?? "历史记录未关联视频"}</td>
+                    <td>{t.settleDueAt === null ? "未记录" : new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(t.settleDueAt)}</td>
+                    <td className={t.amount < 0 ? "money-out" : "money-in"}><strong>{formatMoney(t.amount)}</strong></td>
                     <td className="nowrap-cell">{formatMoney(t.balanceAfter)}</td>
                     <td>{t.remark ?? "—"}</td>
                   </tr>
                 ))}
-                {withdrawals.length === 0 && (
-                  <tr><td colSpan={5}><div className="empty-state compact-empty"><Landmark size={18} /><span>暂无提现记录</span></div></td></tr>
+                {transactions.length === 0 && (
+                  <tr><td colSpan={7}><div className="empty-state compact-empty"><Landmark size={18} /><span>{mode === "loading" ? "正在读取流水" : "暂无钱包流水"}</span></div></td></tr>
                 )}
               </tbody>
             </table>

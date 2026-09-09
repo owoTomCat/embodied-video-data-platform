@@ -96,6 +96,7 @@ import { PriceFieldRename2026091800001 } from "./migrations/202609180001-price-f
 import { TaskSegmentFkCascade2026091900001 } from "./migrations/202609190001-task-segment-fk-cascade.js";
 import { WithdrawalBatchEntity, WithdrawalRequestEntity } from "./entities/withdrawal.entity.js";
 import { ManualPayouts2026092000001 } from "./migrations/202609200001-manual-payouts.js";
+import { NextDaySettlement2026092100001 } from "./migrations/202609210001-next-day-settlement.js";
 
 export const identityEntities = [
   TeamEntity,
@@ -207,6 +208,7 @@ export function createDataSource(
       PriceFieldRename2026091800001,
       TaskSegmentFkCascade2026091900001,
       ManualPayouts2026092000001,
+      NextDaySettlement2026092100001,
     ],
     synchronize: false,
     logging: false,

@@ -3,6 +3,7 @@ export type WalletBalance = {
   ownerName: string;
   totalBalance: number;
   settlingBalance: number;
+  nextSettlementAt: number | null;
   availableBalance: number;
   reservedBalance: number;
   withdrawnBalance: number;
@@ -16,6 +17,8 @@ export type WalletTransaction = {
   balanceAfter: number;
   cycleId: string | null;
   submissionId: string | null;
+  settleDueAt: number | null;
+  fileName: string | null;
   remark: string | null;
   createdAt: number;
 };

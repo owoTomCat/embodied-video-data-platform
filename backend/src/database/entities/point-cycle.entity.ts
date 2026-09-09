@@ -15,7 +15,7 @@ import { PointCycleItemEntity } from "./point-cycle-item.entity.js";
 import { PointRuleVersionEntity } from "./point-rule-version.entity.js";
 import type { PointRuleSnapshot } from "../../rules/rule-calculator.js";
 
-/** 周期状态：locked = 锁定中/结算中（锁定后 3 天自动结算）；settled = 已结算入钱包 */
+/** locked = 结算中；settled = 已结算。通过次日北京时间 02:00 自动结算。 */
 export type PointCycleStatus = "locked" | "settled";
 
 @Entity({ name: "point_cycles" })
@@ -58,8 +58,8 @@ export class PointCycleEntity {
   @Column({ name: "point_rule_snapshot", type: "jsonb", nullable: true })
   pointRuleSnapshot: PointRuleSnapshot | null = null;
 
-  @Column({ name: "created_by_account_id", type: "varchar", length: 64 })
-  createdByAccountId!: string;
+  @Column({ name: "created_by_account_id", type: "varchar", length: 64, nullable: true })
+  createdByAccountId: string | null = null;
 
   @ManyToOne(() => UserEntity, { onDelete: "RESTRICT" })
   @JoinColumn({ name: "created_by_account_id" })
@@ -68,7 +68,7 @@ export class PointCycleEntity {
   @Column({ name: "created_by_name", type: "varchar", length: 120 })
   createdByName!: string;
 
-  /** 自动结算时间（锁定时刻 + 3 天）；到达后由定时任务结算入钱包 */
+  /** 审批所在上海日历日的次日 02:00。 */
   @Column({ name: "settle_due_at", type: "timestamptz", nullable: true })
   settleDueAt: Date | null = null;
 

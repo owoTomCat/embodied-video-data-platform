@@ -10,7 +10,6 @@ import {
   PointRuleVersionEntity,
   type PointRuleCoefficientBand,
 } from "../database/entities/point-rule-version.entity.js";
-import { UserEntity } from "../database/entities/user.entity.js";
 import type { CreatePointRuleDto } from "./dto/point-rule.dto.js";
 import { PointCycleFailure } from "./point-cycle-failure.js";
 import { DEFAULT_COEFFICIENT_BANDS } from "../rules/rule-calculator.js";
@@ -27,7 +26,7 @@ export type PublicPointRule = {
   coefficientBands: PointRuleCoefficientBand[];
   description: string;
   active: boolean;
-  createdByAccountId: string;
+  createdByAccountId: string | null;
   createdByName: string;
   createdAt: number;
 };
@@ -120,23 +119,17 @@ export class PointRulesService {
     private readonly audit: AuditService,
   ) {}
 
-  async ensureDefault(): Promise<PointRuleVersionEntity> {
-    const current = await this.rules.findOneBy({ active: true });
+  async ensureDefault(transaction?: EntityManager): Promise<PointRuleVersionEntity> {
+    const current = await (transaction?.getRepository(PointRuleVersionEntity) ?? this.rules).findOneBy({ active: true });
     if (current) return current;
-    return this.dataSource.transaction(async (manager) => {
+    if (!transaction) return this.dataSource.transaction((manager) => this.ensureDefault(manager));
+    const manager = transaction;
       await manager.query("SELECT pg_advisory_xact_lock($1)", [
         POINT_RULE_LOCK_KEY,
       ]);
       const repository = manager.getRepository(PointRuleVersionEntity);
       const active = await repository.findOneBy({ active: true });
       if (active) return active;
-      const creator = await manager.getRepository(UserEntity).findOne({
-        where: { role: "admin", status: "active" },
-        order: { createdAt: "ASC" },
-      });
-      if (!creator) {
-        throw new Error("初始化单价规则前必须存在启用的管理员账号");
-      }
       return repository.save({
         id: `PRV-${randomUUID()}`,
         revision: 1,
@@ -145,10 +138,9 @@ export class PointRulesService {
         coefficientBands: DEFAULT_BANDS,
         description: "默认单价规则：按有效时长（元/小时）和质量系数计算",
         active: true,
-        createdByAccountId: creator.id,
+        createdByAccountId: null,
         createdByName: "系统初始化",
       });
-    });
   }
 
   async getActive(actor: PublicUser): Promise<PointRuleVersionEntity> {
@@ -160,15 +152,13 @@ export class PointRulesService {
 
   async getActiveForCalculation(
     manager: EntityManager = this.dataSource.manager,
-    lock = false,
   ): Promise<PointRuleVersionEntity> {
     const query = manager
       .getRepository(PointRuleVersionEntity)
       .createQueryBuilder("rule")
       .where("rule.active = true");
-    if (lock) query.setLock("pessimistic_read");
     const rule = await query.getOne();
-    if (!rule) throw new Error("当前单价规则不存在");
+    if (!rule) return this.ensureDefault(manager);
     return rule;
   }
 

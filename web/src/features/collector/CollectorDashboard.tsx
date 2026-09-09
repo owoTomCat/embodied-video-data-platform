@@ -199,11 +199,11 @@ export function CollectorDashboard({
           tone="green"
         />
         <MetricCard
-          label="待锁定金额"
+          label="待入账金额"
           value={pointsLabel}
           detail={
             mode === "live"
-              ? "通过且未进入结算周期"
+              ? "通过但尚未入账；实际收益以钱包为准"
               : unavailableDetail
           }
           icon={Wallet}

@@ -1,3 +1,4 @@
+import { PointCyclesService } from "../src/points/point-cycles.service.js";
 import type { INestApplication } from "@nestjs/common";
 import { readFile } from "node:fs/promises";
 import { Readable } from "node:stream";
@@ -488,13 +489,7 @@ describe("delivery package API", () => {
     deliveryService = app.get(DeliveryPackagesService);
     archiveWorker = app.get(DeliveryArchiveWorker);
 
-    const adminCookie = await login("delivery-admin");
-    await request(app.getHttpServer())
-      .post("/api/v1/point-cycles")
-      .set("Origin", WEB_ORIGIN)
-      .set("Cookie", adminCookie)
-      .send({ businessDate: "2026-08-13" })
-      .expect(201);
+    await app.get(PointCyclesService).reconcileAccruals();
 
     const firstPointItem = await dataSource
       .getRepository(PointCycleItemEntity)

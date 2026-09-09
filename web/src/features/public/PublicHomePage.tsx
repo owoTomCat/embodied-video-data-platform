@@ -131,7 +131,7 @@ export function PublicHomePage({ navigate }: { navigate(path: string): void }) {
             [ScanSearch, "02", "媒体解析", "抽取时长、分辨率与画面特征，建立处理任务"],
             [Bot, "03", "AI 内容理解", "识别场景、动作、对象、工具与质量问题区间"],
             [ShieldCheck, "04", "双层质检", "AI 初筛结合平台人工复核，保留原始结论"],
-            [Database, "05", "金额锁定与入库", "锁定有效时长并按质量系数计算金额，生成可交付数据资产"],
+            [Database, "05", "质检入账与入库", "符合计费条件即按有效时长和质量系数入账，北京时间次日02:00可提现"],
           ].map(([Icon, step, title, copy]) => { const ProcessIcon = Icon as typeof Upload; return <article key={String(step)}><span>{String(step)}</span><i><ProcessIcon size={22} /></i><h3>{String(title)}</h3><p>{String(copy)}</p></article>; })}</div>
         </section>
         <section className="public-content-section public-quality" id="quality">

@@ -1,3 +1,11 @@
+import { PointCyclesService, nextSettlementAt } from "../src/points/point-cycles.service.js";
+import { PointCyclesPolicy } from "../src/points/point-cycles.policy.js";
+import { PointRulesService } from "../src/points/point-rules.service.js";
+import { PointCycleEntity } from "../src/database/entities/point-cycle.entity.js";
+import { PointRuleVersionEntity } from "../src/database/entities/point-rule-version.entity.js";
+import { PointCycleItemEntity } from "../src/database/entities/point-cycle-item.entity.js";
+import { WalletBalanceEntity, WalletTransactionEntity } from "../src/database/entities/wallet.entity.js";
+import { WalletService } from "../src/wallet/wallet.service.js";
 import { createHash, randomUUID } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 
@@ -248,6 +256,15 @@ describe("AI quality analysis persistence", () => {
       inventoryService as never,
       new TestStorage(),
       evaluatorFactory,
+      new PointCyclesService(
+        dataSource.getRepository(PointCycleEntity),
+        dataSource,
+        new PointCyclesPolicy(),
+        {} as AuditService,
+        new PointRulesService(dataSource, dataSource.getRepository(PointRuleVersionEntity), {} as AuditService),
+        new WalletService(dataSource.getRepository(WalletBalanceEntity), dataSource.getRepository(WalletTransactionEntity), dataSource.getRepository(UserEntity)),
+        new TestStorage(),
+      ),
     );
   });
 
@@ -287,6 +304,12 @@ describe("AI quality analysis persistence", () => {
 
     await expect(service.process({ submissionId })).resolves.toBe("skipped");
     expect(evaluate).toHaveBeenCalledTimes(1);
+    const item = await dataSource.getRepository(PointCycleItemEntity).findOneByOrFail({ submissionId });
+    const cycle = await dataSource.getRepository(PointCycleEntity).findOneByOrFail({ id: item.cycleId });
+    expect(cycle.settleDueAt).toEqual(nextSettlementAt(quality.completedAt!));
+    expect(await dataSource.getRepository(WalletBalanceEntity).findOneByOrFail({ ownerId: "U-AI-COLLECTOR" }))
+      .toMatchObject({ settlingBalance: item.points, availableBalance: "0.00" });
+    expect(await dataSource.getRepository(WalletTransactionEntity).countBy({ submissionId, type: "lock" })).toBe(1);
   });
 
   it("detects the later authoritative upload even when duplicate AI tasks start together", async () => {

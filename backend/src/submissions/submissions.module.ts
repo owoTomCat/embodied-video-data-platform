@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 
+import { PointsModule } from "../points/points.module.js";
 import { AiQualityModule } from "../ai-quality/ai-quality.module.js";
 import { AuditModule } from "../audit/audit.module.js";
 import { AuthModule } from "../auth/auth.module.js";
@@ -32,6 +33,7 @@ import { SubmissionsService } from "./submissions.service.js";
     SecurityModule,
     StorageModule,
     AiQualityModule,
+    PointsModule,
   ],
   controllers: [SubmissionsController],
   providers: [

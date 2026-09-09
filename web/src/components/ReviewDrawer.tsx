@@ -414,7 +414,7 @@ export function ReviewDrawer({
         <section className="ai-conclusion duplicate-review">
           <div className="ai-conclusion-head"><span>近似重复候选</span><StatusBadge label="待确认" tone="warning" /></div>
           <strong>{Math.round(duplicateCandidate.similarity * 100)}<small>%</small></strong>
-          <p>疑似与 {duplicateCandidate.candidateFileName ?? duplicateCandidate.candidateSubmissionId} 重复，解除前不会进入金额锁定。</p>
+          <p>疑似与 {duplicateCandidate.candidateFileName ?? duplicateCandidate.candidateSubmissionId} 重复，解除前不会产生入账收益。</p>
           {!readOnly && <button className="table-action" disabled={duplicateSaving} type="button" onClick={clearDuplicate}><CopyCheck size={15} />{duplicateSaving ? "处理中" : "解除重复标记"}</button>}
         </section>
       )}

@@ -23,6 +23,12 @@ import { UserEntity } from "../src/database/entities/user.entity.js";
 import { VideoQualityPromptVersionEntity } from "../src/database/entities/video-quality-prompt-version.entity.js";
 import { VideoQualityResultEntity } from "../src/database/entities/video-quality-result.entity.js";
 import { configureApplication } from "../src/http/configure-application.js";
+import { PointCycleEntity } from "../src/database/entities/point-cycle.entity.js";
+import { WalletBalanceEntity, WalletTransactionEntity } from "../src/database/entities/wallet.entity.js";
+import { PointCyclesService, nextSettlementAt } from "../src/points/point-cycles.service.js";
+import { SettlementSchedulerService } from "../src/points/settlement-scheduler.service.js";
+import { NextDaySettlement2026092100001 } from "../src/database/migrations/202609210001-next-day-settlement.js";
+import { WalletService } from "../src/wallet/wallet.service.js";
 import { PointsModule } from "../src/points/points.module.js";
 import {
   OBJECT_STORAGE,
@@ -346,7 +352,7 @@ describe("point cycle API", () => {
         reviewReasons: [],
         normalizedResult: {},
         rawModelResult: {},
-        completedAt: new Date(),
+        completedAt: new Date("2030-01-01T15:59:00.000Z"),
       },
       {
         submissionId: "SUB-PC-02",
@@ -369,7 +375,7 @@ describe("point cycle API", () => {
         manualReviewReason: "复核后通过",
         manualReviewedByAccountId: "U-PC-ADMIN",
         manualReviewedByName: "积分管理员",
-        manualReviewedAt: new Date(),
+        manualReviewedAt: new Date("2030-01-01T15:59:00.000Z"),
         reviewRevision: 1,
         summary: "待复核后通过",
         modelRuns: [],
@@ -379,7 +385,7 @@ describe("point cycle API", () => {
         reviewReasons: [],
         normalizedResult: {},
         rawModelResult: {},
-        completedAt: new Date(),
+        completedAt: new Date("2030-01-01T15:59:00.000Z"),
       },
       {
         submissionId: "SUB-PC-03",
@@ -403,7 +409,7 @@ describe("point cycle API", () => {
         reviewReasons: [],
         normalizedResult: {},
         rawModelResult: {},
-        completedAt: new Date(),
+        completedAt: new Date("2030-01-01T15:59:00.000Z"),
       },
       {
         submissionId: "SUB-PC-QUARANTINED",
@@ -427,7 +433,7 @@ describe("point cycle API", () => {
         reviewReasons: [],
         normalizedResult: {},
         rawModelResult: {},
-        completedAt: new Date(),
+        completedAt: new Date("2030-01-01T15:59:00.000Z"),
       },
       {
         submissionId: "SUB-PC-FAIL",
@@ -451,7 +457,7 @@ describe("point cycle API", () => {
         reviewReasons: [],
         normalizedResult: {},
         rawModelResult: {},
-        completedAt: new Date(),
+        completedAt: new Date("2030-01-01T15:59:00.000Z"),
       },
     ]);
 
@@ -468,6 +474,8 @@ describe("point cycle API", () => {
         PointsModule,
       ],
     })
+      .overrideProvider(SettlementSchedulerService)
+      .useValue({ onModuleInit() {}, onModuleDestroy() {} })
       .overrideProvider(OBJECT_STORAGE)
       .useValue(new UnusedStorage())
       .compile();
@@ -484,84 +492,73 @@ describe("point cycle API", () => {
     vi.unstubAllEnvs();
   });
 
-  it("previews eligible submissions before locking", async () => {
-    const adminCookie = await login("point-admin");
-    const preview = await request(app.getHttpServer())
-      .get("/api/v1/point-cycles/preview")
-      .set("Cookie", adminCookie)
-      .expect(200);
+  async function cloneSubmission(id: string, approvedAt = new Date("2030-01-01T15:59:00.000Z")) {
+    const source = await dataSource.getRepository(SubmissionEntity).findOneByOrFail({ id: firstSubmissionId });
+    await dataSource.getRepository(SubmissionEntity).save({ ...source, id, originalFileName: `${id}.mp4`, objectKey: `uploads/${id}.mp4` });
+    const quality = await dataSource.getRepository(VideoQualityResultEntity).findOneByOrFail({ submissionId: firstSubmissionId });
+    await dataSource.getRepository(VideoQualityResultEntity).save({ ...quality, submissionId: id, completedAt: approvedAt, manualReviewedAt: null });
+    const metadata = await dataSource.getRepository(MediaMetadataEntity).findOneByOrFail({ submissionId: firstSubmissionId });
+    await dataSource.getRepository(MediaMetadataEntity).save({ ...metadata, submissionId: id });
+    return id;
+  }
 
-    expect(preview.body.preview).toMatchObject({
-      submissionCount: 2,
-      effectiveDurationMs: 230000,
-      effectiveMinutes: 3.83,
-      totalPoints: 0.7,
-    });
-    expect(preview.body.preview.teamSummaries).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          teamId: "TEAM-PC-01",
-          submissionCount: 1,
-          points: 0.37,
-        }),
-        expect.objectContaining({
-          teamId: "TEAM-PC-02",
-          submissionCount: 1,
-          points: 0.33,
-        }),
-      ]),
-    );
+  async function cycleFor(submissionId: string) {
+    const item = await dataSource.getRepository(PointCycleItemEntity).findOneByOrFail({ submissionId });
+    return dataSource.getRepository(PointCycleEntity).findOneByOrFail({ id: item.cycleId });
+  }
 
-    const collectorCookie = await login("point-collector");
-    await request(app.getHttpServer())
-      .get("/api/v1/point-cycles/preview")
-      .set("Cookie", collectorCookie)
-      .expect(403);
+  it.each([
+    ["2030-01-01T15:59:59.999Z", "2030-01-01T18:00:00.000Z"],
+    ["2030-01-01T16:00:00.000Z", "2030-01-02T18:00:00.000Z"],
+    ["2030-01-01T17:59:00.000Z", "2030-01-02T18:00:00.000Z"],
+    ["2030-01-01T18:00:00.000Z", "2030-01-02T18:00:00.000Z"],
+    ["2030-12-31T15:59:59.999Z", "2030-12-31T18:00:00.000Z"],
+  ])("uses next Shanghai calendar day, not 24h: %s", (approval, due) => {
+    expect(nextSettlementAt(new Date(approval)).toISOString()).toBe(due);
   });
 
-  it("lets admins clear near-duplicate candidates before settlement", async () => {
-    const adminCookie = await login("point-admin");
-    const cleared = await request(app.getHttpServer())
-      .post("/api/v1/submissions/SUB-PC-02/duplicate-candidates/DUP-PC-02/clear")
-      .set("Origin", WEB_ORIGIN)
-      .set("Cookie", adminCookie)
-      .send({ reason: "人工确认任务步骤不同" })
-      .expect(201);
+  it("backfills eligible snapshots without an active administrator or duplicate credit", async () => {
+    await dataSource.getRepository(UserEntity).update({ id: "U-PC-ADMIN" }, { status: "disabled" });
+    try {
+      expect(await app.get(PointCyclesService).reconcileAccruals()).toBe(2);
+      expect(await app.get(PointCyclesService).reconcileAccruals()).toBe(0);
+      const balance = await app.get(WalletService).getWallet("U-PC-COLLECTOR");
+      expect(balance).toMatchObject({ totalBalance: 0.37, settlingBalance: 0.37, availableBalance: 0, nextSettlementAt: Date.parse("2030-01-01T18:00:00.000Z") });
+      expect(await dataSource.getRepository(PointCycleItemEntity).count()).toBe(2);
+      expect((await cycleFor(firstSubmissionId)).createdByAccountId).toBeNull();
+      const excluded = await dataSource.getRepository(PointCycleItemEntity).find();
+      expect(excluded.map((item) => item.submissionId).sort()).toEqual([firstSubmissionId, "SUB-PC-03"].sort());
+    } finally {
+      await dataSource.getRepository(UserEntity).update({ id: "U-PC-ADMIN" }, { status: "active" });
+    }
+  });
 
-    expect(cleared.body.submission.duplicateCandidates).toEqual([]);
-    expect(
-      await dataSource.getRepository(SubmissionDuplicateCandidateEntity).findOneByOrFail({
-        id: "DUP-PC-02",
-      }),
-    ).toMatchObject({
-      status: "cleared",
-      clearedReason: "人工确认任务步骤不同",
-      clearedByAccountId: "U-PC-ADMIN",
-    });
-    expect(
-      await dataSource.getRepository(AuditLogEntity).countBy({
-        action: "duplicate_candidate_clear",
-      }),
-    ).toBe(1);
+  it("credits immediately when the last duplicate exclusion is cleared", async () => {
+    const cookie = await login("point-admin");
+    await request(app.getHttpServer()).post("/api/v1/submissions/SUB-PC-02/duplicate-candidates/DUP-PC-02/clear")
+      .set("Origin", WEB_ORIGIN).set("Cookie", cookie).send({ reason: "人工确认任务步骤不同" }).expect(201);
+    expect(await app.get(WalletService).getWallet("U-PC-COLLECTOR")).toMatchObject({ settlingBalance: 0.53 });
+    const cycle = await cycleFor("SUB-PC-02");
+    expect(cycle.settleDueAt?.toISOString()).toBe("2030-01-01T18:00:00.000Z");
+  });
 
-    const preview = await request(app.getHttpServer())
-      .get("/api/v1/point-cycles/preview")
-      .set("Cookie", adminCookie)
-      .expect(200);
-    expect(preview.body.preview).toMatchObject({
-      submissionCount: 3,
-      effectiveDurationMs: 285000,
-      totalPoints: 0.86,
-    });
-
-    await dataSource.getRepository(SubmissionDuplicateCandidateEntity).save({
-      id: "DUP-PC-02",
-      submissionId: "SUB-PC-02",
-      candidateSubmissionId: firstSubmissionId,
-      similarity: "0.9700",
-      status: "candidate",
-      details: { source: "test" },
-    });
+  it("manual approval and credit commit together and expose file/due evidence", async () => {
+    const cookie = await login("point-admin");
+    await request(app.getHttpServer()).patch("/api/v1/submissions/SUB-PC-FAIL/quality-review")
+      .set("Origin", WEB_ORIGIN).set("Cookie", cookie)
+      .send({ finalScore: 90, expectedReviewRevision: 0, reason: "人工复核通过", issues: [] }).expect(200);
+    const quality = await dataSource.getRepository(VideoQualityResultEntity).findOneByOrFail({ submissionId: "SUB-PC-FAIL" });
+    const cycle = await cycleFor("SUB-PC-FAIL");
+    expect(cycle.settleDueAt).toEqual(nextSettlementAt(quality.manualReviewedAt!));
+    const collector = await login("point-collector");
+    const wallet = await request(app.getHttpServer()).get("/api/v1/wallet/me").set("Cookie", collector).expect(200);
+    expect(wallet.body.balance).toMatchObject({ settlingBalance: 0.83, availableBalance: 0 });
+    expect(wallet.body.transactions).toEqual(expect.arrayContaining([expect.objectContaining({
+      submissionId: "SUB-PC-FAIL", type: "lock", amount: 0.3, fileName: "failed-score.mp4", settleDueAt: cycle.settleDueAt!.getTime(),
+    })]));
+    await request(app.getHttpServer()).patch("/api/v1/submissions/SUB-PC-FAIL/quality-review")
+      .set("Origin", WEB_ORIGIN).set("Cookie", cookie)
+      .send({ finalScore: 91, expectedReviewRevision: 1, reason: "不得覆盖已入账快照", issues: [] }).expect(409);
   });
 
   it("publishes versioned point rules and writes audit", async () => {
@@ -634,347 +631,279 @@ describe("point cycle API", () => {
       .expect(403);
   });
 
-  it("locks a point cycle with immutable per-submission snapshots", async () => {
-    const adminCookie = await login("point-admin");
-    await dataSource
-      .getRepository(TeamEntity)
-      .update({ id: "TEAM-PC-02" }, { unitPricePerMinute: "0.0000" });
-    const created = await request(app.getHttpServer())
-      .post("/api/v1/point-cycles")
-      .set("Origin", WEB_ORIGIN)
-      .set("Cookie", adminCookie)
-      .send({ businessDate: "2026-08-13" })
-      .expect(201);
 
-    expect(created.body.cycle).toMatchObject({
-      businessDate: "2026-08-13",
-      status: "locked",
-      submissionCount: 2,
-      totalPoints: 0.43,
-      pointRuleRevision: 2,
-      pointRuleSnapshot: {
-        defaultPointsPerMinute: 15,
-        coefficientBands: expect.arrayContaining([
-          expect.objectContaining({ minScore: 80, ratio: 0.5 }),
-        ]),
-      },
-      createdByAccountId: "U-PC-ADMIN",
-      createdByName: "积分管理员",
-    });
-    expect(created.body.cycle.items).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          submissionId: firstSubmissionId,
-          thumbnail: {
-            url: "http://unused.local/download",
-            expiresAt: Date.parse("2030-01-01T00:00:00.000Z"),
-            contentType: "image/jpeg",
-          },
-          finalScore: 80,
-          settlementRatio: 0.5,
-          effectiveDurationMs: 110000,
-          pointsPerMinute: 12,
-          points: 0.18,
-          qualityRevision: 0,
-        }),
-      ]),
-    );
-    expect(
-      await dataSource.getRepository(PointCycleItemEntity).count(),
-    ).toBe(2);
-    expect(
-      await dataSource.getRepository(AuditLogEntity).countBy({
-        action: "point_cycle_lock",
-      }),
-    ).toBe(1);
-
-    await request(app.getHttpServer())
-      .post("/api/v1/point-cycles")
-      .set("Origin", WEB_ORIGIN)
-      .set("Cookie", adminCookie)
-      .send({ businessDate: "2026-08-13" })
-      .expect(409);
-
-    // 锁定后不允许再修改质检结果：锁定即最终结算依据
-    await request(app.getHttpServer())
-      .patch(`/api/v1/submissions/${firstSubmissionId}/quality-review`)
-      .set("Origin", WEB_ORIGIN)
-      .set("Cookie", adminCookie)
-      .send({
-        finalScore: 92,
-        reason: "锁定后复核调整",
-        expectedReviewRevision: 0,
-        issues: [],
-      })
-      .expect(409);
-
-    const lockedItem = await dataSource
-      .getRepository(PointCycleItemEntity)
-      .findOneByOrFail({ submissionId: firstSubmissionId });
-    expect(lockedItem.finalScore).toBe("80.0");
-    expect(lockedItem.effectiveDurationMs).toBe("110000");
-    expect(lockedItem.points).toBe("0.18");
-    expect(
-      await dataSource.getRepository(PointCycleAdjustmentEntity).countBy({
-        submissionId: firstSubmissionId,
-      }),
-    ).toBe(0);
-    expect(
-      await dataSource.getRepository(AuditLogEntity).countBy({
-        action: "point_cycle_adjustment",
-      }),
-    ).toBe(0);
-
-    const listed = await request(app.getHttpServer())
-      .get("/api/v1/point-cycles")
-      .set("Cookie", adminCookie)
-      .expect(200);
-    expect(listed.body.cycles[0]).toMatchObject({
-      id: created.body.cycle.id,
-      submissionCount: 2,
-      effectiveDurationMs: 230000,
-      totalPoints: 0.43,
-    });
-    expect(listed.body.cycles[0].items).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          submissionId: firstSubmissionId,
-          finalScore: 80,
-          settlementRatio: 0.5,
-          effectiveDurationMs: 110000,
-          points: 0.18,
-        }),
-      ]),
-    );
-
-    const fetched = await request(app.getHttpServer())
-      .get(`/api/v1/point-cycles/${created.body.cycle.id}`)
-      .set("Cookie", adminCookie)
-      .expect(200);
-    expect(fetched.body.cycle).toMatchObject({
-      effectiveDurationMs: 230000,
-      totalPoints: 0.43,
-    });
-    expect(fetched.body.cycle.items).toEqual(listed.body.cycles[0].items);
-
-    const exported = await request(app.getHttpServer())
-      .get(`/api/v1/point-cycles/${created.body.cycle.id}/export.csv`)
-      .set("Cookie", adminCookie)
-      .expect(200);
-    expect(exported.headers["content-type"]).toContain("text/csv");
-    expect(exported.text).toContain(
-      "cycle_id,business_date,submission_id,file_name,team_id,team_name",
-    );
+  it("retains scoped read/export while removing every manual availability bypass", async () => {
+    const admin = await login("point-admin");
+    const cycle = await cycleFor(firstSubmissionId);
+    await request(app.getHttpServer()).post("/api/v1/point-cycles").set("Origin", WEB_ORIGIN).set("Cookie", admin).send({}).expect(404);
+    await request(app.getHttpServer()).get("/api/v1/point-cycles/preview").set("Cookie", admin).expect(404);
+    await request(app.getHttpServer()).post(`/api/v1/point-cycles/${cycle.id}/settle`).set("Origin", WEB_ORIGIN).set("Cookie", admin).expect(404);
+    await expect(app.get(PointCyclesService).settleCycle(cycle.id, new Date(cycle.settleDueAt!.getTime() - 1))).rejects.toMatchObject({ code: "SETTLEMENT_NOT_DUE" });
+    const collector = await login("point-collector");
+    const exported = await request(app.getHttpServer()).get(`/api/v1/point-cycles/${cycle.id}/export.csv`).set("Cookie", collector).expect(200);
     expect(exported.text).toContain("SUB-PC-01,kitchen-a.mp4");
-    expect(exported.text).toContain("SUB-PC-03,other-team.mp4");
-    expect(exported.text).not.toContain("SUB-PC-02,kitchen-b.mp4");
-    const firstRow = exported.text
-      .split("\n")
-      .find((row) => row.includes("SUB-PC-01,kitchen-a.mp4"));
-    expect(firstRow?.split(",").slice(11, 16)).toEqual([
-      "80.0",
-      "0.5000",
-      "1.83",
-      "12.0000",
-      "0.18",
-    ]);
+    expect(exported.text).not.toContain("SUB-PC-03");
+    const other = await login("point-other");
+    await request(app.getHttpServer()).get(`/api/v1/point-cycles/${cycle.id}`).set("Cookie", other).expect(404);
+    const listed = await request(app.getHttpServer()).get("/api/v1/point-cycles").set("Cookie", collector).expect(200);
+    expect(listed.body.cycles.flatMap((row: { items: Array<{ ownerId: string }> }) => row.items).every((item: { ownerId: string }) => item.ownerId === "U-PC-COLLECTOR")).toBe(true);
   });
 
-  it("scopes locked cycles for leaders and collectors", async () => {
-    const leaderCookie = await login("point-leader");
-    const leader = await request(app.getHttpServer())
-      .get("/api/v1/point-cycles")
-      .set("Cookie", leaderCookie)
-      .expect(200);
-    expect(leader.body.cycles).toHaveLength(1);
-    expect(leader.body.cycles[0]).toMatchObject({
-      submissionCount: 1,
-      effectiveDurationMs: 110000,
-      totalPoints: 0.18,
-    });
-    expect(
-      leader.body.cycles[0].items.map((item: { teamId: string }) => item.teamId),
-    ).toEqual(["TEAM-PC-01"]);
-    const leaderExport = await request(app.getHttpServer())
-      .get(`/api/v1/point-cycles/${leader.body.cycles[0].id}/export.csv`)
-      .set("Cookie", leaderCookie)
-      .expect(200);
-    expect(leaderExport.text).toContain("SUB-PC-01,kitchen-a.mp4");
-    expect(leaderExport.text).not.toContain("SUB-PC-03");
-    expect(
-      leaderExport.text
-        .split("\n")
-        .find((row) => row.includes("SUB-PC-01,kitchen-a.mp4"))
-        ?.split(",")
-        .slice(11, 16),
-    ).toEqual(["80.0", "0.5000", "1.83", "12.0000", "0.18"]);
-
-    const leaderGet = await request(app.getHttpServer())
-      .get(`/api/v1/point-cycles/${leader.body.cycles[0].id}`)
-      .set("Cookie", leaderCookie)
-      .expect(200);
-    expect(leaderGet.body.cycle).toMatchObject({
-      submissionCount: 1,
-      effectiveDurationMs: 110000,
-      totalPoints: 0.18,
-    });
-    expect(leaderGet.body.cycle.items).toEqual([
-      expect.objectContaining({
-        submissionId: firstSubmissionId,
-        finalScore: 80,
-        points: 0.18,
-      }),
-    ]);
-
-    const collectorCookie = await login("point-collector");
-    const collector = await request(app.getHttpServer())
-      .get("/api/v1/point-cycles")
-      .set("Cookie", collectorCookie)
-      .expect(200);
-    expect(collector.body.cycles[0]).toMatchObject({
-      submissionCount: 1,
-      effectiveDurationMs: 110000,
-      totalPoints: 0.18,
-    });
-    expect(collector.body.cycles[0].items).toEqual([
-      expect.objectContaining({
-        submissionId: firstSubmissionId,
-        finalScore: 80,
-        settlementRatio: 0.5,
-        points: 0.18,
-      }),
-    ]);
-    const collectorGet = await request(app.getHttpServer())
-      .get(`/api/v1/point-cycles/${collector.body.cycles[0].id}`)
-      .set("Cookie", collectorCookie)
-      .expect(200);
-    expect(collectorGet.body.cycle).toMatchObject({
-      submissionCount: 1,
-      effectiveDurationMs: 110000,
-      totalPoints: 0.18,
-    });
-    const collectorExport = await request(app.getHttpServer())
-      .get(
-        `/api/v1/point-cycles/${collector.body.cycles[0].id}/export.csv`,
-      )
-      .set("Cookie", collectorCookie)
-      .expect(200);
-    expect(collectorExport.text).toContain("SUB-PC-01,kitchen-a.mp4");
-    expect(collectorExport.text).not.toContain("SUB-PC-03");
-    expect(
-      collectorExport.text
-        .split("\n")
-        .find((row) => row.includes("SUB-PC-01,kitchen-a.mp4"))
-        ?.split(",")
-        .slice(11, 16),
-    ).toEqual(["80.0", "0.5000", "1.83", "12.0000", "0.18"]);
-
-    const otherCookie = await login("point-other");
-    const other = await request(app.getHttpServer())
-      .get(`/api/v1/point-cycles/${leader.body.cycles[0].id}`)
-      .set("Cookie", otherCookie)
-      .expect(200);
-    expect(other.body.cycle).toMatchObject({
-      submissionCount: 1,
-      effectiveDurationMs: 120000,
-      totalPoints: 0.25,
-    });
-    expect(other.body.cycle.items).toEqual([
-      expect.objectContaining({ submissionId: "SUB-PC-03" }),
-    ]);
+  it("adjusts pending balance by delta and settles the effective snapshot exactly once", async () => {
+    const cycle = await cycleFor(firstSubmissionId);
+    const item = await dataSource.getRepository(PointCycleItemEntity).findOneByOrFail({ submissionId: firstSubmissionId });
+    const before = await app.get(WalletService).getWallet(item.ownerId);
+    const admin = await login("point-admin");
+    await request(app.getHttpServer()).post(`/api/v1/point-cycles/${cycle.id}/items/${item.id}/adjust`)
+      .set("Origin", WEB_ORIGIN).set("Cookie", admin).send({ nextFinalScore: 70, reason: "纠正评分" }).expect(201);
+    const adjustment = await dataSource.getRepository(PointCycleAdjustmentEntity).findOneByOrFail({ pointCycleItemId: item.id });
+    const amount = Number(adjustment.nextPoints);
+    expect(amount).toBe(0.31); // Original default coefficient snapshot, not the newly published 0.4.
+    expect((await app.get(WalletService).getWallet(item.ownerId)).settlingBalance).toBeCloseTo(before.settlingBalance + Number(adjustment.pointsDelta), 2);
+    expect((await dataSource.getRepository(PointCycleItemEntity).findOneByOrFail({ id: item.id })).points).toBe("0.37");
+    const service = app.get(PointCyclesService);
+    const result = await Promise.all([service.settleCycle(cycle.id, cycle.settleDueAt!), service.settleCycle(cycle.id, cycle.settleDueAt!)]);
+    expect(result.sort()).toEqual([false, true]);
+    expect(await app.get(WalletService).getWallet(item.ownerId)).toMatchObject({ availableBalance: 0.31 });
+    expect(await dataSource.getRepository(WalletTransactionEntity).countBy({ cycleId: cycle.id, type: "settle" })).toBe(1);
+    await dataSource.getRepository(SubmissionEntity).update({ id: item.submissionId }, { assetStatus: "quarantined" });
+    await service.settleCycle(cycle.id, cycle.settleDueAt!);
+    expect(await app.get(WalletService).getWallet(item.ownerId)).toMatchObject({ availableBalance: 0.31 });
+    await request(app.getHttpServer()).post(`/api/v1/point-cycles/${cycle.id}/items/${item.id}/adjust`)
+      .set("Origin", WEB_ORIGIN).set("Cookie", admin).send({ nextFinalScore: 0, reason: "不可暗扣已可用收入" }).expect(409);
+    await dataSource.getRepository(SubmissionEntity).update({ id: item.submissionId }, { assetStatus: "active" });
   });
 
-  it("credits wallets on lock, settles after due time and records withdrawals", async () => {
-    const adminCookie = await login("point-admin");
-    const collectorCookie = await login("point-collector");
-    const leaderCookie = await login("point-leader");
+  it("serializes an adjustment racing settlement without a foreign-key deadlock", async () => {
+    const id = await cloneSubmission("SUB-PC-ADJUST-SETTLE");
+    const service = app.get(PointCyclesService);
+    await service.accrueSubmission(id);
+    const cycle = await cycleFor(id);
+    const item = await dataSource.getRepository(PointCycleItemEntity).findOneByOrFail({ submissionId: id });
+    const before = await app.get(WalletService).getWallet(item.ownerId);
+    const admin = await login("point-admin");
+    const blocker = dataSource.createQueryRunner();
+    await blocker.connect();
+    await blocker.startTransaction();
+    let adjustment: Promise<request.Response> | undefined;
+    let settlement: Promise<PromiseSettledResult<boolean>[]> | undefined;
+    try {
+      await blocker.query("SELECT id FROM point_cycles WHERE id = $1 FOR UPDATE", [cycle.id]);
+      const waitForBlocked = async (count: number) => {
+        await vi.waitFor(async () => {
+          const [row] = await dataSource.query(
+            "SELECT COUNT(*)::int AS count FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'",
+          );
+          expect(row.count).toBe(count);
+        }, { timeout: 5_000 });
+      };
+      adjustment = request(app.getHttpServer()).post(`/api/v1/point-cycles/${cycle.id}/items/${item.id}/adjust`)
+        .set("Origin", WEB_ORIGIN).set("Cookie", admin)
+        .send({ nextFinalScore: 70, reason: "与自动结算并发修正" }).then(response => response);
+      await waitForBlocked(1);
+      settlement = Promise.allSettled([service.settleCycle(cycle.id, cycle.settleDueAt!)]);
+      await waitForBlocked(2);
+      await blocker.commitTransaction();
+      expect((await adjustment).status).toBe(201);
+      expect(await settlement).toEqual([{ status: "fulfilled", value: true }]);
+      const correction = await dataSource.getRepository(PointCycleAdjustmentEntity).findOneByOrFail({ submissionId: id });
+      expect((await app.get(WalletService).getWallet(item.ownerId)).availableBalance)
+        .toBeCloseTo(before.availableBalance + Number(correction.nextPoints), 2);
+      expect(await dataSource.getRepository(WalletTransactionEntity).countBy({ cycleId: cycle.id, type: "settle" })).toBe(1);
+    } finally {
+      if (blocker.isTransactionActive) await blocker.rollbackTransaction();
+      await blocker.release();
+      await Promise.allSettled([adjustment, settlement]);
+    }
+  });
 
-    // 前序用例已锁定周期：SUB-PC-01（积分数采 0.18 元）、SUB-PC-03（二队数采 0.25 元）
-    const listed = await request(app.getHttpServer())
-      .get("/api/v1/point-cycles")
-      .set("Cookie", adminCookie)
-      .expect(200);
-    const cycle = listed.body.cycles[0] as { id: string; status: string; settleDueAt: number | null };
-    expect(cycle.status).toBe("locked");
-    expect(cycle.settleDueAt).toBeGreaterThan(Date.now());
+  it.each([["linked", 0.17], ["unversioned", 0.33]] as const)(
+    "preserves %s legacy pricing when correcting duration without a snapshot",
+    async (kind, expectedPoints) => {
+      const id = await cloneSubmission(`SUB-PC-LEGACY-PRICING-${kind}`);
+      const service = app.get(PointCyclesService);
+      await service.accrueSubmission(id);
+      const cycle = await cycleFor(id);
+      await dataSource.getRepository(PointCycleEntity).update({ id: cycle.id }, {
+        pointRuleSnapshot: null,
+        ...(kind === "unversioned" ? { pointRuleVersionId: null, pointRuleRevision: null } : {}),
+      });
+      const item = await dataSource.getRepository(PointCycleItemEntity).findOneByOrFail({ submissionId: id });
+      const before = await app.get(WalletService).getWallet(item.ownerId);
+      const admin = await login("point-admin");
+      await request(app.getHttpServer()).post(`/api/v1/point-cycles/${cycle.id}/items/${item.id}/adjust`)
+        .set("Origin", WEB_ORIGIN).set("Cookie", admin)
+        .send({ nextInvalidDurationMs: 20_000, reason: "历史时长修正" }).expect(201);
+      const correction = await dataSource.getRepository(PointCycleAdjustmentEntity).findOneByOrFail({ submissionId: id });
+      expect(Number(correction.nextPoints)).toBe(expectedPoints);
+      await service.settleCycle(cycle.id, cycle.settleDueAt!);
+      expect((await app.get(WalletService).getWallet(item.ownerId)).availableBalance)
+        .toBeCloseTo(before.availableBalance + expectedPoints, 2);
+    },
+  );
 
-    // 锁定即入钱包「结算中」
-    const before = await request(app.getHttpServer())
-      .get("/api/v1/wallet/me")
-      .set("Cookie", collectorCookie)
-      .expect(200);
-    expect(before.body.balance).toMatchObject({
-      ownerName: "积分数采",
-      totalBalance: 0.18,
-      settlingBalance: 0.18,
-      availableBalance: 0,
-      withdrawnBalance: 0,
-      cumulativeWithdrawn: 0,
+  it("serializes multi-connection callbacks and concurrent earnings for one wallet", async () => {
+    const id = await cloneSubmission("SUB-PC-CONCURRENT");
+    const otherId = await cloneSubmission("SUB-PC-CONCURRENT-OTHER");
+    const service = app.get(PointCyclesService);
+    const before = await app.get(WalletService).getWallet("U-PC-COLLECTOR");
+    const results = await Promise.all([
+      ...Array.from({ length: 4 }, () => service.accrueSubmission(id)),
+      // A different DataSource/connection executes the real transactional callback too.
+      dataSource.transaction((manager) => service.accrueSubmission(id, manager)),
+      dataSource.transaction((manager) => service.accrueSubmission(otherId, manager)),
+    ]);
+    expect(results.filter(Boolean)).toHaveLength(2);
+    expect(await dataSource.getRepository(PointCycleItemEntity).countBy({ submissionId: id })).toBe(1);
+    const items = await dataSource.getRepository(PointCycleItemEntity).find();
+    const added = items.filter((item) => [id, otherId].includes(item.submissionId)).reduce((sum, item) => sum + Number(item.points), 0);
+    expect((await app.get(WalletService).getWallet("U-PC-COLLECTOR")).settlingBalance).toBeCloseTo(before.settlingBalance + added, 2);
+  });
+
+  it("serializes settlement with withdrawal reservation and preserves manual paid history", async () => {
+    const cycle = await cycleFor("SUB-PC-CONCURRENT-OTHER");
+    const before = await app.get(WalletService).getWallet("U-PC-COLLECTOR");
+    const collector = await login("point-collector");
+    const admin = await login("point-admin");
+    const [, withdrawn] = await Promise.all([
+      app.get(PointCyclesService).settleCycle(cycle.id, cycle.settleDueAt!),
+      request(app.getHttpServer()).post("/api/v1/wallet/withdraw").set("Origin", WEB_ORIGIN).set("Cookie", collector)
+        .send({ amount: 0.1, idempotencyKey: "point-withdrawal", method: "alipay", account: "point@example.test", name: "测试收款人" }).expect(200),
+    ]);
+    expect(await app.get(WalletService).getWallet("U-PC-COLLECTOR")).toMatchObject({
+      availableBalance: Math.round((before.availableBalance + Number(cycle.totalPoints) - 0.1) * 100) / 100,
+      reservedBalance: 0.1, withdrawnBalance: 0,
     });
-    const lockTx = before.body.transactions as Array<{ type: string }>;
-    expect(lockTx[0]?.type).toBe("lock");
-
-    // 手动触发结算：结算中 → 可提现
-    const settled = await request(app.getHttpServer())
-      .post(`/api/v1/point-cycles/${cycle.id}/settle`)
-      .set("Origin", WEB_ORIGIN)
-      .set("Cookie", adminCookie)
-      .expect(200);
-    expect(settled.body.cycle.status).toBe("settled");
-    expect(settled.body.cycle.settledAt).toBeGreaterThan(0);
-
-    const after = await request(app.getHttpServer())
-      .get("/api/v1/wallet/me")
-      .set("Cookie", collectorCookie)
-      .expect(200);
-    expect(after.body.balance).toMatchObject({
-      totalBalance: 0.18,
-      settlingBalance: 0,
-      availableBalance: 0.18,
-    });
-    const txTypes = (after.body.transactions as Array<{ type: string }>).map(
-      (item) => item.type,
-    );
-    expect(txTypes.slice(0, 2)).toEqual(["settle", "lock"]);
-
-    // Application reserves funds; only subsequent finance confirmation creates a paid ledger.
-    const withdrawn = await request(app.getHttpServer())
-      .post("/api/v1/wallet/withdraw").set("Origin", WEB_ORIGIN).set("Cookie", collectorCookie)
-      .send({ amount: 0.1, idempotencyKey: "point-withdrawal", method: "alipay", account: "point@example.test", name: "测试收款人" }).expect(200);
-    expect(withdrawn.body.request.status).toBe("pending");
-    const reserved = await request(app.getHttpServer()).get("/api/v1/wallet/me").set("Cookie", collectorCookie).expect(200);
-    expect(reserved.body.balance).toMatchObject({ totalBalance: 0.18, availableBalance: 0.08, reservedBalance: 0.1, withdrawnBalance: 0, cumulativeWithdrawn: 0 });
-    const batch = await request(app.getHttpServer()).post("/api/v1/wallet/withdrawal-batches").set("Origin", WEB_ORIGIN).set("Cookie", adminCookie)
+    const batch = await request(app.getHttpServer()).post("/api/v1/wallet/withdrawal-batches").set("Origin", WEB_ORIGIN).set("Cookie", admin)
       .send({ ids: [withdrawn.body.request.id] }).expect(200);
-    await request(app.getHttpServer()).post(`/api/v1/wallet/withdrawal-batches/${batch.body.batchId}/export`).set("Origin", WEB_ORIGIN).set("Cookie", adminCookie).expect(200);
-    await request(app.getHttpServer()).post(`/api/v1/wallet/withdrawals/${withdrawn.body.request.id}/status`).set("Origin", WEB_ORIGIN).set("Cookie", adminCookie)
+    await request(app.getHttpServer()).post(`/api/v1/wallet/withdrawal-batches/${batch.body.batchId}/export`).set("Origin", WEB_ORIGIN).set("Cookie", admin).expect(200);
+    await request(app.getHttpServer()).post(`/api/v1/wallet/withdrawals/${withdrawn.body.request.id}/status`).set("Origin", WEB_ORIGIN).set("Cookie", admin)
       .send({ status: "paid", transferReference: "point-manual-transfer", paidAt: new Date().toISOString() }).expect(200);
-    const paid = await request(app.getHttpServer()).get("/api/v1/wallet/me").set("Cookie", collectorCookie).expect(200);
-    expect(paid.body.balance).toMatchObject({ totalBalance: 0.18, availableBalance: 0.08, reservedBalance: 0, withdrawnBalance: 0.1, cumulativeWithdrawn: 0.1 });
-    expect(paid.body.transactions.filter((row: { type: string }) => row.type === "withdraw")).toHaveLength(1);
+    const paid = await app.get(WalletService).getWallet("U-PC-COLLECTOR");
+    expect(paid).toMatchObject({ reservedBalance: 0, withdrawnBalance: 0.1, cumulativeWithdrawn: 0.1, totalBalance: before.totalBalance });
+    await app.get(PointCyclesService).settleCycle(cycle.id, cycle.settleDueAt!);
+    expect(await app.get(WalletService).getWallet("U-PC-COLLECTOR")).toEqual(paid);
+    await request(app.getHttpServer()).post("/api/v1/wallet/withdraw").set("Origin", WEB_ORIGIN).set("Cookie", collector)
+      .send({ amount: 999, idempotencyKey: "point-insufficient", method: "alipay", account: "point@example.test", name: "测试收款人" }).expect(409);
+  });
 
-    // 超额提现被拒绝
-    await request(app.getHttpServer())
-      .post("/api/v1/wallet/withdraw")
-      .set("Origin", WEB_ORIGIN)
-      .set("Cookie", collectorCookie)
-      .send({ amount: 999, idempotencyKey: "point-insufficient", method: "alipay", account: "point@example.test", name: "测试收款人" })
-      .expect(409);
+  it("rejects insufficient pending balances instead of clipping and minting availability", async () => {
+    const id = await cloneSubmission("SUB-PC-INSUFFICIENT");
+    await app.get(PointCyclesService).accrueSubmission(id);
+    const cycle = await cycleFor(id);
+    const repository = dataSource.getRepository(WalletBalanceEntity);
+    const original = await repository.findOneByOrFail({ ownerId: "U-PC-COLLECTOR" });
+    await repository.update({ ownerId: original.ownerId }, {
+      settlingBalance: "0.00", totalBalance: (Number(original.totalBalance) - Number(original.settlingBalance)).toFixed(2),
+    });
+    try {
+      await expect(app.get(PointCyclesService).settleCycle(cycle.id, cycle.settleDueAt!)).rejects.toMatchObject({ code: "ACCOUNTING_INCONSISTENCY" });
+      expect((await cycleFor(id)).status).toBe("locked");
+      expect(await dataSource.getRepository(WalletTransactionEntity).countBy({ cycleId: cycle.id, type: "settle" })).toBe(0);
+    } finally {
+      await repository.save(original);
+    }
+  });
 
-    // 钱包列表范围：管理员全平台 / 团长本队
-    const adminWallets = await request(app.getHttpServer())
-      .get("/api/v1/wallet")
-      .set("Cookie", adminCookie)
-      .expect(200);
-    expect(
-      (adminWallets.body.wallets as Array<{ ownerName: string; totalBalance: number }>).map(
-        (item) => [item.ownerName, item.totalBalance],
-      ),
-    ).toEqual(expect.arrayContaining([
-      ["积分数采", 0.18],
-      ["二队数采", 0.25],
-    ]));
+  it("uses serialized correction order rather than transaction timestamps", async () => {
+    const id = await cloneSubmission("SUB-PC-ADJUST-ORDER");
+    const service = app.get(PointCyclesService);
+    await service.accrueSubmission(id);
+    const cycle = await cycleFor(id);
+    const item = await dataSource.getRepository(PointCycleItemEntity).findOneByOrFail({ submissionId: id });
+    const admin = await login("point-admin");
+    for (const score of [70, 60]) {
+      await request(app.getHttpServer()).post(`/api/v1/point-cycles/${cycle.id}/items/${item.id}/adjust`)
+        .set("Origin", WEB_ORIGIN).set("Cookie", admin).send({ nextFinalScore: score, reason: "复核修正" }).expect(201);
+    }
+    const corrections = await dataSource.getRepository(PointCycleAdjustmentEntity).find({ where: { submissionId: id }, order: { sequence: "ASC" } });
+    // A transaction can begin before the transaction whose row lock it later acquires.
+    await dataSource.getRepository(PointCycleAdjustmentEntity).update({ id: corrections[0]!.id }, { createdAt: new Date("2040-01-01T00:00:00Z") });
+    const before = await app.get(WalletService).getWallet(item.ownerId);
+    await service.settleCycle(cycle.id, cycle.settleDueAt!);
+    expect((await app.get(WalletService).getWallet(item.ownerId)).availableBalance).toBeCloseTo(before.availableBalance + Number(corrections[1]!.nextPoints), 2);
+  });
 
+  it.each(["unavailable", "duplicate", "nonfinal"])("excludes %s records and reverses disqualification before availability", async (kind) => {
+    const id = await cloneSubmission(`SUB-PC-REVOKE-${kind}`);
+    const service = app.get(PointCyclesService);
+    const invalidate = async () => {
+      if (kind === "unavailable") await dataSource.getRepository(SubmissionEntity).update({ id }, { storageStatus: "delete_pending" });
+      if (kind === "nonfinal") await dataSource.getRepository(VideoQualityResultEntity).update({ submissionId: id }, { status: "review_pending", manualFinalScore: null });
+      if (kind === "duplicate") await dataSource.getRepository(SubmissionDuplicateCandidateEntity).save({ id: `DUP-${kind}`, submissionId: id, candidateSubmissionId: firstSubmissionId, similarity: "0.9900", status: "candidate", details: {} });
+    };
+    await invalidate();
+    expect(await service.accrueSubmission(id)).toBe(false);
+    await dataSource.getRepository(SubmissionEntity).update({ id }, { storageStatus: "available" });
+    await dataSource.getRepository(VideoQualityResultEntity).update({ submissionId: id }, { status: "scored" });
+    await dataSource.getRepository(SubmissionDuplicateCandidateEntity).delete({ submissionId: id });
+    await service.accrueSubmission(id);
+    const cycle = await cycleFor(id);
+    const before = await app.get(WalletService).getWallet("U-PC-COLLECTOR");
+    await invalidate();
+    await service.settleCycle(cycle.id, cycle.settleDueAt!);
+    const after = await app.get(WalletService).getWallet("U-PC-COLLECTOR");
+    expect(after.availableBalance).toBe(before.availableBalance);
+    expect(after.totalBalance).toBeCloseTo(before.totalBalance - Number(cycle.totalPoints), 2);
+    const reversal = await dataSource.getRepository(PointCycleAdjustmentEntity).findOneByOrFail({ submissionId: id });
+    expect(Number(reversal.pointsDelta)).toBe(-Number(cycle.totalPoints));
+    expect(reversal.nextPoints).toBe("0.00");
+    expect(await service.settleCycle(cycle.id, cycle.settleDueAt!)).toBe(false);
+  });
+
+  it("recovers a missed historical approval and its overdue settlement on startup", async () => {
+    const id = await cloneSubmission("SUB-PC-HISTORICAL", new Date("2020-01-01T15:59:00.000Z"));
+    const scheduler = new SettlementSchedulerService(app.get(PointCyclesService));
+    scheduler.onModuleInit();
+    try {
+      await vi.waitFor(async () => {
+        const cycle = await cycleFor(id);
+        expect(cycle.status).toBe("settled");
+        expect(cycle.settleDueAt?.toISOString()).toBe("2020-01-01T18:00:00.000Z");
+      }, { timeout: 10_000 });
+    } finally {
+      scheduler.onModuleDestroy();
+    }
+    expect(await dataSource.getRepository(WalletTransactionEntity).countBy({ submissionId: id, type: "lock" })).toBe(1);
+    await app.get(PointCyclesService).reconcileAccruals();
+    expect(await dataSource.getRepository(WalletTransactionEntity).countBy({ submissionId: id, type: "lock" })).toBe(1);
+  });
+
+  it("migrates old pending due dates without changing paid cycles, wallet balances or credits", async () => {
+    const cycle = await cycleFor("SUB-PC-CONCURRENT");
+    await dataSource.getRepository(PointCycleEntity).update({ id: cycle.id }, { settleDueAt: new Date("2040-01-01T00:00:00Z") });
+    const legacyA = await cloneSubmission("SUB-PC-LEGACY-A", new Date("2030-01-01T15:59:00Z"));
+    const legacyB = await cloneSubmission("SUB-PC-LEGACY-B", new Date("2030-01-02T15:59:00Z"));
+    const template = await dataSource.getRepository(PointCycleItemEntity).findOneByOrFail({ submissionId: "SUB-PC-CONCURRENT" });
+    await dataSource.transaction(async (manager) => {
+      await manager.getRepository(PointCycleEntity).save({ ...cycle, id: "PC-LEGACY-GROUP", submissionCount: 2,
+        effectiveDurationMs: String(Number(template.effectiveDurationMs) * 2), totalPoints: (Number(template.points) * 2).toFixed(2),
+        settleDueAt: new Date("2040-01-01T00:00:00Z") });
+      await manager.getRepository(PointCycleItemEntity).save([
+        { ...template, id: "PCI-LEGACY-A", cycleId: "PC-LEGACY-GROUP", submissionId: legacyA, qualityReviewedAt: new Date("2030-01-01T15:59:00Z") },
+        { ...template, id: "PCI-LEGACY-B", cycleId: "PC-LEGACY-GROUP", submissionId: legacyB, qualityReviewedAt: new Date("2030-01-02T15:59:00Z") },
+      ]);
+      await app.get(WalletService).creditSettling(manager, { ownerId: template.ownerId, amount: Number(template.points) * 2, cycleId: "PC-LEGACY-GROUP", remark: "历史聚合周期原入账" });
+    });
+    const settled = await cycleFor(firstSubmissionId);
+    const before = await dataSource.getRepository(WalletBalanceEntity).find({ order: { ownerId: "ASC" } });
+    const txCount = await dataSource.getRepository(WalletTransactionEntity).count();
+    const runner = dataSource.createQueryRunner();
+    await runner.connect();
+    try { await new NextDaySettlement2026092100001().up(runner); } finally { await runner.release(); }
+    expect((await cycleFor("SUB-PC-CONCURRENT")).settleDueAt?.toISOString()).toBe("2030-01-01T18:00:00.000Z");
+    expect((await cycleFor(legacyA)).settleDueAt?.toISOString()).toBe("2030-01-02T18:00:00.000Z");
+    expect((await cycleFor(legacyB)).id).toBe("PC-LEGACY-GROUP");
+    expect(await cycleFor(firstSubmissionId)).toEqual(settled);
+    expect(await dataSource.getRepository(WalletBalanceEntity).find({ order: { ownerId: "ASC" } })).toEqual(before);
+    expect(await dataSource.getRepository(WalletTransactionEntity).count()).toBe(txCount);
+    expect(await app.get(PointCyclesService).reconcileAccruals()).toBe(0);
+  });
+
+  it("restricts wallet and transaction access to the caller's scope", async () => {
+    const leaderCookie = await login("point-leader");
+    const collectorCookie = await login("point-collector");
+    const adminCookie = await login("point-admin");
     const leaderWallets = await request(app.getHttpServer())
       .get("/api/v1/wallet")
       .set("Cookie", leaderCookie)

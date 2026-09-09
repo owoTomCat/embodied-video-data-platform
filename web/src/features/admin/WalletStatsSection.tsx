@@ -77,7 +77,7 @@ export function WalletStatsSection() {
   return (
     <section className="content-card">
       <div className="card-heading">
-        <div><h2>流水统计</h2><p>全平台钱包流水监控：折线图为锁定/结算/提现金额趋势，饼图为各团队已结算金额分布</p></div>
+        <div><h2>流水统计</h2><p>全平台钱包流水监控：折线图为质检通过入账/结算/提现金额趋势，饼图为各团队已结算金额分布</p></div>
         <div className="scene-library-tabs">
           {(Object.keys(BUCKET_LABELS) as Array<keyof typeof BUCKET_LABELS>).map((key) => (
             <button
@@ -109,7 +109,7 @@ export function WalletStatsSection() {
                   formatter={(value: unknown, name: unknown) => [
                     formatMoney(Number(value ?? 0)),
                     String(name) === "lock"
-                      ? "锁定入结算中"
+                      ? "质检通过入账"
                       : String(name) === "settle"
                         ? "结算转可提现"
                         : "提现（流出）",
@@ -117,7 +117,7 @@ export function WalletStatsSection() {
                   labelFormatter={(label: unknown) => `周期起点：${String(label ?? "")}`}
                 />
                 <Legend formatter={(value: string) =>
-                  value === "lock" ? "锁定入结算中" : value === "settle" ? "结算转可提现" : "提现"
+                  value === "lock" ? "质检通过入账" : value === "settle" ? "结算转可提现" : "提现"
                 } />
                 <Line type="monotone" dataKey="lock" stroke="#8e6fd8" strokeWidth={2} dot={false} />
                 <Line type="monotone" dataKey="settle" stroke="#4774df" strokeWidth={2} dot={false} />
@@ -152,7 +152,7 @@ export function WalletStatsSection() {
                     formatter={(value: unknown, _name: unknown, entry) => {
                       const item = (entry as { payload?: WalletTeamStat }).payload;
                       return [
-                        `${formatMoney(Number(value ?? 0))}（结算 ${formatMoney(item?.settle ?? 0)} / 锁定 ${formatMoney(item?.lock ?? 0)} / 提现 ${formatMoney(item?.withdraw ?? 0)}）`,
+                        `${formatMoney(Number(value ?? 0))}（结算 ${formatMoney(item?.settle ?? 0)} / 质检通过入账 ${formatMoney(item?.lock ?? 0)} / 提现 ${formatMoney(item?.withdraw ?? 0)}）`,
                         "已结算金额",
                       ];
                     }}

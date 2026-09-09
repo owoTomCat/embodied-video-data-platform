@@ -305,7 +305,7 @@ export function TeamIncomePage() {
         <div className="card-heading">
           <div>
             <h2>成员金额汇总</h2>
-            <p>根据真实提交、终态质检和锁定周期计算</p>
+            <p>根据真实提交、终态质检和自动入账记录计算</p>
           </div>
         </div>
         <div className="table-scroll">

@@ -7,7 +7,6 @@ import { PointCycleEntity } from "../database/entities/point-cycle.entity.js";
 import { PointCycleItemEntity } from "../database/entities/point-cycle-item.entity.js";
 import { PointRuleVersionEntity } from "../database/entities/point-rule-version.entity.js";
 import { SubmissionDuplicateCandidateEntity } from "../database/entities/submission-duplicate-candidate.entity.js";
-import { UserEntity } from "../database/entities/user.entity.js";
 import { AllowedOriginGuard } from "../http/allowed-origin.guard.js";
 import { SecurityModule } from "../security/security.module.js";
 import { StorageModule } from "../storage/storage.module.js";
@@ -26,7 +25,6 @@ import { SettlementSchedulerService } from "./settlement-scheduler.service.js";
       PointCycleItemEntity,
       PointRuleVersionEntity,
       SubmissionDuplicateCandidateEntity,
-      UserEntity,
     ]),
     AuthModule,
     AuditModule,

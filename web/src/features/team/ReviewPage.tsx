@@ -71,13 +71,13 @@ export function ReviewPage({
       <div className="page-heading">
         <div>
           <p className="page-kicker">
-            {admin ? "金额锁定前可调整" : "本团队只读视图"}
+            {admin ? "入账前质量复核" : "本团队只读视图"}
           </p>
           <h1>{admin ? "质量复核" : "质检结果"}</h1>
           <span>
             {admin
-              ? "复核全平台未锁定数据，原始 AI 结果永久保留"
-              : `查看 ${currentTeam?.name ?? "本团队"} 已出结果且尚未锁定的数据`}
+              ? "复核全平台未入账数据，原始 AI 结果永久保留"
+              : `查看 ${currentTeam?.name ?? "本团队"} 已出结果且尚未入账的数据`}
           </span>
         </div>
         <span className="review-count">
@@ -88,9 +88,9 @@ export function ReviewPage({
       <div className="review-policy">
         <LockKeyhole size={16} />
         <span>
-          <strong>{admin ? "金额锁定规则" : "只读权限"}</strong>
+          <strong>{admin ? "质检入账规则" : "只读权限"}</strong>
           {admin
-            ? "结算周期生成后，视频评分、无效区间和金额结果将进入留痕调整。"
+            ? "质检通过且符合计费条件即自动入账；入账后的视频评分、无效区间和金额变更须留痕调整。"
             : "团长可查看本团队结果，但不能修改 AI 原始结果或最终质检结果。"}
         </span>
       </div>

@@ -16,16 +16,16 @@ function formatMoney(amount: number): string {
   return `${Math.round(amount * 100) / 100} 元`;
 }
 
-/** 累计赚取 = 可提现 + 预留 + 已提现（不含结算中） */
+/** 累计赚取包含结算中、可提现、预留及已提现。 */
 function earnedTotal(balance: WalletBalance): number {
   return (
-    Math.round((balance.availableBalance + balance.reservedBalance + balance.withdrawnBalance) * 100) /
+    Math.round((balance.settlingBalance + balance.availableBalance + balance.reservedBalance + balance.withdrawnBalance) * 100) /
     100
   );
 }
 
 const transactionLabels: Record<string, string> = {
-  lock: "锁定入结算中",
+  lock: "质检通过入账",
   settle: "结算转可提现",
   withdraw: "提现",
 };
@@ -95,7 +95,7 @@ export function TeamWalletPage() {
         <div>
           <p className="page-kicker">本队成员钱包（只读）</p>
           <h1>团队钱包</h1>
-          <span>查看本队成员的结算中 / 可提现 / 累计赚取与提现记录；提现由成员本人操作</span>
+          <span>质检通过且符合计费条件即入账，北京时间次日02:00可提现，非满24小时；实际付款需成员申请并由财务转账</span>
         </div>
         <span className="live-pill">
           <i />
@@ -124,7 +124,7 @@ export function TeamWalletPage() {
 
       <section className="content-card table-card">
         <div className="card-heading">
-          <div><h2>成员钱包</h2><p>点击成员可展开查看其提现记录</p></div>
+          <div><h2>成员钱包</h2><p>点击成员可展开查看入账、结算与提现流水</p></div>
         </div>
         <div className="table-scroll">
           <table className="data-table">
@@ -178,14 +178,14 @@ function WalletMemberRow({
     <>
       <tr>
         <td><strong>{item.ownerName}</strong><small className="field-help">{item.ownerId}</small></td>
-        <td className="nowrap-cell">{formatMoney(item.settlingBalance)}</td>
+        <td className="nowrap-cell">{formatMoney(item.settlingBalance)}<small className="field-help">最早可提现（北京时间）：{item.nextSettlementAt === null ? "暂无待结算时间" : new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(item.nextSettlementAt)}</small></td>
         <td className="nowrap-cell"><strong>{formatMoney(item.availableBalance)}</strong></td>
         <td className="nowrap-cell">{formatMoney(item.reservedBalance)}</td>
         <td className="nowrap-cell">{formatMoney(earnedTotal(item))}</td>
         <td className="nowrap-cell">{formatMoney(item.withdrawnBalance)}</td>
         <td>
           <button className="table-action" onClick={onToggle}>
-            {loading ? "读取中…" : expanded ? "收起提现记录" : "查看提现记录"}
+            {loading ? "读取中…" : expanded ? "收起钱包流水" : "查看钱包流水"}
           </button>
         </td>
       </tr>
@@ -193,13 +193,12 @@ function WalletMemberRow({
         <tr className="wallet-detail-row">
           <td colSpan={7}>
             <div className="wallet-detail-inner">
-              <h3>提现记录（{transactions.filter((t) => t.type === "withdraw").length} 条）</h3>
-              {transactions.filter((t) => t.type === "withdraw").length > 0 ? (
+              <h3>钱包流水（{transactions.length} 条）</h3>
+              {transactions.length > 0 ? (
                 <table className="data-table">
-                  <thead><tr><th>时间</th><th>类型</th><th>金额</th><th>操作后总余额</th><th>说明</th></tr></thead>
+                  <thead><tr><th>时间</th><th>类型</th><th>视频</th><th>预计可提现（北京时间）</th><th>金额</th><th>操作后总余额</th><th>说明</th></tr></thead>
                   <tbody>
                     {transactions
-                      .filter((t) => t.type === "withdraw")
                       .map((t) => (
                         <tr key={t.id}>
                           <td className="nowrap-cell">
@@ -213,7 +212,9 @@ function WalletMemberRow({
                             }).format(t.createdAt)}
                           </td>
                           <td><StatusBadge label={transactionLabels[t.type] ?? t.type} tone={transactionTone(t.type)} /></td>
-                          <td className="money-out"><strong>{formatMoney(t.amount)}</strong></td>
+                          <td>{t.fileName ?? t.submissionId ?? "历史记录未关联视频"}</td>
+                          <td>{t.settleDueAt === null ? "未记录" : new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(t.settleDueAt)}</td>
+                          <td className={t.amount < 0 ? "money-out" : "money-in"}><strong>{formatMoney(t.amount)}</strong></td>
                           <td className="nowrap-cell">{formatMoney(t.balanceAfter)}</td>
                           <td>{t.remark ?? "—"}</td>
                         </tr>
@@ -221,7 +222,7 @@ function WalletMemberRow({
                   </tbody>
                 </table>
               ) : (
-                <p className="form-message">该成员暂无提现记录</p>
+                <p className="form-message">{loading ? "正在读取流水" : "该成员暂无钱包流水"}</p>
               )}
             </div>
           </td>

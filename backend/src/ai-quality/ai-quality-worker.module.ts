@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 
+import { PointsModule } from "../points/points.module.js";
 import { DatabaseModule } from "../database/database.module.js";
 import { MediaMetadataEntity } from "../database/entities/media-metadata.entity.js";
 import { SubmissionEntity } from "../database/entities/submission.entity.js";
@@ -35,6 +36,7 @@ function required(name: string): string {
     StorageModule,
     AiQualityModule,
     OperationsModule,
+    PointsModule,
   ],
   providers: [
     {

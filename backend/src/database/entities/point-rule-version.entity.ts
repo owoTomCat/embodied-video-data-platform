@@ -46,8 +46,8 @@ export class PointRuleVersionEntity {
   @Column({ type: "boolean", default: false })
   active = false;
 
-  @Column({ name: "created_by_account_id", type: "varchar", length: 64 })
-  createdByAccountId!: string;
+  @Column({ name: "created_by_account_id", type: "varchar", length: 64, nullable: true })
+  createdByAccountId: string | null = null;
 
   @ManyToOne(() => UserEntity, { onDelete: "RESTRICT" })
   @JoinColumn({ name: "created_by_account_id" })

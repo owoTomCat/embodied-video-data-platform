@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { DataSource, In, Repository, type EntityManager } from "typeorm";
 
@@ -17,13 +17,13 @@ import { PointRuleVersionEntity } from "../database/entities/point-rule-version.
 import { QualityRuleVersionEntity } from "../database/entities/quality-rule-version.entity.js";
 import { SubmissionDuplicateCandidateEntity } from "../database/entities/submission-duplicate-candidate.entity.js";
 import { SubmissionEntity } from "../database/entities/submission.entity.js";
-import { UserEntity } from "../database/entities/user.entity.js";
 import { VideoQualityResultEntity } from "../database/entities/video-quality-result.entity.js";
 import {
   OBJECT_STORAGE,
   type ObjectStoragePort,
 } from "../storage/object-storage.port.js";
 import {
+  DEFAULT_COEFFICIENT_BANDS,
   pointRuleSnapshot,
   pointsForRule,
   settlementRatioForScore,
@@ -37,8 +37,11 @@ import { WalletService } from "../wallet/wallet.service.js";
 import { SUBMISSION_SOURCE_RETENTION_ROUTING_KEY } from "../messaging/rabbitmq-topology.js";
 
 const POINT_CYCLE_THUMBNAIL_TTL_SECONDS = 10 * 60;
-/** 锁定后自动结算天数（用户需求：锁定 3 天后自动结算） */
-const SETTLE_AFTER_DAYS = 3;
+/** Calendar day after approval, at 02:00 Asia/Shanghai (UTC+08). */
+export function nextSettlementAt(approvedAt: Date): Date {
+  const local = new Date(approvedAt.getTime() + 8 * 60 * 60 * 1_000);
+  return new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate() + 1, 2) - 8 * 60 * 60 * 1_000);
+}
 
 type PointCycleThumbnail = {
   url: string;
@@ -84,11 +87,7 @@ function decimal(value: number, digits: number): string {
   return value.toFixed(digits);
 }
 
-function todayIsoDate(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-/** 上海时区的当天日期（自动锁定使用） */
+/** 上海时区的审批日期。 */
 function shanghaiIsoDate(now = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Shanghai",
@@ -218,11 +217,10 @@ function publicCycle(
 
 @Injectable()
 export class PointCyclesService {
+  private readonly logger = new Logger(PointCyclesService.name);
   constructor(
     @InjectRepository(PointCycleEntity)
     private readonly cycles: Repository<PointCycleEntity>,
-    @InjectRepository(UserEntity)
-    private readonly users: Repository<UserEntity>,
     private readonly dataSource: DataSource,
     private readonly policy: PointCyclesPolicy,
     private readonly audit: AuditService,
@@ -232,17 +230,6 @@ export class PointCyclesService {
     private readonly storage: ObjectStoragePort,
   ) {}
 
-  async preview(actor: PublicUser) {
-    this.policy.requireCreate(actor);
-    await this.pointRules.ensureDefault();
-    const pointRule = await this.pointRules.getActiveForCalculation();
-    const candidates = await this.loadCandidates(
-      pointRule,
-      this.dataSource.manager,
-      false,
-    );
-    return this.publicPreview(candidates);
-  }
 
   async list(actor: PublicUser) {
     this.policy.requireRead(actor);
@@ -365,12 +352,19 @@ export class PointCyclesService {
     itemId: string,
     input: AdjustPointCycleItemDto,
   ) {
-    this.policy.requireCreate(actor);
+    this.policy.requireAdjust(actor);
     const reason = input.reason.trim();
     if (!reason) {
       throw new PointCycleFailure("VALIDATION", "请填写调整原因", 400);
     }
     return this.dataSource.transaction(async (manager) => {
+      // Match settlement's submission -> cycle -> wallet order, including FK locks.
+      const target = await manager.getRepository(PointCycleItemEntity).findOneBy({ id: itemId, cycleId });
+      if (target) {
+        await manager.getRepository(SubmissionEntity).findOneOrFail({
+          where: { id: target.submissionId }, lock: { mode: "pessimistic_write" },
+        });
+      }
       const cycle = await manager.getRepository(PointCycleEntity).findOne({
         where: { id: cycleId },
         lock: { mode: "pessimistic_write" },
@@ -378,11 +372,11 @@ export class PointCyclesService {
       if (!cycle) {
         throw new PointCycleFailure("NOT_FOUND", "结算周期不存在", 404);
       }
-      // 周期一旦锁定即为最终结算依据，锁定/已结算后的条目不允许再编辑
-      if (cycle.status === "locked" || cycle.status === "settled") {
+      // Available/paid history is immutable; corrections only affect pending earnings.
+      if (cycle.status === "settled") {
         throw new PointCycleFailure(
           "CYCLE_LOCKED",
-          "周期已锁定，锁定后的条目不允许编辑；如需纠错请在下次锁定前处理",
+          "已结算金额不可修改；结算中的金额请通过有原因的调整处理",
           409,
         );
       }
@@ -448,10 +442,14 @@ export class PointCyclesService {
       const passThreshold = Number(
         quality.qualityRuleSnapshot?.passThreshold ?? 60,
       );
+      const legacyPointRule = !cycle.pointRuleSnapshot && cycle.pointRuleVersionId
+        ? await manager.getRepository(PointRuleVersionEntity).findOneByOrFail({ id: cycle.pointRuleVersionId })
+        : null;
       const nextRatio = settlementRatioForScore({
         score: nextFinalScore,
         passThreshold,
-        coefficientBands: cycle.pointRuleSnapshot?.coefficientBands ?? [],
+        coefficientBands: cycle.pointRuleSnapshot?.coefficientBands ??
+          legacyPointRule?.coefficientBands ?? DEFAULT_COEFFICIENT_BANDS,
       });
       const nextPoints = pointsForRule({
         pointsPerMinute: Number(item.pointsPerMinute),
@@ -460,7 +458,7 @@ export class PointCyclesService {
       });
       const previousPoints = Number(previous.points);
 
-      const adjustment = await manager
+      await manager
         .getRepository(PointCycleAdjustmentEntity)
         .save({
           id: `PCA-${randomUUID()}`,
@@ -481,6 +479,14 @@ export class PointCyclesService {
           createdByAccountId: actor.id,
           createdByName: actor.displayName,
         });
+      await this.wallet.creditSettling(manager, {
+        ownerId: item.ownerId,
+        amount: nextPoints - previousPoints,
+        cycleId,
+        submissionId: item.submissionId,
+        createdByAccountId: actor.id,
+        remark: `结算调整：${reason}`,
+      });
 
       await this.audit.record(
         manager,
@@ -518,7 +524,6 @@ export class PointCyclesService {
         manager,
         (reloaded.items ?? []).map((entry) => entry.submissionId),
       );
-      void adjustment;
       return this.withThumbnails(
         reloaded,
         allAdjustments,
@@ -528,26 +533,26 @@ export class PointCyclesService {
     });
   }
 
-  async create(actor: PublicUser, businessDate = todayIsoDate()) {
-    this.policy.requireCreate(actor);
-    await this.pointRules.ensureDefault();
-    return this.dataSource.transaction(async (manager) => {
-      const pointRule = await this.pointRules.getActiveForCalculation(
-        manager,
-        true,
-      );
-      const candidates = await this.loadCandidates(pointRule, manager, true);
-      if (candidates.length === 0) {
-        throw new PointCycleFailure(
-          "NO_ELIGIBLE_SUBMISSIONS",
-          "当前没有可锁定数据",
-          409,
-        );
-      }
-      const totals = this.summarize(candidates);
-      const cycleId = pointCycleId(businessDate);
-      const settleDueAt = new Date(Date.now() + SETTLE_AFTER_DAYS * 24 * 60 * 60 * 1_000);
-      const cycle = await manager.getRepository(PointCycleEntity).save({
+  /** Approval and accounting share the caller's transaction. */
+  async accrueSubmission(submissionId: string, transaction?: EntityManager): Promise<boolean> {
+    if (!transaction) {
+      await this.pointRules.ensureDefault();
+      return this.dataSource.transaction((manager) => this.accrueSubmission(submissionId, manager));
+    }
+    const manager = transaction;
+    await manager.getRepository(SubmissionEntity).findOneOrFail({
+      where: { id: submissionId }, lock: { mode: "pessimistic_write" },
+    });
+    const pointRule = await this.pointRules.getActiveForCalculation(manager);
+    const candidates = await this.loadCandidates(pointRule, manager, submissionId);
+    if (candidates.length === 0) return false;
+    const candidate = candidates[0]!;
+    const approvedAt = candidate.quality.manualReviewedAt ?? candidate.quality.completedAt ?? candidate.quality.updatedAt ?? candidate.quality.createdAt;
+    const businessDate = shanghaiIsoDate(approvedAt);
+    const totals = this.summarize(candidates);
+    const cycleId = pointCycleId(businessDate);
+    const settleDueAt = nextSettlementAt(approvedAt);
+      await manager.getRepository(PointCycleEntity).save({
         id: cycleId,
         businessDate,
         status: "locked",
@@ -560,8 +565,8 @@ export class PointCyclesService {
           ...pointRule,
           defaultPointsPerMinute: Number(pointRule.defaultPointsPerMinute),
         }),
-        createdByAccountId: actor.id,
-        createdByName: actor.displayName,
+        createdByAccountId: null,
+        createdByName: "系统自动入账",
         settleDueAt,
       });
       await manager.getRepository(PointCycleItemEntity).save(
@@ -584,64 +589,40 @@ export class PointCyclesService {
           pointsPerMinute: decimal(candidate.pointsPerMinute, 4),
           points: decimal(candidate.points, 2),
           qualityRevision: candidate.quality.reviewRevision,
-          qualityReviewedAt: candidate.quality.manualReviewedAt,
+          qualityReviewedAt: approvedAt,
         })),
       );
-      // 锁定即入钱包「结算中」：按数采人员汇总金额（单价 × 有效小时 × 质量系数）
-      const amountsByOwner = new Map<string, number>();
-      for (const candidate of candidates) {
-        amountsByOwner.set(
-          candidate.submission.ownerId,
-          (amountsByOwner.get(candidate.submission.ownerId) ?? 0) + candidate.points,
-        );
-      }
-      for (const [ownerId, amount] of amountsByOwner) {
-        await this.wallet.creditSettling(manager, {
-          ownerId,
-          amount,
-          cycleId,
-          createdByAccountId: actor.id,
-          remark: `周期 ${businessDate} 锁定`,
-        });
-      }
-      await this.audit.record(
-        manager,
-        actor,
-        "point_cycle_lock",
-        { id: cycle.id, name: cycle.businessDate },
-        `锁定 ${totals.count} 条合格数据，合计 ${decimal(totals.points, 2)} 元`,
-        null,
-        {
-          submissionCount: totals.count,
-          effectiveDurationMs: totals.effectiveDurationMs,
-          totalPoints: totals.points,
-        },
-      );
-      const locked = await manager
-        .getRepository(PointCycleEntity)
-        .createQueryBuilder("cycle")
-        .leftJoinAndSelect("cycle.items", "item")
-        .where("cycle.id = :cycleId", { cycleId })
-        .orderBy("item.teamName", "ASC")
-        .addOrderBy("item.ownerName", "ASC")
-        .addOrderBy("item.fileName", "ASC")
-        .getOneOrFail();
-      const invalidBySubmission = await loadInvalidDurationBySubmission(
-        manager,
-        (locked.items ?? []).map((entry) => entry.submissionId),
-      );
-      return this.withThumbnails(
-        locked,
-        undefined,
-        invalidBySubmission,
-        manager,
-      );
+    await this.wallet.creditSettling(manager, {
+      ownerId: candidate.submission.ownerId,
+      amount: candidate.points,
+      cycleId,
+      submissionId,
+      remark: `质检通过入账：${candidate.submission.originalFileName}`,
     });
+    return true;
+  }
+
+  /** One submission transaction at a time; no truncated scan or active-admin prerequisite. */
+  async reconcileAccruals(): Promise<number> {
+    await this.pointRules.ensureDefault();
+    const ids = await this.candidateIdQuery(this.dataSource.manager).getRawMany<{ submission_id: string }>();
+    let credited = 0;
+    const failures: unknown[] = [];
+    for (const { submission_id } of ids) {
+      try {
+        if (await this.accrueSubmission(submission_id)) credited += 1;
+      } catch (error) {
+        this.logger.error(`自动入账失败 ${submission_id}`, error instanceof Error ? error.stack : String(error));
+        failures.push(error);
+      }
+    }
+    if (failures.length) throw new AggregateError(failures, "自动入账部分失败，下次扫描重试");
+    return credited;
   }
 
   /**
    * 结算到期周期：把「结算中」金额转入「可提现」，周期标记为已结算。
-   * 由定时任务调用（也可手动触发单个周期结算）。
+   * 仅由内部调度调用，到期校验不可绕过。
    */
   async settleDueCycles(now = new Date()): Promise<number> {
     const due = await this.cycles
@@ -654,10 +635,9 @@ export class PointCyclesService {
     let settled = 0;
     for (const row of due) {
       try {
-        await this.settleCycle(row.id, now);
-        settled += 1;
-      } catch {
-        // 单个周期结算失败不影响其他周期，下次扫描重试
+        if (await this.settleCycle(row.id, now)) settled += 1;
+      } catch (error) {
+        this.logger.error(`自动结算失败 ${row.id}`, error instanceof Error ? error.stack : String(error));
       }
     }
     return settled;
@@ -667,9 +647,17 @@ export class PointCyclesService {
   async settleCycle(
     cycleId: string,
     now = new Date(),
-    actor?: PublicUser,
   ) {
-    const result = await this.dataSource.transaction(async (manager) => {
+    return this.dataSource.transaction(async (manager) => {
+      const items = await manager.getRepository(PointCycleItemEntity).find({
+        where: { cycleId }, order: { submissionId: "ASC" },
+      });
+      // Same order as eligibility mutations: submission -> cycle -> wallet.
+      for (const item of items) {
+        await manager.getRepository(SubmissionEntity).findOneOrFail({
+          where: { id: item.submissionId }, lock: { mode: "pessimistic_write" },
+        });
+      }
       const repository = manager.getRepository(PointCycleEntity);
       const cycle = await repository.findOne({
         where: { id: cycleId },
@@ -678,7 +666,7 @@ export class PointCyclesService {
       if (!cycle) {
         throw new PointCycleFailure("NOT_FOUND", "结算周期不存在", 404);
       }
-      if (cycle.status === "settled") return { cycle, already: true };
+      if (cycle.status === "settled") return false;
       if (cycle.status !== "locked") {
         throw new PointCycleFailure(
           "CYCLE_NOT_SETTLABLE",
@@ -686,21 +674,30 @@ export class PointCyclesService {
           409,
         );
       }
-      const items = await manager
-        .getRepository(PointCycleItemEntity)
-        .findBy({ cycleId });
+      if (!cycle.settleDueAt || cycle.settleDueAt.getTime() > now.getTime()) {
+        throw new PointCycleFailure("SETTLEMENT_NOT_DUE", "尚未到次日北京时间 02:00", 409);
+      }
+      const adjustments = await loadLatestPointCycleAdjustments(manager, items.map((item) => item.id));
+      await manager.query(
+        "SELECT owner_id FROM wallet_balances WHERE owner_id = ANY($1::varchar[]) ORDER BY owner_id FOR UPDATE",
+        [[...new Set(items.map((item) => item.ownerId))]],
+      );
       const byOwner = new Map<string, number>();
+      const paidSubmissions = new Set<string>();
       for (const item of items) {
+        const amount = await this.pendingItemAmount(manager, item, adjustments.get(item.id));
+        if (amount > 0) paidSubmissions.add(item.submissionId);
         byOwner.set(
           item.ownerId,
-          (byOwner.get(item.ownerId) ?? 0) + Number(item.points),
+          (byOwner.get(item.ownerId) ?? 0) + amount,
         );
       }
-      for (const [ownerId, amount] of byOwner) {
+      for (const [ownerId, amount] of [...byOwner].sort(([a], [b]) => a.localeCompare(b))) {
         await this.wallet.settleToAvailable(manager, {
           ownerId,
           amount,
           cycleId,
+          submissionId: items.length === 1 ? items[0]!.submissionId : null,
           remark: `周期 ${cycle.businessDate} 结算`,
         });
       }
@@ -712,7 +709,7 @@ export class PointCyclesService {
       const outbox = manager.getRepository(JobOutboxEntity);
       const seenSubmissions = new Set<string>();
       for (const item of items) {
-        if (!item.submissionId || seenSubmissions.has(item.submissionId)) continue;
+        if (!paidSubmissions.has(item.submissionId) || seenSubmissions.has(item.submissionId)) continue;
         seenSubmissions.add(item.submissionId);
         const existing = await outbox.findOneBy({
           eventType: SUBMISSION_SOURCE_RETENTION_ROUTING_KEY,
@@ -742,72 +739,48 @@ export class PointCyclesService {
           });
         }
       }
-      if (actor) {
-        await this.audit.record(
-          manager,
-          actor,
-          "point_cycle_settle",
-          { id: cycle.id, name: cycle.businessDate },
-          `结算周期 ${cycle.businessDate}：${byOwner.size} 位数采钱包转入可提现，合计 ${decimal(
-            [...byOwner.values()].reduce((sum, value) => sum + value, 0),
-            2,
-          )} 元`,
-          null,
-          { settledAt: now.toISOString() },
-        );
-      }
-      return { cycle, already: false };
-    });
-    return this.get(actor ?? this.systemActor(), cycleId);
-  }
-
-  /**
-   * 每天凌晨 2 点（上海时区）自动锁定当日合格数据；
-   * 当天已锁定或无合格数据时跳过。由定时任务调用。
-   */
-  async autoLockDue(now = new Date()): Promise<boolean> {
-    const businessDate = shanghaiIsoDate(now);
-    const existing = await this.cycles.findOneBy({ businessDate });
-    if (existing) return false;
-    const admin = await this.users.findOne({
-      where: { role: "admin", status: "active" },
-      order: { createdAt: "ASC" },
-    });
-    if (!admin) return false;
-    try {
-      await this.create(this.systemActor(admin), businessDate);
       return true;
-    } catch (error) {
-      if (
-        error instanceof PointCycleFailure &&
-        error.code === "NO_ELIGIBLE_SUBMISSIONS"
-      ) {
-        return false;
-      }
-      throw error;
-    }
+    });
   }
 
-  private systemActor(admin?: UserEntity): PublicUser {
-    if (admin) {
-      return {
-        id: admin.id,
-        displayName: admin.displayName,
-        username: admin.username,
-        role: admin.role,
-        teamId: admin.teamId ?? undefined,
-        status: admin.status,
-        updatedAt: admin.updatedAt.getTime(),
-      };
-    }
-    return {
-      id: "system",
-      displayName: "系统定时任务",
-      username: "system",
-      role: "admin",
-      status: "active",
-      updatedAt: 0,
-    };
+  private async pendingItemAmount(
+    manager: EntityManager,
+    item: PointCycleItemEntity,
+    adjustment?: PointCycleAdjustmentEntity,
+  ): Promise<number> {
+    const previous = effectiveItemValues(item, adjustment);
+    const eligible = await this.candidateIdQuery(manager, true)
+      .andWhere("submission.id = :submissionId", { submissionId: item.submissionId })
+      .getRawOne();
+    if (eligible || previous.points === 0) return previous.points;
+    // Preserve the accounting snapshot; disqualification is an explicit reversal.
+    const quality = await manager.getRepository(VideoQualityResultEntity).findOneBy({ submissionId: item.submissionId });
+    const invalidMs = String(adjustment?.nextInvalidDurationMs ?? quality?.manualInvalidDurationMs ?? quality?.invalidDurationMs ?? 0);
+    const reason = "到期资格复核未通过：视频不可用、重复待确认或质检未最终通过，撤销未结算收入";
+    await manager.getRepository(PointCycleAdjustmentEntity).save({
+      id: `PCA-${randomUUID()}`,
+      pointCycleItemId: item.id,
+      submissionId: item.submissionId,
+      previousFinalScore: decimal(previous.finalScore, 1),
+      nextFinalScore: decimal(previous.finalScore, 1),
+      previousSettlementRatio: decimal(previous.settlementRatio, 4),
+      nextSettlementRatio: "0.0000",
+      previousInvalidDurationMs: invalidMs,
+      nextInvalidDurationMs: invalidMs,
+      previousEffectiveDurationMs: String(previous.effectiveDurationMs),
+      nextEffectiveDurationMs: String(previous.effectiveDurationMs),
+      previousPoints: decimal(previous.points, 2),
+      nextPoints: "0.00",
+      pointsDelta: decimal(-previous.points, 2),
+      reason,
+      createdByAccountId: null,
+      createdByName: "系统结算资格复核",
+    });
+    await this.wallet.creditSettling(manager, {
+      ownerId: item.ownerId, amount: -previous.points, cycleId: item.cycleId,
+      submissionId: item.submissionId, remark: reason,
+    });
+    return 0;
   }
 
   private async withThumbnails(
@@ -852,23 +825,8 @@ export class PointCyclesService {
   private async loadCandidates(
     pointRule: PointRuleVersionEntity,
     manager: EntityManager = this.dataSource.manager,
-    lock = false,
+    submissionId?: string,
   ): Promise<Candidate[]> {
-    let lockedIds: string[] | null = null;
-    if (lock) {
-      const ids = await this.candidateIdQuery(manager).getRawMany<{
-        submission_id: string;
-      }>();
-      lockedIds = ids.map((row) => row.submission_id);
-      if (lockedIds.length === 0) return [];
-      await manager
-        .getRepository(SubmissionEntity)
-        .createQueryBuilder("submission")
-        .setLock("pessimistic_write")
-        .where("submission.id IN (:...ids)", { ids: lockedIds })
-        .getMany();
-    }
-
     const query = manager
       .getRepository(SubmissionEntity)
       .createQueryBuilder("submission")
@@ -928,9 +886,7 @@ export class PointCyclesService {
         )
       `)
       .orderBy("submission.createdAt", "ASC");
-    if (lockedIds) {
-      query.andWhere("submission.id IN (:...lockedIds)", { lockedIds });
-    }
+    if (submissionId) query.andWhere("submission.id = :submissionId", { submissionId });
 
     const submissions = await query.getMany();
     const taskIds = [
@@ -1052,7 +1008,7 @@ export class PointCyclesService {
     });
   }
 
-  private candidateIdQuery(manager: EntityManager) {
+  private candidateIdQuery(manager: EntityManager, includeCredited = false) {
     return manager
       .getRepository(SubmissionEntity)
       .createQueryBuilder("submission")
@@ -1087,7 +1043,7 @@ export class PointCyclesService {
       .andWhere("submission.storageStatus = :availableStorage", {
         availableStorage: "available",
       })
-      .andWhere("pointItem.id IS NULL")
+      .andWhere(includeCredited ? "1 = 1" : "pointItem.id IS NULL")
       .andWhere("duplicateCandidate.id IS NULL")
       .andWhere("quality.status IN (:...statuses)", {
         statuses: ["scored", "review_pending"],
@@ -1106,19 +1062,6 @@ export class PointCyclesService {
       .orderBy("submission.createdAt", "ASC");
   }
 
-  private publicPreview(candidates: Candidate[]) {
-    const totals = this.summarize(candidates);
-    return {
-      submissionCount: totals.count,
-      effectiveDurationMs: totals.effectiveDurationMs,
-      effectiveMinutes:
-        Math.round((totals.effectiveDurationMs / 60_000) * 100) / 100,
-      totalPoints: totals.points,
-      teamSummaries: [...totals.teamSummaries.values()].sort((left, right) =>
-        left.teamName.localeCompare(right.teamName, "zh-CN"),
-      ),
-    };
-  }
 
   private summarize(candidates: Candidate[]) {
     const teamSummaries = new Map<

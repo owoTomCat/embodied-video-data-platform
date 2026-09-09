@@ -6,6 +6,7 @@ import { Inject, Injectable, PayloadTooLargeException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Brackets, DataSource, EntityManager, In, Repository } from "typeorm";
 
+import { PointCyclesService } from "../points/point-cycles.service.js";
 import { AuditService } from "../audit/audit.service.js";
 import { AiQualityPromptService } from "../ai-quality/ai-quality-prompt.service.js";
 import {
@@ -31,20 +32,15 @@ import { MediaSegmentEntity } from "../database/entities/media-segment.entity.js
 import { PointCycleAdjustmentEntity } from "../database/entities/point-cycle-adjustment.entity.js";
 import { PointCycleEntity } from "../database/entities/point-cycle.entity.js";
 import { PointCycleItemEntity } from "../database/entities/point-cycle-item.entity.js";
-import { PointRuleVersionEntity } from "../database/entities/point-rule-version.entity.js";
 import { QualityRuleVersionEntity } from "../database/entities/quality-rule-version.entity.js";
 import { SubmissionDuplicateCandidateEntity } from "../database/entities/submission-duplicate-candidate.entity.js";
 import { SubmissionEntity } from "../database/entities/submission.entity.js";
 import { VideoQualityResultEntity } from "../database/entities/video-quality-result.entity.js";
 import {
-  coefficientForScore,
-  DEFAULT_COEFFICIENT_BANDS,
   labelSetSnapshot,
   passesQualityRule,
-  pointsForRule,
   qualityRuleSnapshot,
   settlementRatioForScore,
-  type PointRuleSnapshot,
   type QualityRuleSnapshot,
 } from "../rules/rule-calculator.js";
 import {
@@ -603,6 +599,7 @@ export class SubmissionsService {
     private readonly labelSets: LabelSetService,
     @Inject(OBJECT_STORAGE)
     private readonly storage: ObjectStoragePort,
+    private readonly pointCycles: PointCyclesService,
   ) {}
 
   async createUpload(actor: PublicUser, input: CreateUploadDto) {
@@ -1273,7 +1270,7 @@ export class SubmissionsService {
         if (cycle && (cycle.status === "locked" || cycle.status === "settled")) {
           throw new SubmissionFailure(
             "SUBMISSION_IN_LOCKED_CYCLE",
-            "该视频已进入锁定/结算周期，质检结果不允许再修改；如需纠错请在下次锁定前处理",
+            "该视频已入账，质检结果不可覆盖；结算前纠错请使用结算条目调整，已结算金额不可修改",
             409,
           );
         }
@@ -1412,122 +1409,6 @@ export class SubmissionsService {
             ? "asset_quarantine"
             : "asset_release"
           : null;
-      if (lockedItem) {
-        if (durationMs === null || billableDurationMs === null) {
-          throw new SubmissionFailure(
-            "MEDIA_DURATION_REQUIRED",
-            "视频时长未知，不能计算锁定后调整",
-            409,
-          );
-        }
-        const adjustmentRepository = manager.getRepository(
-          PointCycleAdjustmentEntity,
-        );
-        const latestAdjustment = await adjustmentRepository
-          .createQueryBuilder("adjustment")
-          .setLock("pessimistic_write")
-          .where("adjustment.submissionId = :id", { id })
-          .orderBy("adjustment.createdAt", "DESC")
-          .addOrderBy("adjustment.id", "DESC")
-          .getOne();
-        const previousFinalScore = latestAdjustment
-          ? Number(latestAdjustment.nextFinalScore)
-          : Number(lockedItem.finalScore);
-        const previousSettlementRatio = latestAdjustment
-          ? Number(latestAdjustment.nextSettlementRatio)
-          : Number(lockedItem.settlementRatio);
-        const previousInvalidDurationMs = latestAdjustment
-          ? Number(latestAdjustment.nextInvalidDurationMs)
-          : Math.max(
-              0,
-              durationMs - Number(lockedItem.effectiveDurationMs),
-            );
-        const previousEffectiveDurationMs = latestAdjustment
-          ? Number(latestAdjustment.nextEffectiveDurationMs)
-          : Number(lockedItem.effectiveDurationMs);
-        const previousPoints = latestAdjustment
-          ? Number(latestAdjustment.nextPoints)
-          : Number(lockedItem.points);
-        const pointRule = await this.pointRuleForCycle(
-          manager,
-          lockedItem.cycleId,
-        );
-        const cycleSettlementRatio = passed
-          ? coefficientForScore(finalScore, pointRule.coefficientBands)
-          : 0;
-        const nextPoints = pointsForRule({
-          pointsPerMinute: Number(lockedItem.pointsPerMinute),
-          effectiveDurationMs: billableDurationMs,
-          settlementRatio: cycleSettlementRatio,
-        });
-        const pointsDelta =
-          Math.round((nextPoints - previousPoints) * 100) / 100;
-        const adjustment = await adjustmentRepository.save({
-          id: `PCA-${randomUUID()}`,
-          pointCycleItemId: lockedItem.id,
-          submissionId: submission.id,
-          previousFinalScore: decimal(previousFinalScore, 1),
-          nextFinalScore: decimal(finalScore, 1),
-          previousSettlementRatio: decimal(previousSettlementRatio, 4),
-          nextSettlementRatio: decimal(cycleSettlementRatio, 4),
-          previousInvalidDurationMs: String(previousInvalidDurationMs),
-          nextInvalidDurationMs: String(invalidDurationMs),
-          previousEffectiveDurationMs: String(previousEffectiveDurationMs),
-          nextEffectiveDurationMs: String(billableDurationMs),
-          previousPoints: decimal(previousPoints, 2),
-          nextPoints: decimal(nextPoints, 2),
-          pointsDelta: decimal(pointsDelta, 2),
-          reason,
-          createdByAccountId: actor.id,
-          createdByName: actor.displayName,
-        });
-        await this.audit.record(
-          manager,
-          actor,
-          "point_cycle_adjustment",
-          { id: submission.id, name: submission.originalFileName },
-          reason,
-          {
-            ...before,
-            finalScore: previousFinalScore,
-            settlementRatio: previousSettlementRatio,
-            invalidDurationMs: previousInvalidDurationMs,
-            effectiveDurationMs: previousEffectiveDurationMs,
-            points: previousPoints,
-          },
-          {
-            ...after,
-            adjustmentId: adjustment.id,
-            pointCycleItemId: lockedItem.id,
-            settlementRatio: cycleSettlementRatio,
-            effectiveDurationMs: billableDurationMs,
-            points: nextPoints,
-            pointsDelta,
-            assetStatus: submission.assetStatus,
-            quarantineReason: submission.quarantineReason,
-          },
-        );
-        if (quarantineAction) {
-          await this.audit.record(
-            manager,
-            actor,
-            quarantineAction,
-            { id: submission.id, name: submission.originalFileName },
-            submission.assetStatus === "quarantined"
-              ? "人工复核将视频移入敏感隔离区"
-              : "人工复核解除视频敏感隔离",
-            {
-              assetStatus: previousAssetStatus,
-              quarantineReason: previousQuarantineReason,
-            },
-            {
-              assetStatus: submission.assetStatus,
-              quarantineReason: submission.quarantineReason,
-            },
-          );
-        }
-        return;
-      }
       await this.audit.record(
         manager,
         actor,
@@ -1560,6 +1441,7 @@ export class SubmissionsService {
           },
         );
       }
+      await this.pointCycles.accrueSubmission(id, manager);
     });
 
     return this.get(actor, id);
@@ -1972,6 +1854,7 @@ export class SubmissionsService {
           candidateFileName: candidateSubmission?.originalFileName ?? null,
         },
       );
+      await this.pointCycles.accrueSubmission(id, manager);
     });
 
     return this.get(actor, id);
@@ -2788,39 +2671,6 @@ export class SubmissionsService {
     };
   }
 
-  private async pointRuleForCycle(
-    manager: EntityManager,
-    cycleId: string,
-  ): Promise<PointRuleSnapshot> {
-    const cycle = await manager
-      .getRepository(PointCycleEntity)
-      .findOneBy({ id: cycleId });
-    if (!cycle) throw new Error("积分周期不存在");
-    if (cycle.pointRuleSnapshot) return cycle.pointRuleSnapshot;
-    if (cycle.pointRuleVersionId) {
-      const rule = await manager
-        .getRepository(PointRuleVersionEntity)
-        .findOneBy({ id: cycle.pointRuleVersionId });
-      if (rule) {
-        return {
-          id: rule.id,
-          revision: rule.revision,
-          version: rule.version,
-          defaultPointsPerMinute: Number(rule.defaultPointsPerMinute),
-          coefficientBands: rule.coefficientBands,
-          description: rule.description,
-        };
-      }
-    }
-    return {
-      id: "legacy-default",
-      revision: 0,
-      version: "legacy-default",
-      defaultPointsPerMinute: 0,
-      coefficientBands: DEFAULT_COEFFICIENT_BANDS,
-      description: "历史周期默认积分规则",
-    };
-  }
 
   private async processPendingStorageDelete(id: string): Promise<void> {
     const pending = await this.submissions.findOneBy({ id });

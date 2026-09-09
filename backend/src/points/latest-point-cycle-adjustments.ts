@@ -16,8 +16,7 @@ export async function loadLatestPointCycleAdjustments(
       pointCycleItemIds,
     })
     .orderBy("adjustment.pointCycleItemId", "ASC")
-    .addOrderBy("adjustment.createdAt", "DESC")
-    .addOrderBy("adjustment.id", "DESC")
+    .addOrderBy("adjustment.sequence", "DESC")
     .getMany();
 
   return new Map(

@@ -6,7 +6,6 @@ import {
   CircleDollarSign,
   Clock3,
   Landmark,
-  Wallet,
 } from "lucide-react";
 
 import { useInteractions } from "../../interactions/InteractionContext";
@@ -31,6 +30,7 @@ const emptyWallet: WalletDetail = {
     ownerName: "",
     totalBalance: 0,
     settlingBalance: 0,
+    nextSettlementAt: null,
     availableBalance: 0,
     reservedBalance: 0,
     withdrawnBalance: 0,
@@ -44,7 +44,7 @@ function formatMoney(amount: number): string {
 }
 
 const transactionLabels: Record<string, string> = {
-  lock: "锁定入结算中",
+  lock: "质检通过入账",
   settle: "结算转可提现",
   withdraw: "提现",
 };
@@ -55,9 +55,9 @@ function transactionTone(type: string): "success" | "info" | "warning" {
   return "warning";
 }
 
-/** 累计赚取包含预留金额，不含结算中。 */
+/** 累计赚取包含结算中、可提现、预留及已提现，不重复累计资金转移流水。 */
 function earnedTotal(balance: WalletDetail["balance"]): number {
-  return Math.round((balance.availableBalance + balance.reservedBalance + balance.withdrawnBalance) * 100) / 100;
+  return Math.round((balance.settlingBalance + balance.availableBalance + balance.reservedBalance + balance.withdrawnBalance) * 100) / 100;
 }
 
 const viewMeta: Record<
@@ -66,7 +66,7 @@ const viewMeta: Record<
 > = {
   settling: {
     label: "结算中",
-    description: "已提交数据、锁定但尚未结算的金额（对应「锁定入结算中」流水）",
+    description: "质检通过且符合计费条件即入账；仅上传或等待人工复核不产生收益。下列为入账历史，预计可提现时间不代表实际付款时间。",
     types: ["lock"],
   },
   available: {
@@ -76,8 +76,8 @@ const viewMeta: Record<
   },
   earned: {
     label: "累计赚取",
-    description: "总共赚到的金额（含已提现，不含结算中）——对应结算与提现流水",
-    types: ["settle", "withdraw"],
+    description: "累计已入账收益（含结算中、提现预留和已提现）；展示入账记录，结算与提现不重复计为收益。",
+    types: ["lock"],
   },
 };
 
@@ -175,7 +175,7 @@ export function EarningsPage() {
         <div>
           <p className="page-kicker">个人钱包账户</p>
           <h1>钱包</h1>
-          <span>点击下方金额卡片可查看对应明细；锁定任务进入「结算中」，3 天后自动结算为「可提现」</span>
+          <span>质检通过且符合计费条件，金额立即进入「结算中」；北京时间次日02:00转为「可提现」，非满24小时。</span>
         </div>
         <span className="live-pill">
           <i />
@@ -197,7 +197,7 @@ export function EarningsPage() {
           <span className="wallet-summary-icon"><Clock3 size={20} /></span>
           <span className="wallet-summary-label">结算中</span>
           <strong>{formatMoney(balance.settlingBalance)}</strong>
-          <small>提交数据还未结算</small>
+          <small>质检通过已入账，等待次日可提现</small>
         </button>
         <button
           type="button"
@@ -219,9 +219,13 @@ export function EarningsPage() {
           <span className="wallet-summary-icon"><Landmark size={20} /></span>
           <span className="wallet-summary-label">累计赚取</span>
           <strong>{formatMoney(earned)}</strong>
-          <small>含已提现，不含结算中</small>
+          <small>含结算中、预留和已提现</small>
         </button>
       </div>
+      <p className="form-message">
+        最早预计可提现（北京时间）：{balance.nextSettlementAt === null ? "暂无待结算时间" : new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(balance.nextSettlementAt)}。
+        可提现不等于到账，实际付款仍需提交提现申请并由财务人工转账。
+      </p>
       <p className="form-message">提现处理中（已预留）：<strong>{formatMoney(balance.reservedBalance)}</strong>，不计为已付款。</p>
       <WithdrawalHistory key={currentAccount.id} revision={revision} />
 
@@ -277,6 +281,8 @@ export function EarningsPage() {
               <tr>
                 <th>时间</th>
                 <th>类型</th>
+                <th>视频</th>
+                <th>预计可提现（北京时间）</th>
                 <th>金额</th>
                 <th>操作后总余额</th>
                 <th>说明</th>
@@ -301,6 +307,8 @@ export function EarningsPage() {
                       tone={transactionTone(item.type)}
                     />
                   </td>
+                  <td>{item.fileName ?? (item.submissionId ? item.submissionId : "历史记录未关联视频")}</td>
+                  <td className="nowrap-cell">{item.settleDueAt === null ? "未记录" : new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(item.settleDueAt)}</td>
                   <td className={item.amount < 0 ? "money-out" : "money-in"}>
                     <strong>
                       {item.amount < 0 ? "" : "+"}
@@ -316,7 +324,7 @@ export function EarningsPage() {
               ))}
               {viewTransactions.length === 0 && (
                 <tr>
-                  <td colSpan={5}>
+                  <td colSpan={7}>
                     <div className="empty-state compact-empty">
                       <BadgeCheck size={20} />
                       <span>{viewMeta[view].label}暂无流水</span>

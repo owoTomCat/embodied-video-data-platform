@@ -3,7 +3,6 @@
 import { type RefObject } from "react";
 
 import { Modal } from "../../components/Modal";
-import { StatusBadge } from "../../components/StatusBadge";
 import type { BackendPointCycle } from "../../points/contracts";
 
 export function CycleDetailModal({
@@ -32,14 +31,14 @@ export function CycleDetailModal({
         </p>
         <p className="form-help">
           {cycle.status === "locked"
-            ? `锁定中：预计 ${new Intl.DateTimeFormat("zh-CN", {
+            ? cycle.settleDueAt === null ? "结算中：历史记录未提供预计可提现时间。" : `结算中：预计北京时间 ${new Intl.DateTimeFormat("zh-CN", {
                 timeZone: "Asia/Shanghai",
                 month: "2-digit",
                 day: "2-digit",
                 hour: "2-digit",
                 minute: "2-digit",
                 hour12: false,
-              }).format(cycle.settleDueAt ?? 0)} 自动结算入钱包。锁定后条目不可编辑。`
+              }).format(cycle.settleDueAt)} 转为可提现。质检通过次日02:00，非满24小时。`
             : "已结算：金额已转入各数采人员钱包的「可提现」。"}
         </p>
       </div>

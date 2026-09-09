@@ -17,11 +17,9 @@ import {
 } from "../../delivery/client/deliveryPackageApi";
 import {
   adjustPointCycleItem,
-  createPointCycle,
   createPointRule,
   getPointRule,
   listPointCycles,
-  previewPointCycle,
 } from "../../points/client/pointCycleApi";
 import {
   getWalletFlowStats,
@@ -53,8 +51,6 @@ vi.mock("../../points/client/pointCycleApi", async (importOriginal) => {
   return {
     ...actual,
     listPointCycles: vi.fn(),
-    previewPointCycle: vi.fn(),
-    createPointCycle: vi.fn(),
     getPointRule: vi.fn(),
     createPointRule: vi.fn(),
     adjustPointCycleItem: vi.fn(),
@@ -78,8 +74,6 @@ vi.mock("../../delivery/client/deliveryPackageApi", async (importOriginal) => {
 });
 
 const listPointCyclesMock = vi.mocked(listPointCycles);
-const previewPointCycleMock = vi.mocked(previewPointCycle);
-const createPointCycleMock = vi.mocked(createPointCycle);
 const getPointRuleMock = vi.mocked(getPointRule);
 const createPointRuleMock = vi.mocked(createPointRule);
 const adjustPointCycleItemMock = vi.mocked(adjustPointCycleItem);
@@ -140,28 +134,6 @@ describe("settlement actions", () => {
         items: [],
       },
     ]);
-    previewPointCycleMock.mockResolvedValue({
-      submissionCount: 4,
-      effectiveDurationMs: 676_200,
-      effectiveMinutes: 11.27,
-      totalPoints: 116.12,
-      teamSummaries: [],
-    });
-    createPointCycleMock.mockResolvedValue({
-      id: "PC-20260813",
-      businessDate: "2026-08-13",
-      status: "locked",
-      submissionCount: 4,
-      effectiveDurationMs: 676_200,
-      effectiveMinutes: 11.27,
-      totalPoints: 116.12,
-      createdByAccountId: "U-ADMIN-01",
-      createdByName: "管理员",
-      createdAt: 1_786_204_800_000,
-      items: [],
-      settleDueAt: null,
-      settledAt: null,
-    });
     getPointRuleMock.mockResolvedValue({
       id: "PRV-1",
       revision: 1,
@@ -307,48 +279,20 @@ describe("settlement actions", () => {
     });
   });
 
-  it("previews and locks the eligible settlement records", async () => {
+  it("shows automatic daily settlement evidence without manual money controls", async () => {
     const user = userEvent.setup();
     renderAdmin("/admin/settlements");
-
-    expect(
-      await screen.findByText("结算周期数据已同步"),
-    ).toBeVisible();
-    await user.click(
-      await screen.findByRole("button", { name: "手动锁定" }),
-    );
-    const dialog = screen.getByRole("dialog", { name: "确认锁定并生成结算周期" });
-    expect(within(dialog).getByText("4 条")).toBeVisible();
-    expect(within(dialog).getByText("11.27 分钟")).toBeVisible();
-    expect(within(dialog).getByText("116.12 元")).toBeVisible();
-    await user.click(within(dialog).getByRole("button", { name: "确认生成" }));
-
-    expect(screen.getByText("结算周期已生成并锁定")).toBeVisible();
-    expect(createPointCycleMock).toHaveBeenCalledTimes(1);
-    const firstBatch = screen.getAllByRole("row")[1];
-    expect(within(firstBatch).getByText("4 条")).toBeVisible();
-    expect(within(firstBatch).getByText("116.12 元")).toBeVisible();
-    expect(within(firstBatch).getByText("锁定中")).toBeVisible();
-    expect(
-      within(firstBatch).getByRole("link", { name: /导出/ }),
-    ).toHaveAttribute("href", expect.stringContaining("export.csv"));
-  });
-
-  it("disables confirmation when no settlement data remains", async () => {
-    const user = userEvent.setup();
-    previewPointCycleMock.mockResolvedValue({
-      submissionCount: 0,
-      effectiveDurationMs: 0,
-      effectiveMinutes: 0,
-      totalPoints: 0,
-      teamSummaries: [],
-    });
-    renderAdmin("/admin/settlements");
-
-    await user.click(screen.getByRole("button", { name: "手动锁定" }));
-
-    expect(screen.getByText("当前没有可锁定数据")).toBeVisible();
-    expect(screen.getByRole("button", { name: "确认生成" })).toBeDisabled();
+    expect(await screen.findByText("结算周期数据已同步")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "手动锁定" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "立即结算" })).not.toBeInTheDocument();
+    const row = screen.getAllByRole("row")[1];
+    expect(within(row).getByText("2 条")).toBeVisible();
+    expect(within(row).getByText("24.00 元")).toBeVisible();
+    expect(within(row).getByText("结算中")).toBeVisible();
+    expect(within(row).getByRole("link", { name: /导出/ })).toHaveAttribute("href", expect.stringContaining("export.csv"));
+    await user.click(within(row).getByRole("button", { name: "查看条目" }));
+    expect(screen.getByRole("dialog", { name: "周期明细 · 2026-08-12" })).toBeVisible();
+    expect(screen.getByText("结算中：历史记录未提供预计可提现时间。")).toBeVisible();
   });
 
   it("publishes a persisted point rule version", async () => {

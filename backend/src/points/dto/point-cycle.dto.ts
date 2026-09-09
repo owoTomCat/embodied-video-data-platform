@@ -1,5 +1,4 @@
 import {
-  IsDateString,
   IsInt,
   IsNumber,
   IsOptional,
@@ -9,12 +8,6 @@ import {
   Min,
   MinLength,
 } from "class-validator";
-
-export class CreatePointCycleDto {
-  @IsOptional()
-  @IsDateString()
-  businessDate?: string;
-}
 
 export class AdjustPointCycleItemDto {
   @IsString()

@@ -17,6 +17,11 @@ describe("task segment adaptive-cut migration", () => {
   beforeAll(async () => {
     dataSource = createDataSource(TEST_DATABASE_URL);
     await dataSource.initialize();
+    // This historical rollback fixture predates the forward-only financial cutover.
+    const legacyMigrations = dataSource.migrations.filter(
+      (migration) => Number(migration.name!.slice(-13)) <= 2_026_092_000_001,
+    );
+    dataSource.migrations.splice(0, dataSource.migrations.length, ...legacyMigrations);
     await dataSource.dropDatabase();
     await dataSource.runMigrations();
   });

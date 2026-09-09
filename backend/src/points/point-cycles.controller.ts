@@ -3,7 +3,6 @@ import {
   Controller,
   Get,
   Header,
-  HttpCode,
   Param,
   Post,
   Put,
@@ -18,7 +17,7 @@ import { CurrentUser } from "../auth/current-user.decorator.js";
 import { SessionGuard } from "../auth/session.guard.js";
 import { AllowedOriginGuard } from "../http/allowed-origin.guard.js";
 import { SensitiveActionRateLimitGuard } from "../security/sensitive-action-rate-limit.guard.js";
-import { AdjustPointCycleItemDto, CreatePointCycleDto } from "./dto/point-cycle.dto.js";
+import { AdjustPointCycleItemDto } from "./dto/point-cycle.dto.js";
 import { CreatePointRuleDto } from "./dto/point-rule.dto.js";
 import { PointCycleFailureFilter } from "./point-cycle-failure.filter.js";
 import { PointCyclesService } from "./point-cycles.service.js";
@@ -36,11 +35,6 @@ export class PointCyclesController {
   @Get()
   async list(@CurrentUser() actor: PublicUser) {
     return { cycles: await this.cycles.list(actor) };
-  }
-
-  @Get("preview")
-  async preview(@CurrentUser() actor: PublicUser) {
-    return { preview: await this.cycles.preview(actor) };
   }
 
   @Get("rule")
@@ -91,26 +85,4 @@ export class PointCyclesController {
     };
   }
 
-  @Post(":id/settle")
-  @HttpCode(200)
-  @UseGuards(AllowedOriginGuard, SensitiveActionRateLimitGuard)
-  async settle(
-    @CurrentUser() actor: PublicUser,
-    @Param("id") id: string,
-  ) {
-    return {
-      cycle: await this.cycles.settleCycle(id, new Date(), actor),
-    };
-  }
-
-  @Post()
-  @UseGuards(AllowedOriginGuard, SensitiveActionRateLimitGuard)
-  async create(
-    @CurrentUser() actor: PublicUser,
-    @Body() input: CreatePointCycleDto,
-  ) {
-    return {
-      cycle: await this.cycles.create(actor, input.businessDate),
-    };
-  }
 }

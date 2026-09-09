@@ -416,7 +416,7 @@ export function SubmissionDetail({
       {item.assetStatus === "quarantined" && <div className="form-message error">该视频已进入敏感隔离区：{item.quarantine?.reason ?? "敏感内容隔离"}</div>}
       {item.storageStatus === "deleted" && <div className="form-message error">该视频对象已删除：{item.storage?.deleteReason ?? "对象已删除"}</div>}
       {item.storageStatus === "delete_pending" && <div className="form-message warning">该视频对象正在删除，完成前不可预览或重新处理。</div>}
-      {duplicateCandidate && <div className="form-message warning"><CopyCheck size={14} />该视频疑似与 {duplicateCandidate.candidateFileName ?? duplicateCandidate.candidateSubmissionId} 重复，相似度 {Math.round(duplicateCandidate.similarity * 100)}%，管理员确认前不会进入金额锁定。</div>}
+      {duplicateCandidate && <div className="form-message warning"><CopyCheck size={14} />该视频疑似与 {duplicateCandidate.candidateFileName ?? duplicateCandidate.candidateSubmissionId} 重复，相似度 {Math.round(duplicateCandidate.similarity * 100)}%，管理员确认前不会产生入账收益。</div>}
       {item.qualityResult?.status === "review_pending" &&
         reviewReasons.length > 0 ? (
         <section className="form-message warning submission-review-notice" aria-label="人工复核原因">

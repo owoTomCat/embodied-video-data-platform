@@ -2,7 +2,6 @@ import { resolveApiBaseUrl } from "../../lib/api-base";
 import type {
   AdjustPointCycleItemInput,
   BackendPointCycle,
-  BackendPointCyclePreview,
   BackendPointRule,
   CreatePointRuleInput,
 } from "../contracts";
@@ -63,39 +62,8 @@ export async function listPointCycles(): Promise<BackendPointCycle[]> {
   return result.cycles;
 }
 
-export async function previewPointCycle(): Promise<BackendPointCyclePreview> {
-  const result = await requestJson<{ preview: BackendPointCyclePreview }>(
-    "/point-cycles/preview",
-  );
-  return result.preview;
-}
-
-export async function createPointCycle(
-  businessDate?: string,
-): Promise<BackendPointCycle> {
-  const result = await requestJson<{ cycle: BackendPointCycle }>(
-    "/point-cycles",
-    {
-      method: "POST",
-      body: JSON.stringify(
-        businessDate === undefined ? {} : { businessDate },
-      ),
-    },
-  );
-  return result.cycle;
-}
-
 export function pointCycleExportUrl(id: string): string {
   return apiUrl(`/point-cycles/${encodeURIComponent(id)}/export.csv`);
-}
-
-/** 手动结算锁定中的周期：金额转入各数采人员钱包「可提现」 */
-export async function settlePointCycle(id: string): Promise<BackendPointCycle> {
-  const result = await requestJson<{ cycle: BackendPointCycle }>(
-    `/point-cycles/${encodeURIComponent(id)}/settle`,
-    { method: "POST" },
-  );
-  return result.cycle;
 }
 
 export async function getPointRule(): Promise<BackendPointRule> {

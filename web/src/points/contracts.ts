@@ -39,27 +39,13 @@ export type BackendPointCycle = {
   totalPoints: number;
   pointRuleVersionId?: string | null;
   pointRuleRevision?: number | null;
-  createdByAccountId: string;
+  createdByAccountId: string | null;
   createdByName: string;
-  /** 自动结算时间（锁定 + 3 天），到达后由定时任务结算入钱包 */
+  /** 北京时间质检通过次日 02:00 转为可提现；历史缺失时间为 null */
   settleDueAt: number | null;
   settledAt: number | null;
   createdAt: number;
   items: BackendPointCycleItem[];
-};
-
-export type BackendPointCyclePreview = {
-  submissionCount: number;
-  effectiveDurationMs: number;
-  effectiveMinutes: number;
-  totalPoints: number;
-  teamSummaries: Array<{
-    teamId: string;
-    teamName: string;
-    submissionCount: number;
-    effectiveDurationMs: number;
-    points: number;
-  }>;
 };
 
 export type BackendPointRuleCoefficientBand = {
@@ -77,7 +63,7 @@ export type BackendPointRule = {
   coefficientBands: BackendPointRuleCoefficientBand[];
   description: string;
   active: boolean;
-  createdByAccountId: string;
+  createdByAccountId: string | null;
   createdByName: string;
   createdAt: number;
 };
