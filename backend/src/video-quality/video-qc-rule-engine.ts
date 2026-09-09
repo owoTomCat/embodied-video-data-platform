@@ -133,7 +133,12 @@ function rawIssueToQualityIssue(
   } else if (issue.evidence_timestamps_ms.length > 0) {
     errors.push(`${context}/${issue.reason_code} 非时序问题不应带证据时间点`);
   }
-  if (issue.evidence_timestamps_ms.length === 0 && issue.start_ms !== null) {
+  if (
+    issue.evidence_timestamps_ms.length === 0 &&
+    issue.start_ms !== null &&
+    (issue.source === "visual_model" ||
+      issue.source === "deterministic_detector")
+  ) {
     errors.push(`${context}/${issue.reason_code} 扣分缺少证据时间点`);
   }
   return {
@@ -311,18 +316,32 @@ export function normalizeVideoQcResult(
   }
 
   // 人工复核降频：模型 evaluation_status 仅作输入，服务端按类型重判定。
-  // 决定性候选/缺输入/校验错误 → review_pending；仅时段性候选或模型证据不足 → scored（原因留 advisory）。
+  // 决定性候选/真正缺失的必要输入/校验错误 → review_pending；
+  // 仅时段性候选、可选技术指标缺失或模型证据不足 → scored。
   const decisiveCandidate = decisiveVetoPresent(input.raw.hard_reject.candidates);
-  // 缺必要输入只看模型侧判定（missing_required_inputs）；
-  // sourceInput.missing_inputs 是可选技术指标（如 blur_ratio 探测失败），不触发复核。
-  const missingRequiredInputs =
-    (input.raw.input_status.missing_required_inputs?.length ?? 0) > 0;
+  const rawMissingInputs = input.raw.input_status.missing_required_inputs
+    .map((name) => name.trim())
+    .filter(Boolean);
+  // sourceInput.missing_inputs 仅包含预处理器无法产出的可选技术指标；
+  // 模型可能原样抄入 missing_required_inputs，但它们不影响视频可评估性。
+  const optionalTechnicalInputs = new Set(
+    input.sourceInput.missing_inputs.map((name) => name.trim().toLowerCase()),
+  );
+  const missingRequiredInputs = rawMissingInputs.filter(
+    (name) => !optionalTechnicalInputs.has(name.toLowerCase()),
+  );
+  const unexplainedIncompleteInput =
+    (input.raw.evaluation_status === "incomplete_input" ||
+      !input.raw.input_status.is_complete) &&
+    rawMissingInputs.length === 0;
+  const inputIncomplete =
+    missingRequiredInputs.length > 0 || unexplainedIncompleteInput;
   const reviewRequiredByServer =
-    errors.length > 0 || missingRequiredInputs || decisiveCandidate;
+    errors.length > 0 || inputIncomplete || decisiveCandidate;
   let evaluationStatus: NormalizedVideoQcResultV1["evaluationStatus"] =
     input.raw.evaluation_status === "hard_reject"
       ? "hard_reject"
-      : input.raw.evaluation_status === "incomplete_input"
+      : inputIncomplete
         ? "incomplete_input"
         : reviewRequiredByServer
           ? "review_pending"
@@ -343,14 +362,25 @@ export function normalizeVideoQcResult(
     warnings.push("模型要求复核但没有给出复核原因");
   }
 
-  const reviewReasons = [...input.raw.review.review_reasons];
+  // reviewReasons 只保存真正阻断自动判定的原因；非阻断建议进入 warnings，
+  // 避免前端把 advisory 计作“待人工核实”。
+  const reviewReasons = reviewRequiredByServer
+    ? [...input.raw.review.review_reasons]
+    : [];
   const segmentableCandidates = input.raw.hard_reject.candidates.filter(
     (candidate) =>
       (SEGMENTABLE_VETO_TYPES as readonly string[]).includes(vetoType(candidate)),
   );
   if (segmentableCandidates.length > 0) {
-    reviewReasons.push(
+    warnings.push(
       `整段视频存在时段性问题（任务切片粒度可规避，不阻断）：${segmentableCandidates.join("、")}`,
+    );
+  }
+  if (inputIncomplete) {
+    reviewReasons.push(
+      missingRequiredInputs.length > 0
+        ? `缺少必要输入：${missingRequiredInputs.join("、")}`
+        : "模型将输入标记为不完整但未说明缺失项",
     );
   }
   if (
@@ -399,7 +429,9 @@ export function normalizeVideoQcResult(
     deductions,
     recommendations: input.raw.recommendations,
     summary: input.raw.overall_result.summary,
-    reviewRequired: evaluationStatus === "review_pending",
+    reviewRequired:
+      evaluationStatus === "review_pending" ||
+      evaluationStatus === "incomplete_input",
     reviewReasons: [...new Set(reviewReasons)],
     missingInputs: [
       ...new Set([
@@ -647,17 +679,20 @@ export function applyServerTaskCompliance(
     (item) => item.type === "hard" && item.result === "unmet",
   );
   // 人工复核降频：仅场景不匹配（全局性：整段内容与任务不符）触发复核；
-  // 硬性要求未满足/符合度证据不足多为时段性问题，任务切片粒度可规避 → advisory 记录。
+  // 硬性要求未满足/符合度证据不足多为时段性问题，任务切片粒度可规避 → advisory。
   const complianceReview = !sceneMatched;
   const reviewReasons = [...normalized.reviewReasons];
+  const complianceAdvisories: string[] = [];
   if (compliance.review_required) {
-    reviewReasons.push("任务符合度：条目不完整或证据不足（advisory，切片粒度可规避）");
+    complianceAdvisories.push(
+      "任务符合度：条目不完整或证据不足（advisory，切片粒度可规避）",
+    );
   }
   if (!sceneMatched) {
     reviewReasons.push("任务符合度：视频内容与任务声明场景不匹配");
   }
   if (hardUnmet.length > 0) {
-    reviewReasons.push(
+    complianceAdvisories.push(
       `任务符合度：${hardUnmet.length} 条硬性要求未满足（advisory，切片粒度可规避：${hardUnmet
         .slice(0, 5)
         .map((item) => item.requirement)
@@ -728,6 +763,7 @@ export function applyServerTaskCompliance(
       ...normalized.validation,
       warnings: [
         ...normalized.validation.warnings,
+        ...complianceAdvisories,
         "任务符合度已由服务端按条目复算并覆盖 D4 分数",
       ],
     },

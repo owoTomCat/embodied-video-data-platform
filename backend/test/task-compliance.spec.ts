@@ -145,11 +145,14 @@ describe("applyServerTaskCompliance", () => {
       [],
     )!;
     const applied = applyServerTaskCompliance(baseNormalized(), compliance);
-    // 人工复核降频：hard 未满足多为时段性，任务切片可规避 → 不触发复核，advisory 记录
+    // 人工复核降频：hard 未满足多为时段性，任务切片可规避 → advisory，不污染待复核原因
     expect(applied.evaluationStatus).toBe("scored");
     expect(applied.reviewRequired).toBe(false);
+    expect(applied.reviewReasons).toEqual([]);
     expect(
-      applied.reviewReasons.some((reason) => reason.includes("硬性要求未满足")),
+      applied.validation.warnings.some((warning) =>
+        warning.includes("硬性要求未满足"),
+      ),
     ).toBe(true);
     // D4 = 20 × 0.5 × 1（1 条 met 1 条 unmet）
     expect(applied.dimensions.task_authenticity_completeness.coefficient).toBe(0.5);
@@ -197,10 +200,11 @@ describe("applyServerTaskCompliance", () => {
     )!;
 
     const applied = applyServerTaskCompliance(baseNormalized(), compliance);
-    // 人工复核降频：模型“证据不足”→ advisory，不再阻断自动结算
+    // 人工复核降频：模型“证据不足”→ advisory，不再阻断或伪装成人工复核原因
     expect(applied.evaluationStatus).toBe("scored");
     expect(applied.reviewRequired).toBe(false);
-    expect(applied.reviewReasons.join(" ")).toContain("证据不足");
+    expect(applied.reviewReasons).toEqual([]);
+    expect(applied.validation.warnings.join(" ")).toContain("证据不足");
     expect(applied.settlementRatio).not.toBeNull();
   });
 

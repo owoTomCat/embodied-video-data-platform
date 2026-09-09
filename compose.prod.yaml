@@ -9,6 +9,10 @@ services:
     environment:
       EVDP_ALLOW_LOCAL_DEFAULT_PASSWORDS: "false"
       NODE_ENV: production
+      # 清除 compose.yaml 面向本地 Docker Desktop 的 Node 堆上限。
+      NODE_OPTIONS: !reset null
+    # 生产容量由服务器/编排层按实测负载配置，不继承本地开发机的内存上限。
+    mem_limit: !reset null
 
   web:
     image: evdp-web:${EVDP_RELEASE_VERSION:-dev}

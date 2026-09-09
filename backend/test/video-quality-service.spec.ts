@@ -106,9 +106,16 @@ function setup(
     decisive?: boolean;
     reviewFails?: boolean;
     annotationProvider?: VideoAnnotationProvider;
+    missingRequiredInputs?: string[];
   } = {},
 ) {
   const prepared = evidence();
+  const initialRaw = raw(
+    options.review,
+    options.decisive ? ["PRIVACY_OR_SAFETY"] : [],
+  );
+  initialRaw.input_status.missing_required_inputs =
+    options.missingRequiredInputs ?? [];
   const preprocessor: VideoEvidencePreprocessor = {
     prepare: vi.fn().mockResolvedValue(prepared),
     extractReviewFrames: vi
@@ -119,10 +126,7 @@ function setup(
   };
   const provider: VideoQualityModelProvider = {
     analyze: vi.fn().mockResolvedValue({
-      raw: raw(
-        options.review,
-        options.decisive ? ["PRIVACY_OR_SAFETY"] : [],
-      ),
+      raw: initialRaw,
       metadata: {
         stage: "initial",
         model: "qwen3.7-plus",
@@ -263,6 +267,28 @@ describe("video quality service", () => {
     expect(plain.provider.review).not.toHaveBeenCalled();
     expect(stages).toEqual(["media_analysis", "initial_review", "completed"]);
     expect(result.evaluationStatus).toBe("scored");
+  });
+
+  it("distinguishes optional technical metrics from genuinely required inputs", async () => {
+    const optional = setup({ missingRequiredInputs: ["blur_ratio"] });
+    const optionalResult = await optional.service.evaluate({
+      videoId: "LAB-OPTIONAL",
+      filePath: "/tmp/video.mp4",
+      workDirectory: "/tmp/work",
+      registerSha256: () => false,
+    });
+    expect(optional.provider.review).not.toHaveBeenCalled();
+    expect(optionalResult.evaluationStatus).toBe("scored");
+    expect(optionalResult.reviewReasons).toEqual([]);
+
+    const required = setup({ missingRequiredInputs: ["video_frames"] });
+    await required.service.evaluate({
+      videoId: "LAB-REQUIRED",
+      filePath: "/tmp/video.mp4",
+      workDirectory: "/tmp/work",
+      registerSha256: () => false,
+    });
+    expect(required.provider.review).toHaveBeenCalledOnce();
   });
 
   it("attaches shadow annotations without changing the quality decision", async () => {

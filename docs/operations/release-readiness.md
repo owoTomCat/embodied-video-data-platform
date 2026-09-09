@@ -72,7 +72,7 @@ docker compose cp minio:/data backups/minio-data
 
 ### 已知的本地稳定性经验（复制到生产排障）
 
-- api 容器已配置 `pids_limit: 200`、`mem_limit: 1536m`、`NODE_OPTIONS=--max-old-space-size=1024`、`stop_grace_period: 30s`、`restart: unless-stopped`：线程/内存超限时由内核终止并自动拉起，避免长期挂死后只能重启 Docker。
+- `compose.yaml` 面向本地开发，api 默认配置 `pids_limit: 200`、`mem_limit: 1536m`、`NODE_OPTIONS=--max-old-space-size=1024`、`stop_grace_period: 30s` 与 `restart: unless-stopped`。生产叠加 `compose.prod.yaml` 后会清除 `mem_limit` 和 Node 堆上限，由服务器/编排层按容量验收结果配置内存；`pids_limit`、停止宽限与重启策略继续防止线程泄漏或进程挂死。
 - `scripts/dev-health.sh` 定时探测 ready 端点（连续失败 3 次自动 restart api）、预检宿主 swap（>50% 提示、>80% 预警）并给出 Docker VM 内存建议；建议 cron 每 2–5 分钟执行。
 - 线程基线参考：api 约 10–20 线程（`docker stats` 观察）；持续增长说明存在连接/句柄泄漏，排查 TypeORM 连接池、amqplib、aws-sdk、ioredis 配置。
 

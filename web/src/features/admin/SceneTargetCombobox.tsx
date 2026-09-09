@@ -137,6 +137,7 @@ export function SceneTargetCombobox({
             <button
               type="button"
               role="option"
+              aria-selected={false}
               className={`scene-combobox-option scene-combobox-new${highlight === matches.length ? " highlight" : ""}`}
               onMouseEnter={() => setHighlight(matches.length)}
               onMouseDown={(event) => event.preventDefault()}

@@ -17,6 +17,7 @@ import { SceneEntity } from "../database/entities/scene.entity.js";
 import { SceneLibraryEntity } from "../database/entities/scene-library.entity.js";
 import {
   OBJECT_STORAGE,
+  ObjectStorageSizeLimitError,
   type ObjectStoragePort,
   type PresignedUpload,
 } from "../storage/object-storage.port.js";
@@ -25,7 +26,10 @@ import {
   SceneGuideFailure,
   sceneGuidePolicy,
 } from "./scene-guide.policy.js";
-import type { QwenSceneGuideProvider } from "./qwen-scene-guide.provider.js";
+import {
+  QwenSceneGuideProvider,
+  SceneGuideProviderError,
+} from "./qwen-scene-guide.provider.js";
 import {
   envelopeTaskCardSchema,
   type EnvRecognitionRaw,
@@ -37,6 +41,29 @@ const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
 
 function guidId(prefix: string): string {
   return `${prefix}-${randomUUID().slice(0, 8).toUpperCase()}`;
+}
+
+function assertPhotoNamespace(
+  actor: PublicUser,
+  photoRefs: GuidePhotoRef[],
+): void {
+  const prefix =
+    actor.role === "admin" ? "scene-guide/" : `scene-guide/${actor.id}/`;
+  if (photoRefs.some((photo) => !photo.objectKey.startsWith(prefix))) {
+    throw new SceneGuideFailure(
+      "FORBIDDEN",
+      "只能使用自己上传的场景照片",
+      403,
+    );
+  }
+}
+
+function photoSizeFailure(): SceneGuideFailure {
+  return new SceneGuideFailure(
+    "PHOTO_SIZE_INVALID",
+    "照片实际大小需在 1B ~ 8MB 之间",
+    413,
+  );
 }
 
 export type PhotoUploadResult = {
@@ -229,6 +256,7 @@ export class SceneGuideService {
       throw new SceneGuideFailure("VALIDATION", "场景不存在或已停用", 400);
     }
     const photoRefs = input.photoRefs ?? [];
+    assertPhotoNamespace(actor, photoRefs);
     const row = await this.libraries.save(
       this.libraries.create({
         id: `SL-${randomUUID().slice(0, 8).toUpperCase()}`,
@@ -316,6 +344,7 @@ export class SceneGuideService {
     const upload = await this.storage.presignUploadObject({
       objectKey,
       contentType: input.contentType,
+      sizeBytes: input.sizeBytes,
       expiresInSeconds: PHOTO_EXPIRES_SECONDS,
     });
     return {
@@ -345,6 +374,7 @@ export class SceneGuideService {
     if (library.ownerAccountId !== actor.id && actor.role !== "admin") {
       throw new SceneGuideFailure("FORBIDDEN", "只能在自己的场景库下生成任务卡", 403);
     }
+    assertPhotoNamespace(actor, input.photoRefs);
     if (!this.storage.getObjectBytes) {
       throw new SceneGuideFailure(
         "UNSUPPORTED",
@@ -354,10 +384,31 @@ export class SceneGuideService {
     }
 
     const dataUrls: string[] = [];
+
     for (const photo of input.photoRefs) {
-      const bytes = await this.storage.getObjectBytes({
+      const metadata = await this.storage.headObject({
         objectKey: photo.objectKey,
       });
+      const actualSizeBytes = Number(metadata.sizeBytes);
+      if (
+        !Number.isSafeInteger(actualSizeBytes) ||
+        actualSizeBytes <= 0 ||
+        actualSizeBytes > MAX_PHOTO_BYTES
+      ) {
+        throw photoSizeFailure();
+      }
+      let bytes: Buffer;
+      try {
+        bytes = await this.storage.getObjectBytes({
+          objectKey: photo.objectKey,
+          maxBytes: MAX_PHOTO_BYTES,
+        });
+      } catch (error) {
+        if (error instanceof ObjectStorageSizeLimitError) {
+          throw photoSizeFailure();
+        }
+        throw error;
+      }
       const contentType = photo.contentType ?? "image/jpeg";
       dataUrls.push(`data:${contentType};base64,${bytes.toString("base64")}`);
     }
@@ -389,6 +440,16 @@ export class SceneGuideService {
       }
     } catch (error) {
       if (error instanceof SceneGuideFailure) throw error;
+      if (
+        error instanceof SceneGuideProviderError &&
+        error.kind === "not_configured"
+      ) {
+        throw new SceneGuideFailure(
+          "MODEL_NOT_CONFIGURED",
+          error.message,
+          503,
+        );
+      }
       throw new SceneGuideFailure(
         "GENERATION_FAILED",
         error instanceof Error ? error.message : "AI 生成任务卡失败",
@@ -510,10 +571,48 @@ export class SceneGuideService {
   }
 
   /** 数采：获取场景库/任务卡照片的预签名下载 URL（用于场景库卡片封面展示）。 */
-  async resolvePhotoUrl(actor: PublicUser, objectKey: string): Promise<{ url: string; expiresAt: number }> {
+  async resolvePhotoUrl(
+    actor: PublicUser,
+    objectKey: string,
+  ): Promise<{ url: string; expiresAt: number }> {
     sceneGuidePolicy.requireCollector(actor);
+    const namespacePrefix =
+      actor.role === "admin" ? "scene-guide/" : `scene-guide/${actor.id}/`;
+    if (!objectKey.startsWith(namespacePrefix)) {
+      throw new SceneGuideFailure("NOT_FOUND", "场景照片不存在", 404);
+    }
+
+    const photoRef = JSON.stringify([{ objectKey }]);
+    const libraryQuery = this.libraries
+      .createQueryBuilder("library")
+      .where(
+        "(library.coverObjectKey = :objectKey OR library.photoRefs @> CAST(:photoRef AS jsonb))",
+        { objectKey, photoRef },
+      );
+    const taskQuery = this.tasks
+      .createQueryBuilder("task")
+      .where("task.photoRefs @> CAST(:photoRef AS jsonb)", { photoRef });
+    if (actor.role !== "admin") {
+      libraryQuery.andWhere("library.ownerAccountId = :actorId", {
+        actorId: actor.id,
+      });
+      taskQuery.andWhere("task.ownerAccountId = :actorId", {
+        actorId: actor.id,
+      });
+    }
+    const [registeredByLibrary, registeredByTask] = await Promise.all([
+      libraryQuery.getExists(),
+      taskQuery.getExists(),
+    ]);
+    if (!registeredByLibrary && !registeredByTask) {
+      throw new SceneGuideFailure("NOT_FOUND", "场景照片不存在", 404);
+    }
     if (!this.storage.presignDownloadObject) {
-      throw new SceneGuideFailure("UNSUPPORTED", "对象存储不支持预签名下载", 501);
+      throw new SceneGuideFailure(
+        "UNSUPPORTED",
+        "对象存储不支持预签名下载",
+        501,
+      );
     }
     const download = await this.storage.presignDownloadObject({
       objectKey,

@@ -11,7 +11,7 @@
 - 采集任务：管理员在线创建任务（标题、说明、场景名称带标签字典补全、自由填写任务要求、按分钟定价），AI 将任务要求规范化为结构化条目（hard/soft + 判定依据）供管理员预览编辑后确认；发布时全新场景自动加入标签字典并生成新版本；任务支持发布/暂停/恢复/关闭，关闭后不可再提交；任务创建、规范化确认、发布、暂停、恢复、关闭全部写入审计。
 - 任务化上传：数采人员从任务大厅选择任务，阅读并确认任务要求后上传；上传创建时后端校验任务状态并锁定任务快照（版本、场景、规范化要求、单价），后续任务修改不影响已提交数据的质检与结算；历史无任务提交按无任务模式处理。
 - 编辑已发布任务时，仅场景名、说明或原始要求的实际变化会重新规范化；标题、价格修改及原样保存保留原就绪状态。要求重新处理期间暂停接收上传，成功后恢复；已有提交的要求与价格快照不变。
-- AI 质检 = 通用框架 + 任务要求：质检提示词重构为通用框架 v2（`video_qc_v2`），D4 在提供任务要求时按「任务符合度」逐条判定（含场景匹配），未提供时按通用任务真实性判定；服务端按条目复算 D4 并重算总分，硬性要求未满足或场景不匹配进入人工复核；`task_compliance` 结果展示在质检详情。
+- AI 质检 = 通用框架 + 任务要求：质检提示词使用通用框架 v2（`video_qc_v2`），D4 在提供任务要求时按「任务符合度」逐条判定（含场景匹配），未提供时按通用任务真实性判定；服务端按条目复算 D4 并重算总分。仅决定性否决、真正缺失的必要输入、规则冲突或场景不匹配进入人工复核；硬性要求未满足、可选技术指标缺失及证据不足作为 advisory 并由分数表达，不占用复核队列。`task_compliance` 结果展示在质检详情。
 - 按任务定价：积分单价优先级为任务快照单价 > 团队单价 > 全局默认积分；积分周期明细与 CSV 导出包含任务快照列。
 - 公开官网：平台定位、真实脱敏公开指标、场景能力、生产流程、质量保障和体验入口。
 - 数采人员：视频上传、服务端分页的我的数据、质检结果、质检详情、积分明细、采集指南和个人资料。
@@ -159,16 +159,16 @@ pnpm start:local
 
 ### 本地健康自愈与故障预防
 
-api 容器（NestJS）曾出现两类故障：① Node 句柄/线程泄漏（基线 11 线程，挂死前 265 线程）；② **宿主机内存压力导致 Docker VM 冻结**——Docker VM 默认占用约一半内存（16GB 机器约 7.75GB），叠加 web dev 与编辑器后 macOS 进入重度换页（swap 打满），会冻结 VM 内全部进程，表现为 api 无响应且容器无法 kill（`did not receive an exit event`，见 docker/for-mac #6850 / #7816），只能重启 Docker Desktop。为此做了三层预防：
+api 容器（NestJS）曾出现两类故障：① Node 句柄/线程泄漏（基线 11 线程，挂死前 265 线程）；② **宿主机内存压力导致 Docker VM 冻结**——Docker VM 默认占用约一半内存（16GB 机器约 7.75GB），叠加 web dev 与编辑器后 macOS 进入重度换页（swap 打满），会冻结 VM 内全部进程，表现为 api 无响应且容器无法 kill（`did not receive an exit event`，见 docker/for-mac #6850 / #7816），只能重启 Docker Desktop。为此做了四项预防：
 
-1. **有界失败（compose.yaml）**：api 容器配置 `pids_limit: 200`、`mem_limit: 1536m`、`NODE_OPTIONS=--max-old-space-size=1024` 与 `stop_grace_period: 30s`。线程/内存超限时由内核终止容器并依赖 `restart: unless-stopped` 自动拉起。
+1. **本地有界失败（compose.yaml）**：api 容器默认配置 `pids_limit: 200`、`mem_limit: 1536m`、`NODE_OPTIONS=--max-old-space-size=1024` 与 `stop_grace_period: 30s`。线程/内存超限时由内核终止容器并依赖 `restart: unless-stopped` 自动拉起。服务器部署叠加 `compose.prod.yaml` 后会清除 `mem_limit` 和 Node 堆上限，不把开发机容量带入生产；`pids_limit` 与停止宽限仍作为进程异常保护保留。
 2. **健康自愈脚本**：`scripts/dev-health.sh` 定时探测 `/api/v1/health/ready`，连续失败 3 次自动 `docker compose restart api`；daemon 卡死时给出重启 Docker Desktop 的指引；**并预检宿主机 swap 使用率**，超过 50% 提示、超过 80% 预警并建议降低 Docker VM 内存。建议通过 cron/launchd 每 2~5 分钟执行一次：
 
    ```bash
    */2 * * * * cd <仓库目录> && ./scripts/dev-health.sh --cron >> /tmp/dev-health.log 2>&1
    ```
 
-3. **降低 Docker VM 内存（强烈建议）**：全部容器实际占用 <1GB，Docker Desktop → Settings → Resources → Memory 降到 **4~6GB** 即可，可显著缓解宿主换页导致的 VM 冻结。
+3. **按本地机器调整 Docker VM 内存**：这是 Docker Desktop 虚拟机的本地设置，不是生产服务器限制。8GB MacBook Air 可设为 **2GB** 以避免 macOS 重度换页；内存更充足的开发机可按并行容器数量提高。Linux 服务器没有这项 Docker Desktop VM 上限，生产容量应按真实视频并发与 Worker 实测配置。
 4. **泄漏监控**：可用 `docker stats evdp-api-1` 观察线程数（基线约 10~20）。若线程持续增长，说明存在连接/句柄泄漏，需要排查 TypeORM 连接池、amqplib、aws-sdk 与 ioredis 的配置。
 
 ### 独立 AI 视频质检与融合标注实验页

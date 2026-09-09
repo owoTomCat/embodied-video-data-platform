@@ -201,6 +201,52 @@ describe("video_qc_v2 rule engine", () => {
     expect(result.validation.errors.join(" ")).toContain("证据");
   });
 
+  it("accepts whole-video technical deductions without visual evidence timestamps", () => {
+    const raw = rawAt(58);
+    raw.dimensions.D3.issues.push({
+      reason_code: "LOW_RESOLUTION",
+      description: "短边分辨率低于质量标准",
+      start_ms: 0,
+      end_ms: 10_000,
+      severity: "major",
+      confidence: 1,
+      evidence_timestamps_ms: [],
+      source: "technical_metrics",
+    });
+
+    const result = normalize(raw);
+
+    expect(result.validation.errors).toEqual([]);
+    expect(result.evaluationStatus).toBe("scored");
+    expect(result.reviewRequired).toBe(false);
+  });
+
+  it("keeps unavailable optional technical metrics out of the review queue", () => {
+    const raw = rawAt(80, "incomplete_input");
+    raw.input_status.is_complete = false;
+    raw.input_status.missing_required_inputs = [
+      "blur_ratio",
+      "underexposure_ratio",
+    ];
+    const sourceEvidence = evidence();
+    sourceEvidence.technicalMetrics.blur_ratio = null;
+    sourceEvidence.technicalMetrics.underexposure_ratio = null;
+    sourceEvidence.missingMetrics = [
+      "blur_ratio",
+      "underexposure_ratio",
+    ];
+
+    const result = normalize(raw, sourceEvidence);
+
+    expect(result.evaluationStatus).toBe("scored");
+    expect(result.reviewRequired).toBe(false);
+    expect(result.reviewReasons).toEqual([]);
+    expect(result.missingInputs).toEqual([
+      "blur_ratio",
+      "underexposure_ratio",
+    ]);
+  });
+
   it("downgrades segmentable veto candidates and low confidence to scored (review reduction)", () => {
     // 时段性候选（NO_HAND_OR_OBJECT）：任务切片粒度可规避 → 不触发复核
     const noHand = rawAt(70);
@@ -210,7 +256,8 @@ describe("video_qc_v2 rule engine", () => {
     noHand.review.review_reasons = ["主体操作中 70% 看不到手部或对象"];
     const noHandResult = normalize(noHand);
     expect(noHandResult.evaluationStatus).toBe("scored");
-    expect(noHandResult.reviewReasons.join(" ")).toContain("时段性");
+    expect(noHandResult.reviewReasons).toEqual([]);
+    expect(noHandResult.validation.warnings.join(" ")).toContain("时段性");
 
     // 低置信度：分数表达价值，不触发复核
     const lowConfidence = rawAt(70);

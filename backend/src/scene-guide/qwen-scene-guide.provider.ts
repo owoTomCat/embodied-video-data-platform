@@ -24,7 +24,7 @@ export class SceneGuideProviderError extends Error {
     message: string,
     readonly status: number | null,
     readonly requestId: string | null,
-    readonly kind: "transport" | "invalid_output" = "transport",
+    readonly kind: "transport" | "invalid_output" | "not_configured" = "transport",
   ) {
     super(message);
   }
@@ -137,7 +137,9 @@ export class QwenSceneGuideProvider {
       fetcher?: Fetcher;
     },
   ) {
-    this.endpoint = `${stripTrailingSlash(options.baseUrl)}/chat/completions`;
+    this.endpoint = options.baseUrl
+      ? `${stripTrailingSlash(options.baseUrl)}/chat/completions`
+      : "";
     this.fetcher = options.fetcher ?? fetch;
   }
 
@@ -241,6 +243,14 @@ export class QwenSceneGuideProvider {
     signal?: AbortSignal,
   ): Promise<ModelCallResult> {
     if (signal?.aborted) throw signal.reason;
+    if (!this.options.apiKey || !this.endpoint) {
+      throw new SceneGuideProviderError(
+        "AI 场景指导服务未配置（缺少 QWEN_API_KEY 或 QWEN_BASE_URL）",
+        503,
+        null,
+        "not_configured",
+      );
+    }
     const startedAt = Date.now();
     try {
       const timeout = AbortSignal.timeout(this.options.timeoutMs);

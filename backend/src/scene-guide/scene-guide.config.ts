@@ -19,15 +19,3 @@ export function sceneGuideModelTimeoutMs(value: string | undefined): number {
   }
   return parsed;
 }
-
-export function sceneGuideModelBaseUrl(): string {
-  const value = process.env.QWEN_BASE_URL?.trim();
-  if (!value) throw new Error("QWEN_BASE_URL is required");
-  return value;
-}
-
-export function sceneGuideModelApiKey(): string {
-  const value = process.env.QWEN_API_KEY?.trim();
-  if (!value) throw new Error("QWEN_API_KEY is required");
-  return value;
-}

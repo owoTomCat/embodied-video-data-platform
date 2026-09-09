@@ -217,7 +217,7 @@ export function QualityReportCard({
             ) : (
               <p className="report-fold-empty">未发现需要说明的扣分问题</p>
             )}
-            {quality?.reviewReasons && quality.reviewReasons.length > 0 && (
+            {quality?.status === "review_pending" && quality.reviewReasons && quality.reviewReasons.length > 0 && (
               <div className="report-issue-group">
                 <strong>AI 建议人工复核</strong>
                 <ul>{quality.reviewReasons.map((reason, index) => <li key={`reason-${index}`}><span><em>{reason}</em></span></li>)}</ul>

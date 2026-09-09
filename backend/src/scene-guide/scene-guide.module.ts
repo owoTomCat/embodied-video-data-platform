@@ -13,8 +13,6 @@ import { StorageModule } from "../storage/storage.module.js";
 import { QwenSceneGuideProvider } from "./qwen-scene-guide.provider.js";
 import { SceneGuideController } from "./scene-guide.controller.js";
 import {
-  sceneGuideModelApiKey,
-  sceneGuideModelBaseUrl,
   sceneGuideModelTimeoutMs,
   sceneGuidePromptPath,
 } from "./scene-guide.config.js";
@@ -46,8 +44,8 @@ export { SCENE_GUIDE_PROVIDER };
       useFactory: async () => {
         const prompt = await loadSceneGuidePrompt(sceneGuidePromptPath());
         return new QwenSceneGuideProvider({
-          apiKey: sceneGuideModelApiKey(),
-          baseUrl: sceneGuideModelBaseUrl(),
+          apiKey: process.env.QWEN_API_KEY?.trim() ?? "",
+          baseUrl: process.env.QWEN_BASE_URL?.trim() ?? "",
           timeoutMs: sceneGuideModelTimeoutMs(process.env.SCENE_GUIDE_MODEL_TIMEOUT_MS),
           prompt,
         });

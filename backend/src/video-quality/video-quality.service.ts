@@ -69,16 +69,16 @@ function needsReview(
   normalized: NormalizedVideoQcResultV1,
 ): boolean {
   // 人工复核降频（2026-09-02）：
-  // - 决定性硬否决（损坏/重复/虚假/隐私安全/第三人称）与校验错误 → 复核；
-  // - 时段性类型（手未出镜、部分内容无关）与低置信/证据不足 → 不触发复核，
+  // - 决定性硬否决（损坏/重复/虚假/隐私安全/第三人称）、真正缺失的必要输入与校验错误 → 复核；
+  // - 时段性类型、低置信、证据不足与可选技术指标缺失 → 不触发复核，
   //   由分数表达价值，任务切片粒度可规避；
   // - 疑似重复（S_total>=0.92）转独立 duplicate 流程，不占复核。
   if (raw.hard_reject.triggered) return true;
   if (decisiveVetoPresent(raw.hard_reject.candidates)) return true;
-  if (normalized.validation.errors.length > 0) return true;
-  const missingInputs =
-    (raw.input_status.missing_required_inputs?.length ?? 0) > 0;
-  return missingInputs;
+  return (
+    normalized.evaluationStatus === "review_pending" ||
+    normalized.evaluationStatus === "incomplete_input"
+  );
 }
 
 function reviewWindows(

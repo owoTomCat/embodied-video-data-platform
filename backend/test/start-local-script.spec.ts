@@ -151,30 +151,33 @@ describe("local backend startup script", () => {
     expect(readLog(fixture.logPath)).toEqual(["migrate", "bootstrap:"]);
   });
 
-  it("forwards termination to the API and preserves signal termination", async () => {
-    const fixture = createStartupFixture({ keepApiRunning: true });
-    directories.push(fixture.directory);
-    const localServer = spawn(process.execPath, [fixture.scriptPath], {
-      env: fixtureEnvironment(fixture.logPath),
-      stdio: "ignore",
-    });
+  it.skipIf(process.platform === "win32")(
+    "forwards termination to the API and preserves signal termination",
+    async () => {
+      const fixture = createStartupFixture({ keepApiRunning: true });
+      directories.push(fixture.directory);
+      const localServer = spawn(process.execPath, [fixture.scriptPath], {
+        env: fixtureEnvironment(fixture.logPath),
+        stdio: "ignore",
+      });
 
-    try {
-      await waitForLogLine(fixture.logPath, "api");
-      localServer.kill("SIGTERM");
-      const [exitCode, signal] = (await once(localServer, "exit")) as [
-        number | null,
-        NodeJS.Signals | null,
-      ];
+      try {
+        await waitForLogLine(fixture.logPath, "api");
+        localServer.kill("SIGTERM");
+        const [exitCode, signal] = (await once(localServer, "exit")) as [
+          number | null,
+          NodeJS.Signals | null,
+        ];
 
-      expect(exitCode).toBeNull();
-      expect(signal).toBe("SIGTERM");
-      await waitForLogLine(fixture.logPath, "api:SIGTERM");
-    } finally {
-      if (localServer.exitCode === null && localServer.signalCode === null) {
-        localServer.kill("SIGKILL");
-        await once(localServer, "exit");
+        expect(exitCode).toBeNull();
+        expect(signal).toBe("SIGTERM");
+        await waitForLogLine(fixture.logPath, "api:SIGTERM");
+      } finally {
+        if (localServer.exitCode === null && localServer.signalCode === null) {
+          localServer.kill("SIGKILL");
+          await once(localServer, "exit");
+        }
       }
-    }
-  });
+    },
+  );
 });

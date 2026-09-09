@@ -141,4 +141,29 @@ describe("QualityReportCard", () => {
     expect(screen.getByText(/完成度：无法确认/)).toBeInTheDocument();
     expect(screen.getByText(/不参与当前质检与结算/)).toBeInTheDocument();
   });
+
+  it("does not present nonblocking advisories as manual-review reasons", () => {
+    const base = makeSubmission({});
+    const submission = makeSubmission({
+      qualityResult: {
+        ...base.qualityResult!,
+        status: "scored",
+        reviewReasons: [
+          "任务符合度：条目不完整或证据不足（advisory，切片粒度可规避）",
+        ],
+      },
+    });
+
+    render(
+      <QualityReportCard
+        submission={submission}
+        pointsLabel="3.22 分"
+        evidenceByRange={new Map()}
+      />,
+    );
+    fireEvent.click(screen.getByText("评分依据与扣分明细"));
+
+    expect(screen.queryByText("AI 建议人工复核")).not.toBeInTheDocument();
+    expect(screen.queryByText(/条目不完整或证据不足/)).not.toBeInTheDocument();
+  });
 });

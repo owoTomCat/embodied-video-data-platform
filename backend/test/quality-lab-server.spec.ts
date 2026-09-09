@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
@@ -107,10 +108,13 @@ describe("quality lab environment", () => {
     expect(parsed.reviewModel).toBe("qwen3.7-flash");
     expect(parsed.promptStatePath).toBeUndefined();
 
+    const historyPath = "/data/quality-lab/jobs.json";
     const persisted = parseQualityLabEnvironment({
-      QUALITY_LAB_HISTORY_PATH: "/data/quality-lab/jobs.json",
+      QUALITY_LAB_HISTORY_PATH: historyPath,
     });
-    expect(persisted.promptStatePath).toBe("/data/quality-lab/prompt.json");
+    expect(persisted.promptStatePath).toBe(
+      resolve(dirname(historyPath), "prompt.json"),
+    );
 
     const fused = parseQualityLabEnvironment({
       QUALITY_LAB_MODE: "fused",

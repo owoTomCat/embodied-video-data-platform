@@ -828,4 +828,41 @@ describe("point cycle API", () => {
     expect(await dataSource.getRepository(WalletTransactionEntity).count()).toBe(txCount);
     expect(await app.get(PointCyclesService).reconcileAccruals()).toBe(0);
   });
+
+  it("restricts wallet and transaction access to the caller's scope", async () => {
+    const leaderCookie = await login("point-leader");
+    const collectorCookie = await login("point-collector");
+    const adminCookie = await login("point-admin");
+    const leaderWallets = await request(app.getHttpServer())
+      .get("/api/v1/wallet")
+      .set("Cookie", leaderCookie)
+      .expect(200);
+    const leaderNames = (leaderWallets.body.wallets as Array<{ ownerName: string }>).map(
+      (item) => item.ownerName,
+    );
+    expect(leaderNames).toContain("积分数采");
+    expect(leaderNames).not.toContain("二队数采");
+
+    const ownTeamTransactions = await request(app.getHttpServer())
+      .get("/api/v1/wallet/transactions?ownerId=U-PC-COLLECTOR")
+      .set("Cookie", leaderCookie)
+      .expect(200);
+    expect(ownTeamTransactions.body.transactions.length).toBeGreaterThan(0);
+
+    const crossTeamTransactions = await request(app.getHttpServer())
+      .get("/api/v1/wallet/transactions?ownerId=U-PC-OTHER")
+      .set("Cookie", leaderCookie)
+      .expect(403);
+    expect(crossTeamTransactions.body).toMatchObject({ code: "FORBIDDEN" });
+
+    await request(app.getHttpServer())
+      .get("/api/v1/wallet/transactions?ownerId=U-PC-OTHER")
+      .set("Cookie", collectorCookie)
+      .expect(403);
+
+    await request(app.getHttpServer())
+      .get("/api/v1/wallet/transactions?ownerId=U-PC-OTHER")
+      .set("Cookie", adminCookie)
+      .expect(200);
+  });
 });

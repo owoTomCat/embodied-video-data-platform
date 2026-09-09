@@ -15,11 +15,12 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { createReadStream, createWriteStream } from "node:fs";
 import { pipeline } from "node:stream/promises";
 
-import type {
-  ObjectStoragePort,
-  PresignedDownload,
-  PresignedUpload,
-  PresignedUploadPart,
+import {
+  ObjectStorageSizeLimitError,
+  type ObjectStoragePort,
+  type PresignedDownload,
+  type PresignedUpload,
+  type PresignedUploadPart,
 } from "./object-storage.port.js";
 
 export class MinioObjectStorageService implements ObjectStoragePort {
@@ -180,6 +181,7 @@ export class MinioObjectStorageService implements ObjectStoragePort {
   async presignUploadObject(input: {
     objectKey: string;
     contentType: string;
+    sizeBytes: number;
     expiresInSeconds: number;
   }): Promise<PresignedUpload> {
     await this.ensureBucket();
@@ -191,15 +193,20 @@ export class MinioObjectStorageService implements ObjectStoragePort {
       new PutObjectCommand({
         Bucket: this.bucket,
         Key: input.objectKey,
+        ContentLength: input.sizeBytes,
         ContentType: input.contentType,
       }),
-      { expiresIn: input.expiresInSeconds },
+      {
+        expiresIn: input.expiresInSeconds,
+        signableHeaders: new Set(["content-length", "content-type"]),
+      },
     );
     return { objectKey: input.objectKey, url, expiresAt };
   }
 
   async getObjectBytes(input: {
     objectKey: string;
+    maxBytes?: number;
   }): Promise<Buffer> {
     const result = await this.client.send(
       new GetObjectCommand({
@@ -210,11 +217,16 @@ export class MinioObjectStorageService implements ObjectStoragePort {
     if (!result.Body) {
       throw new Error("MinIO object body is unavailable");
     }
-    const chunks: Buffer[] = [];
+    const chunks: Uint8Array[] = [];
+    let sizeBytes = 0;
     for await (const chunk of result.Body as AsyncIterable<Uint8Array>) {
-      chunks.push(Buffer.from(chunk));
+      sizeBytes += chunk.byteLength;
+      if (input.maxBytes !== undefined && sizeBytes > input.maxBytes) {
+        throw new ObjectStorageSizeLimitError(input.maxBytes);
+      }
+      chunks.push(chunk);
     }
-    return Buffer.concat(chunks);
+    return Buffer.concat(chunks, sizeBytes);
   }
 
   async deleteObject(input: { objectKey: string }): Promise<void> {

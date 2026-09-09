@@ -15,8 +15,11 @@ import { CollectionTaskEntity } from "../src/database/entities/collection-task.e
 import { TeamEntity } from "../src/database/entities/team.entity.js";
 import { UserEntity } from "../src/database/entities/user.entity.js";
 import { configureApplication } from "../src/http/configure-application.js";
-import { SCENE_GUIDE_PROVIDER } from "../src/scene-guide/scene-guide.module.js";
-import { SceneGuideModule } from "../src/scene-guide/scene-guide.module.js";
+import { SceneGuideProviderError } from "../src/scene-guide/qwen-scene-guide.provider.js";
+import {
+  SCENE_GUIDE_PROVIDER,
+  SceneGuideModule,
+} from "../src/scene-guide/scene-guide.module.js";
 import {
   OBJECT_STORAGE,
   type ObjectStoragePort,
@@ -30,6 +33,7 @@ const TEST_PASSWORD = "Scene-guide-password-2026";
 
 class StubStorage implements ObjectStoragePort {
   readonly stored = new Map<string, Buffer>();
+  readonly sizes = new Map<string, number>();
   async downloadObject(): Promise<void> {
     /* no-op */
   }
@@ -51,6 +55,7 @@ class StubStorage implements ObjectStoragePort {
   async presignUploadObject(input: {
     objectKey: string;
     contentType: string;
+    sizeBytes: number;
     expiresInSeconds: number;
   }) {
     return {
@@ -59,7 +64,10 @@ class StubStorage implements ObjectStoragePort {
       expiresAt: new Date(Date.now() + input.expiresInSeconds * 1_000),
     };
   }
-  async getObjectBytes(input: { objectKey: string }): Promise<Buffer> {
+  async getObjectBytes(input: {
+    objectKey: string;
+    maxBytes?: number;
+  }): Promise<Buffer> {
     const bytes = this.stored.get(input.objectKey);
     if (!bytes) throw new Error(`missing object ${input.objectKey}`);
     return bytes;
@@ -70,8 +78,14 @@ class StubStorage implements ObjectStoragePort {
   async completeMultipartUpload() {
     return { etag: "stub-etag" };
   }
-  async headObject() {
-    return { sizeBytes: "1024" };
+  async headObject(input: { objectKey: string }) {
+    return {
+      sizeBytes: String(
+        this.sizes.get(input.objectKey) ??
+          this.stored.get(input.objectKey)?.byteLength ??
+          1024,
+      ),
+    };
   }
   async abortMultipartUpload(): Promise<void> {
     /* no-op */
@@ -290,5 +304,165 @@ describe("scene guide API", () => {
     expect(tasks[0]!.envObjects.length).toBe(4);
     expect(stubProvider.recognizeEnvObjects).toHaveBeenCalledTimes(1);
     expect(stubProvider.generateTaskCards).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns an observable 503 when scene-guide model configuration is absent", async () => {
+    const objectKey =
+      "scene-guide/U-SG-COLLECTOR/PHOTO-NOT-CONFIGURED/kitchen.jpg";
+    stubStorage.stored.set(objectKey, Buffer.from("fake-image-bytes"));
+    stubProvider.recognizeEnvObjects.mockRejectedValueOnce(
+      new SceneGuideProviderError(
+        "AI 场景指导服务未配置（缺少 QWEN_API_KEY 或 QWEN_BASE_URL）",
+        503,
+        null,
+        "not_configured",
+      ),
+    );
+
+    const cookie = await login("guide-collector");
+    const library = await request(app.getHttpServer())
+      .post("/api/v1/scene-guide/libraries")
+      .set("Origin", WEB_ORIGIN)
+      .set("Cookie", cookie)
+      .send({ name: "无模型配置场景", sceneId: "SC-001" })
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .post("/api/v1/scene-guide")
+      .set("Origin", WEB_ORIGIN)
+      .set("Cookie", cookie)
+      .send({
+        sceneLibraryId: library.body.library.id,
+        photoRefs: [{ objectKey, contentType: "image/jpeg" }],
+      })
+      .expect(503);
+
+    expect(response.body).toEqual({
+      code: "MODEL_NOT_CONFIGURED",
+      error: "AI 场景指导服务未配置（缺少 QWEN_API_KEY 或 QWEN_BASE_URL）",
+    });
+    expect(stubProvider.generateTaskCards).not.toHaveBeenCalled();
+  });
+
+  it("does not report an upstream HTTP 503 as missing local configuration", async () => {
+    const objectKey =
+      "scene-guide/U-SG-COLLECTOR/PHOTO-UPSTREAM-503/kitchen.jpg";
+    stubStorage.stored.set(objectKey, Buffer.from("fake-image-bytes"));
+    stubProvider.recognizeEnvObjects.mockRejectedValueOnce(
+      new SceneGuideProviderError(
+        "场景指导模型请求失败（HTTP 503）",
+        503,
+        "request-upstream-503",
+      ),
+    );
+
+    const cookie = await login("guide-collector");
+    const library = await request(app.getHttpServer())
+      .post("/api/v1/scene-guide/libraries")
+      .set("Origin", WEB_ORIGIN)
+      .set("Cookie", cookie)
+      .send({ name: "上游不可用场景", sceneId: "SC-001" })
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .post("/api/v1/scene-guide")
+      .set("Origin", WEB_ORIGIN)
+      .set("Cookie", cookie)
+      .send({
+        sceneLibraryId: library.body.library.id,
+        photoRefs: [{ objectKey, contentType: "image/jpeg" }],
+      })
+      .expect(502);
+
+    expect(response.body).toEqual({
+      code: "GENERATION_FAILED",
+      error: "场景指导模型请求失败（HTTP 503）",
+    });
+    expect(stubProvider.generateTaskCards).not.toHaveBeenCalled();
+  });
+
+  it("only signs registered scene-guide photos owned by the caller", async () => {
+    const cookie = await login("guide-collector");
+    const ownKey =
+      "scene-guide/U-SG-COLLECTOR/PHOTO-AUTHORIZED/kitchen.jpg";
+    const foreignKey =
+      "scene-guide/U-SG-ADMIN/PHOTO-FOREIGN/private.jpg";
+    const library = await request(app.getHttpServer())
+      .post("/api/v1/scene-guide/libraries")
+      .set("Origin", WEB_ORIGIN)
+      .set("Cookie", cookie)
+      .send({
+        name: "照片授权场景",
+        sceneId: "SC-001",
+        photoRefs: [{ objectKey: ownKey, contentType: "image/jpeg" }],
+      })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .get(`/api/v1/scene-guide/photo?key=${encodeURIComponent(ownKey)}`)
+      .set("Origin", WEB_ORIGIN)
+      .set("Cookie", cookie)
+      .expect(200);
+
+    for (const unauthorizedKey of [
+      foreignKey,
+      "uploads/TEAM-02/U-SG-ADMIN/SUB-FOREIGN/original.mp4",
+      "scene-guide/U-SG-COLLECTOR/PHOTO-UNREGISTERED/private.jpg",
+    ]) {
+      await request(app.getHttpServer())
+        .get(
+          `/api/v1/scene-guide/photo?key=${encodeURIComponent(unauthorizedKey)}`,
+        )
+        .set("Origin", WEB_ORIGIN)
+        .set("Cookie", cookie)
+        .expect(404);
+    }
+
+    await request(app.getHttpServer())
+      .post("/api/v1/scene-guide/libraries")
+      .set("Origin", WEB_ORIGIN)
+      .set("Cookie", cookie)
+      .send({
+        name: "非法照片场景",
+        sceneId: "SC-001",
+        photoRefs: [{ objectKey: foreignKey, contentType: "image/jpeg" }],
+      })
+      .expect(403);
+
+    await request(app.getHttpServer())
+      .post("/api/v1/scene-guide")
+      .set("Origin", WEB_ORIGIN)
+      .set("Cookie", cookie)
+      .send({
+        sceneLibraryId: library.body.library.id,
+        photoRefs: [{ objectKey: foreignKey, contentType: "image/jpeg" }],
+      })
+      .expect(403);
+  });
+
+  it("rejects an uploaded photo whose actual size exceeds 8 MB", async () => {
+    const cookie = await login("guide-collector");
+    const objectKey =
+      "scene-guide/U-SG-COLLECTOR/PHOTO-OVERSIZED/kitchen.jpg";
+    stubStorage.sizes.set(objectKey, 8 * 1024 * 1024 + 1);
+    const library = await request(app.getHttpServer())
+      .post("/api/v1/scene-guide/libraries")
+      .set("Origin", WEB_ORIGIN)
+      .set("Cookie", cookie)
+      .send({ name: "照片大小校验场景", sceneId: "SC-001" })
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .post("/api/v1/scene-guide")
+      .set("Origin", WEB_ORIGIN)
+      .set("Cookie", cookie)
+      .send({
+        sceneLibraryId: library.body.library.id,
+        photoRefs: [{ objectKey, contentType: "image/jpeg" }],
+      })
+      .expect(413);
+
+    expect(response.body).toMatchObject({ code: "PHOTO_SIZE_INVALID" });
+    expect(stubProvider.recognizeEnvObjects).not.toHaveBeenCalled();
   });
 });

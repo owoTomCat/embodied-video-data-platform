@@ -94,12 +94,12 @@ services:
       EVDP_AUTO_RECLAIM_WORKER_TIMEOUTS: "true"
       VIDEO_QUALITY_PROMPT_PATH: /quality/prompts/qwen-video-ai-quality-framework-v2/manifest.json
       SCENE_GUIDE_PROMPT_PATH: /quality/prompts/scene-guide-v1/manifest.json
-      # 限制 Node 堆内存，避免长期运行后内存/句柄泄漏拖垮容器
+      # 本地 Docker Desktop 上限；compose.prod.yaml 会在服务器部署时清除
       NODE_OPTIONS: "--max-old-space-size=1024"
     ports:
       - "127.0.0.1:4000:4000"
-    # 有界失败：线程数/内存超限时由内核终止容器，restart 策略自动拉起，
-    # 避免进程挂死数天后只能靠重启 Docker Desktop 恢复
+    # 本地有界失败：线程数/内存超限时由内核终止容器，restart 策略自动拉起，
+    # 避免开发机 Docker Desktop 挂死；生产覆盖文件会清除内存上限
     pids_limit: 200
     mem_limit: 1536m
     stop_grace_period: 30s

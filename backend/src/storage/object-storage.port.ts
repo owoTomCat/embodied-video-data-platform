@@ -17,6 +17,13 @@ export type PresignedDownload = {
   expiresAt: Date;
 };
 
+export class ObjectStorageSizeLimitError extends Error {
+  constructor(readonly maxBytes: number) {
+    super(`Object exceeds the ${maxBytes}-byte read limit`);
+    this.name = "ObjectStorageSizeLimitError";
+  }
+}
+
 export interface ObjectStoragePort {
   downloadObject(input: {
     objectKey: string;
@@ -49,11 +56,13 @@ export interface ObjectStoragePort {
   presignUploadObject?(input: {
     objectKey: string;
     contentType: string;
+    sizeBytes: number;
     expiresInSeconds: number;
   }): Promise<PresignedUpload>;
   /** 读取对象字节（用于把照片转 dataUrl 提交给视觉模型）。 */
   getObjectBytes?(input: {
     objectKey: string;
+    maxBytes?: number;
   }): Promise<Buffer>;
   deleteObject(input: {
     objectKey: string;
