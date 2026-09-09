@@ -674,6 +674,74 @@ describe("point cycle API", () => {
     await dataSource.getRepository(SubmissionEntity).update({ id: item.submissionId }, { assetStatus: "active" });
   });
 
+  it("serializes an adjustment racing settlement without a foreign-key deadlock", async () => {
+    const id = await cloneSubmission("SUB-PC-ADJUST-SETTLE");
+    const service = app.get(PointCyclesService);
+    await service.accrueSubmission(id);
+    const cycle = await cycleFor(id);
+    const item = await dataSource.getRepository(PointCycleItemEntity).findOneByOrFail({ submissionId: id });
+    const before = await app.get(WalletService).getWallet(item.ownerId);
+    const admin = await login("point-admin");
+    const blocker = dataSource.createQueryRunner();
+    await blocker.connect();
+    await blocker.startTransaction();
+    let adjustment: Promise<request.Response> | undefined;
+    let settlement: Promise<PromiseSettledResult<boolean>[]> | undefined;
+    try {
+      await blocker.query("SELECT id FROM point_cycles WHERE id = $1 FOR UPDATE", [cycle.id]);
+      const waitForBlocked = async (count: number) => {
+        await vi.waitFor(async () => {
+          const [row] = await dataSource.query(
+            "SELECT COUNT(*)::int AS count FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'",
+          );
+          expect(row.count).toBe(count);
+        }, { timeout: 5_000 });
+      };
+      adjustment = request(app.getHttpServer()).post(`/api/v1/point-cycles/${cycle.id}/items/${item.id}/adjust`)
+        .set("Origin", WEB_ORIGIN).set("Cookie", admin)
+        .send({ nextFinalScore: 70, reason: "与自动结算并发修正" }).then(response => response);
+      await waitForBlocked(1);
+      settlement = Promise.allSettled([service.settleCycle(cycle.id, cycle.settleDueAt!)]);
+      await waitForBlocked(2);
+      await blocker.commitTransaction();
+      expect((await adjustment).status).toBe(201);
+      expect(await settlement).toEqual([{ status: "fulfilled", value: true }]);
+      const correction = await dataSource.getRepository(PointCycleAdjustmentEntity).findOneByOrFail({ submissionId: id });
+      expect((await app.get(WalletService).getWallet(item.ownerId)).availableBalance)
+        .toBeCloseTo(before.availableBalance + Number(correction.nextPoints), 2);
+      expect(await dataSource.getRepository(WalletTransactionEntity).countBy({ cycleId: cycle.id, type: "settle" })).toBe(1);
+    } finally {
+      if (blocker.isTransactionActive) await blocker.rollbackTransaction();
+      await blocker.release();
+      await Promise.allSettled([adjustment, settlement]);
+    }
+  });
+
+  it.each([["linked", 0.17], ["unversioned", 0.33]] as const)(
+    "preserves %s legacy pricing when correcting duration without a snapshot",
+    async (kind, expectedPoints) => {
+      const id = await cloneSubmission(`SUB-PC-LEGACY-PRICING-${kind}`);
+      const service = app.get(PointCyclesService);
+      await service.accrueSubmission(id);
+      const cycle = await cycleFor(id);
+      await dataSource.getRepository(PointCycleEntity).update({ id: cycle.id }, {
+        pointRuleSnapshot: null,
+        ...(kind === "unversioned" ? { pointRuleVersionId: null, pointRuleRevision: null } : {}),
+      });
+      const item = await dataSource.getRepository(PointCycleItemEntity).findOneByOrFail({ submissionId: id });
+      const before = await app.get(WalletService).getWallet(item.ownerId);
+      const admin = await login("point-admin");
+      await request(app.getHttpServer()).post(`/api/v1/point-cycles/${cycle.id}/items/${item.id}/adjust`)
+        .set("Origin", WEB_ORIGIN).set("Cookie", admin)
+        .send({ nextInvalidDurationMs: 20_000, reason: "历史时长修正" }).expect(201);
+      const correction = await dataSource.getRepository(PointCycleAdjustmentEntity).findOneByOrFail({ submissionId: id });
+      expect(Number(correction.nextPoints)).toBe(expectedPoints);
+      await service.settleCycle(cycle.id, cycle.settleDueAt!);
+      expect((await app.get(WalletService).getWallet(item.ownerId)).availableBalance)
+        .toBeCloseTo(before.availableBalance + expectedPoints, 2);
+    },
+  );
+
   it("serializes multi-connection callbacks and concurrent earnings for one wallet", async () => {
     const id = await cloneSubmission("SUB-PC-CONCURRENT");
     const otherId = await cloneSubmission("SUB-PC-CONCURRENT-OTHER");

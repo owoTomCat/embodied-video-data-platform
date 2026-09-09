@@ -23,6 +23,7 @@ import {
   type ObjectStoragePort,
 } from "../storage/object-storage.port.js";
 import {
+  DEFAULT_COEFFICIENT_BANDS,
   pointRuleSnapshot,
   pointsForRule,
   settlementRatioForScore,
@@ -357,6 +358,13 @@ export class PointCyclesService {
       throw new PointCycleFailure("VALIDATION", "请填写调整原因", 400);
     }
     return this.dataSource.transaction(async (manager) => {
+      // Match settlement's submission -> cycle -> wallet order, including FK locks.
+      const target = await manager.getRepository(PointCycleItemEntity).findOneBy({ id: itemId, cycleId });
+      if (target) {
+        await manager.getRepository(SubmissionEntity).findOneOrFail({
+          where: { id: target.submissionId }, lock: { mode: "pessimistic_write" },
+        });
+      }
       const cycle = await manager.getRepository(PointCycleEntity).findOne({
         where: { id: cycleId },
         lock: { mode: "pessimistic_write" },
@@ -434,10 +442,14 @@ export class PointCyclesService {
       const passThreshold = Number(
         quality.qualityRuleSnapshot?.passThreshold ?? 60,
       );
+      const legacyPointRule = !cycle.pointRuleSnapshot && cycle.pointRuleVersionId
+        ? await manager.getRepository(PointRuleVersionEntity).findOneByOrFail({ id: cycle.pointRuleVersionId })
+        : null;
       const nextRatio = settlementRatioForScore({
         score: nextFinalScore,
         passThreshold,
-        coefficientBands: cycle.pointRuleSnapshot?.coefficientBands ?? [],
+        coefficientBands: cycle.pointRuleSnapshot?.coefficientBands ??
+          legacyPointRule?.coefficientBands ?? DEFAULT_COEFFICIENT_BANDS,
       });
       const nextPoints = pointsForRule({
         pointsPerMinute: Number(item.pointsPerMinute),
