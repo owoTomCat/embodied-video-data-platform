@@ -1,3 +1,5 @@
+/// <reference lib="es2024.promise" />
+import { randomUUID } from "node:crypto";
 import type { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import { TypeOrmModule } from "@nestjs/typeorm";
@@ -21,6 +23,7 @@ import {
 } from "../src/storage/object-storage.port.js";
 import { SubmissionsModule } from "../src/submissions/submissions.module.js";
 import { TasksModule } from "../src/tasks/tasks.module.js";
+import { RequirementNormalizerService } from "../src/tasks/requirement-normalizer.service.js";
 
 const TEST_DATABASE_URL =
   process.env.TEST_DATABASE_URL ??
@@ -39,7 +42,7 @@ class StubObjectStorage implements ObjectStoragePort {
     throw new Error("not used");
   }
   async createMultipartUpload() {
-    return { uploadId: "UPLOAD-STUB" };
+    return { uploadId: `UPLOAD-${randomUUID()}` };
   }
   async presignUploadPart() {
     return {
@@ -362,6 +365,77 @@ describe("tasks API with task type dimension", () => {
       }>).find((task) => task.id === id);
       expect(found?.taskType).toBe("scene_type");
       expect(found?.targetDurationSeconds).toBe(3600);
+    });
+  });
+
+  describe("published task edits and upload readiness", () => {
+    const requirements = {
+      scene_description: "厨房采集",
+      requirements: [{ type: "hard" as const, content: "必须第一人称拍摄" }],
+      quality_notes: [],
+    };
+    async function seedPublishedTask() {
+      return dataSource.getRepository(CollectionTaskEntity).save({
+        id: "TASK-EDIT-READY", title: "已发布任务", description: "原说明",
+        sceneName: "厨房", taskType: "generic", rawRequirements: "必须第一人称拍摄",
+        normalizedRequirements: requirements, normalizationStatus: "ready",
+        pricePerHour: "12.00", status: "published", revision: 1,
+        createdByAccountId: "U-STAT-ADMIN", createdByName: "统计管理员",
+      });
+    }
+    function upload(cookie: string, checksum = "a") {
+      return request(app.getHttpServer()).post("/api/v1/submissions/uploads")
+        .set("Origin", WEB_ORIGIN).set("Cookie", cookie).send({
+          fileName: "task-edit.mp4", contentType: "video/mp4", sizeBytes: 1024,
+          checksumSha256: checksum.repeat(64), taskId: "TASK-EDIT-READY",
+          dataUsageAuthorized: true, privacyConfirmed: true,
+          sensitiveContentConfirmed: true, taskRequirementsConfirmed: true,
+        });
+    }
+
+    it("keeps full-form title and price edits, including unchanged resaves, open for uploads", async () => {
+      const task = await seedPublishedTask();
+      const admin = await login("stat-admin");
+      const collector = await login("stat-collector");
+      const fields = { title: "新标题", pricePerHour: 15, description: task.description,
+        sceneName: ` ${task.sceneName} `, rawRequirements: ` ${task.rawRequirements} ` };
+      await request(app.getHttpServer()).patch(`/api/v1/tasks/${task.id}`)
+        .set("Origin", WEB_ORIGIN).set("Cookie", admin).send(fields).expect(200);
+      await request(app.getHttpServer()).patch(`/api/v1/tasks/${task.id}`)
+        .set("Origin", WEB_ORIGIN).set("Cookie", admin).send(fields).expect(200);
+      const created = await upload(collector).expect(201);
+      const submission = await dataSource.getRepository(SubmissionEntity).findOneByOrFail({ id: created.body.submission.id });
+      expect(submission.taskRequirementsSnapshot).toMatchObject(requirements);
+      expect(submission.taskPricePerHour).toBe("15.00");
+    });
+
+    it("blocks uploads while changed descriptions normalize and preserves older submission snapshots", async () => {
+      const task = await seedPublishedTask();
+      const admin = await login("stat-admin");
+      const collector = await login("stat-collector");
+      const original = await upload(collector).expect(201);
+      const normalization = Promise.withResolvers<typeof requirements>();
+      const entered = Promise.withResolvers<void>();
+      const normalized = { ...requirements, scene_description: "修改后的厨房采集说明" };
+      const normalizer = vi.spyOn(app.get(RequirementNormalizerService), "normalize").mockImplementationOnce(
+        () => { entered.resolve(); return normalization.promise; },
+      );
+      const editing = request(app.getHttpServer()).patch(`/api/v1/tasks/${task.id}`)
+        .set("Origin", WEB_ORIGIN).set("Cookie", admin)
+        .send({ description: "修改后的说明" }).then(response => response);
+      try {
+        await entered.promise;
+        const blocked = await upload(collector, "b").expect(409);
+        expect(blocked.body.code).toBe("TASK_REQUIREMENTS_NOT_READY");
+      } finally {
+        normalization.resolve(normalized);
+        await editing;
+        normalizer.mockRestore();
+      }
+      const created = await upload(collector, "c").expect(201);
+      const repository = dataSource.getRepository(SubmissionEntity);
+      expect((await repository.findOneByOrFail({ id: created.body.submission.id })).taskRequirementsSnapshot).toMatchObject(normalized);
+      expect((await repository.findOneByOrFail({ id: original.body.submission.id })).taskRequirementsSnapshot).toMatchObject(requirements);
     });
   });
 
